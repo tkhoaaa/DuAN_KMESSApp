@@ -17,19 +17,35 @@ service cloud.firestore {
     match /user_profiles/{uid} {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && request.auth.uid == uid;
-      allow update, delete: if isOwner(uid);
+      // Cho phép update nếu là owner hoặc chỉ update followersCount/followingCount
+      allow update: if isOwner(uid) || (
+        isSignedIn() && 
+        request.resource.data.diff(resource.data).affectedKeys().hasAny(['followersCount', 'followingCount']) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['followersCount', 'followingCount', 'updatedAt']) &&
+        (!('followersCount' in request.resource.data.diff(resource.data).affectedKeys()) || request.resource.data.followersCount is int) &&
+        (!('followingCount' in request.resource.data.diff(resource.data).affectedKeys()) || request.resource.data.followingCount is int)
+      );
+      allow delete: if isOwner(uid);
 
       // Followers subcollection
+      // Cho phép follower tự tạo (khi follow) hoặc owner của profile tạo (khi accept request)
       match /followers/{followerUid} {
         allow read: if isSignedIn();
-        allow create, delete: if isSignedIn() && request.auth.uid == followerUid;
+        allow create, delete: if isSignedIn() && (
+          request.auth.uid == followerUid || 
+          request.auth.uid == uid
+        );
         allow update: if false;
       }
 
       // Following subcollection
+      // Cho phép owner của profile tạo (khi follow) hoặc người được follow tạo (khi accept request)
       match /following/{followedUid} {
         allow read: if isSignedIn();
-        allow create, delete: if isSignedIn() && request.auth.uid == uid;
+        allow create, delete: if isSignedIn() && (
+          request.auth.uid == uid || 
+          request.auth.uid == followedUid
+        );
         allow update: if false;
       }
 
@@ -49,7 +65,9 @@ service cloud.firestore {
       allow read: if isSignedIn() && (request.auth.uid == userId || request.auth.uid == resource.data.fromUid);
       allow create: if isSignedIn() 
         && request.resource.data.fromUid == request.auth.uid
-        && request.resource.data.toUid == userId;
+        && request.resource.data.keys().hasOnly(['fromUid', 'createdAt'])
+        && request.resource.data.fromUid is string
+        && request.resource.data.createdAt is timestamp;
       allow update, delete: if isSignedIn() && (request.auth.uid == userId || request.auth.uid == resource.data.fromUid);
     }
 
@@ -73,9 +91,10 @@ service cloud.firestore {
       match /messages/{messageId} {
         allow read: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participantIds;
         allow create: if isSignedIn() 
-          && request.resource.data.senderUid == request.auth.uid
+          && request.resource.data.senderId == request.auth.uid
           && request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participantIds;
-        allow update, delete: if isSignedIn() && request.auth.uid == resource.data.senderUid;
+        allow update: if isSignedIn() && request.auth.uid == resource.data.senderId;
+        allow delete: if isSignedIn() && request.auth.uid == resource.data.senderId;
       }
     }
 

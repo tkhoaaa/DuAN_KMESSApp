@@ -110,15 +110,19 @@ class FollowRepository {
     required String followerUid,
   }) async {
     await _firestore.runTransaction((txn) async {
+      // Tất cả reads phải được thực hiện trước tất cả writes
       final requestDoc = _requestsRef(targetUid).doc(followerUid);
       final requestSnap = await txn.get(requestDoc);
       if (!requestSnap.exists) {
         return;
       }
-      txn.delete(requestDoc);
 
       final followerDoc = _followersRef(targetUid).doc(followerUid);
       final followerSnap = await txn.get(followerDoc);
+      
+      // Sau khi đã đọc xong, mới thực hiện writes
+      txn.delete(requestDoc);
+
       if (!followerSnap.exists) {
         txn.set(followerDoc, {
           'followedAt': FieldValue.serverTimestamp(),

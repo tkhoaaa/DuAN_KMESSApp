@@ -168,6 +168,21 @@ class ChatRepository {
     await batch.commit();
   }
 
+  /// Gửi tin nhắn có hình ảnh
+  Future<void> sendImageMessage({
+    required String conversationId,
+    required String senderId,
+    required List<MessageAttachment> attachments,
+    String? text,
+  }) async {
+    await sendTextMessage(
+      conversationId: conversationId,
+      senderId: senderId,
+      text: text ?? '',
+      attachments: attachments,
+    );
+  }
+
   Future<void> markConversationAsRead({
     required String conversationId,
     required String uid,
