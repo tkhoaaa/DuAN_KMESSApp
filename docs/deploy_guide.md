@@ -70,6 +70,31 @@ Nếu có file `firebase/firestore.indexes.json`:
 firebase deploy --only firestore:indexes
 ```
 
+## 2.5. Setup Firebase Storage (Lần đầu tiên)
+
+> **Lưu ý:** Nếu chưa setup Storage, bạn cần làm bước này trước khi deploy rules.
+
+### Bước 1: Mở Firebase Console
+1. Truy cập: https://console.firebase.google.com/project/duankmessapp/storage
+2. Nhấn **"Get Started"**
+
+### Bước 2: Chọn chế độ
+- **Test mode** (khuyến nghị cho development): Cho phép đọc/ghi trong 30 ngày
+- **Production mode**: An toàn hơn, cần rules ngay
+
+### Bước 3: Chọn Location
+- **Khuyến nghị:** `asia-southeast1` (Singapore) - gần Việt Nam nhất
+- ⚠️ **Lưu ý:** Location không thể thay đổi sau khi tạo!
+
+### Bước 4: Deploy Storage Rules
+Sau khi setup xong:
+
+```bash
+firebase deploy --only storage
+```
+
+> 📖 **Xem chi tiết:** [docs/setup_storage.md](docs/setup_storage.md)
+
 ## 3. Deploy Cloud Functions (Tùy chọn - Cần Blaze Plan)
 
 > **Lưu ý:** Cloud Functions **KHÔNG BẮT BUỘC** cho app hoạt động. App hiện tại đã hoạt động đầy đủ mà không cần Cloud Functions:

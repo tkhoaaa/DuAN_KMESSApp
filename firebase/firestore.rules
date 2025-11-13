@@ -5,10 +5,81 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
     function isPostOwner() {
       return isSignedIn() && resource.data.authorUid == request.auth.uid;
     }
 
+    // User profiles: cho phép đọc công khai, chỉ owner được ghi
+    match /user_profiles/{uid} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.auth.uid == uid;
+      allow update, delete: if isOwner(uid);
+
+      // Followers subcollection
+      match /followers/{followerUid} {
+        allow read: if isSignedIn();
+        allow create, delete: if isSignedIn() && request.auth.uid == followerUid;
+        allow update: if false;
+      }
+
+      // Following subcollection
+      match /following/{followedUid} {
+        allow read: if isSignedIn();
+        allow create, delete: if isSignedIn() && request.auth.uid == uid;
+        allow update: if false;
+      }
+
+      // FCM tokens subcollection
+      match /fcm_tokens/{token} {
+        allow read, write: if isOwner(uid);
+      }
+
+      // Notifications subcollection
+      match /notifications/{notificationId} {
+        allow read, write: if isOwner(uid);
+      }
+    }
+
+    // Follow requests collection group
+    match /follow_requests/{userId}/requests/{requestId} {
+      allow read: if isSignedIn() && (request.auth.uid == userId || request.auth.uid == resource.data.fromUid);
+      allow create: if isSignedIn() 
+        && request.resource.data.fromUid == request.auth.uid
+        && request.resource.data.toUid == userId;
+      allow update, delete: if isSignedIn() && (request.auth.uid == userId || request.auth.uid == resource.data.fromUid);
+    }
+
+    // Collection group query for follow_requests
+    match /{path=**}/requests/{requestId} {
+      allow read: if isSignedIn() && (
+        request.auth.uid == resource.data.fromUid ||
+        request.auth.uid == resource.data.toUid
+      );
+    }
+
+    // Conversations
+    match /conversations/{conversationId} {
+      allow read: if isSignedIn() && request.auth.uid in resource.data.participantIds;
+      allow create: if isSignedIn() 
+        && request.auth.uid in request.resource.data.participantIds;
+      allow update: if isSignedIn() && request.auth.uid in resource.data.participantIds;
+      allow delete: if false; // Không cho xóa conversation
+
+      // Messages subcollection
+      match /messages/{messageId} {
+        allow read: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participantIds;
+        allow create: if isSignedIn() 
+          && request.resource.data.senderUid == request.auth.uid
+          && request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participantIds;
+        allow update, delete: if isSignedIn() && request.auth.uid == resource.data.senderUid;
+      }
+    }
+
+    // Posts collection
     match /posts/{postId} {
       allow read: if isSignedIn();
 

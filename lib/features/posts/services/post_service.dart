@@ -11,6 +11,7 @@ import 'package:video_thumbnail/video_thumbnail.dart';
 
 import '../../auth/auth_repository.dart';
 import '../../profile/user_profile_repository.dart';
+import '../../../services/cloudinary_service.dart';
 import '../models/post.dart';
 import '../models/post_comment.dart';
 import '../models/post_media.dart';
@@ -59,6 +60,10 @@ class PostCommentEntry {
 }
 
 class PostService {
+  /// Chọn storage backend: 'firebase' hoặc 'cloudinary'
+  /// Mặc định: 'firebase'
+  static const String storageBackend = 'cloudinary'; // Thay đổi thành 'firebase' nếu muốn dùng Firebase Storage
+  
   PostService({
     PostRepository? repository,
     UserProfileRepository? profileRepository,
@@ -115,87 +120,154 @@ class PostService {
 
     for (final entry in media) {
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final originalName =
-          entry.file.name.isNotEmpty ? entry.file.name : 'media';
-      final ref = _storage
-          .ref()
-          .child('posts')
-          .child(currentUid)
-          .child('$timestamp-$originalName');
-
-      final metadata = SettableMetadata(
-        contentType: entry.type == PostMediaType.video
-            ? (entry.file.mimeType ?? 'video/mp4')
-            : (entry.file.mimeType ?? 'image/jpeg'),
-      );
-
-      if (kIsWeb) {
-        final data = await entry.file.readAsBytes();
-        await ref.putData(data, metadata);
-      } else {
-        await ref.putFile(File(entry.file.path), metadata);
-      }
-
-      final downloadUrl = await ref.getDownloadURL();
-
+      // Làm sạch tên file: loại bỏ khoảng trắng và ký tự đặc biệt
+      final originalName = entry.file.name.isNotEmpty 
+          ? entry.file.name
+              .trim()
+              .replaceAll(RegExp(r'[^\w\-.]'), '_')
+              .replaceAll(RegExp(r'\s+'), '_')
+          : 'media';
+      
+      String downloadUrl;
       String? thumbnailUrl;
       int? durationMs;
 
-      if (entry.type == PostMediaType.video) {
-        if (kIsWeb) {
-          // Tạo thumbnail từ video trên web bằng canvas
-          try {
-            final thumbData = await _generateWebVideoThumbnail(entry.file);
-            if (thumbData != null) {
-              final thumbRef = _storage
-                  .ref()
-                  .child('posts')
-                  .child(currentUid)
-                  .child('thumbnails')
-                  .child('$timestamp-$originalName.png');
-              await thumbRef.putData(
-                thumbData,
-                SettableMetadata(contentType: 'image/png'),
-              );
-              thumbnailUrl = await thumbRef.getDownloadURL();
-            }
-          } catch (e) {
-            print('Web thumbnail generation failed: $e');
-          }
+      if (storageBackend == 'cloudinary') {
+        // Dùng Cloudinary
+        if (entry.type == PostMediaType.video) {
+          final result = await CloudinaryService.uploadVideo(
+            file: entry.file,
+            folder: 'posts/$currentUid',
+            publicId: '$timestamp-$originalName',
+          );
+          downloadUrl = result['url'] as String;
+          thumbnailUrl = result['thumbnailUrl'] as String?;
+          durationMs = result['durationMs'] as int?;
         } else {
-          try {
-            final thumbData = await VideoThumbnail.thumbnailData(
-              video: entry.file.path,
-              imageFormat: ImageFormat.PNG,
-              maxHeight: 480,
-              quality: 75,
-            );
-            if (thumbData != null) {
-              final thumbRef = _storage
-                  .ref()
-                  .child('posts')
-                  .child(currentUid)
-                  .child('thumbnails')
-                  .child('$timestamp-$originalName.png');
-              await thumbRef.putData(
-                thumbData,
-                SettableMetadata(contentType: 'image/png'),
-              );
-              thumbnailUrl = await thumbRef.getDownloadURL();
-            }
-          } catch (_) {
-            // Ignore thumbnail failures for now
-          }
+          downloadUrl = await CloudinaryService.uploadImage(
+            file: entry.file,
+            folder: 'posts/$currentUid',
+            publicId: '$timestamp-$originalName',
+          );
+        }
+      } else {
+        // Dùng Firebase Storage (code cũ)
+        final ref = _storage
+            .ref()
+            .child('posts')
+            .child(currentUid)
+            .child('$timestamp-$originalName');
 
-          VideoPlayerController? controller;
-          try {
-            controller = VideoPlayerController.file(File(entry.file.path));
-            await controller.initialize();
-            durationMs = controller.value.duration.inMilliseconds;
-          } catch (_) {
-            durationMs = null;
-          } finally {
-            await controller?.dispose();
+        final metadata = SettableMetadata(
+          contentType: entry.type == PostMediaType.video
+              ? (entry.file.mimeType ?? 'video/mp4')
+              : (entry.file.mimeType ?? 'image/jpeg'),
+        );
+
+        UploadTask uploadTask;
+        if (kIsWeb) {
+          final data = await entry.file.readAsBytes();
+          uploadTask = ref.putData(data, metadata);
+        } else {
+          final file = File(entry.file.path);
+          if (!await file.exists()) {
+            throw StateError('File không tồn tại: ${entry.file.path}');
+          }
+          uploadTask = ref.putFile(file, metadata);
+        }
+
+        // Đợi upload hoàn thành và kiểm tra kết quả với retry
+        TaskSnapshot uploadSnapshot;
+        try {
+          uploadSnapshot = await uploadTask;
+        } catch (e) {
+          // Retry một lần nếu lỗi
+          print('Upload failed, retrying... Error: $e');
+          if (kIsWeb) {
+            final data = await entry.file.readAsBytes();
+            uploadTask = ref.putData(data, metadata);
+          } else {
+            final file = File(entry.file.path);
+            uploadTask = ref.putFile(file, metadata);
+          }
+          uploadSnapshot = await uploadTask;
+        }
+
+        if (uploadSnapshot.state != TaskState.success) {
+          throw StateError('Upload thất bại: ${uploadSnapshot.state}');
+        }
+
+        // Lấy download URL sau khi upload thành công
+        try {
+          downloadUrl = await ref.getDownloadURL();
+        } catch (e) {
+          // Nếu không lấy được URL, thử lại sau 1 giây
+          await Future.delayed(const Duration(seconds: 1));
+          downloadUrl = await ref.getDownloadURL();
+        }
+
+        if (entry.type == PostMediaType.video) {
+          if (kIsWeb) {
+            // Tạo thumbnail từ video trên web bằng canvas
+            try {
+              final thumbData = await _generateWebVideoThumbnail(entry.file);
+              if (thumbData != null) {
+                final thumbRef = _storage
+                    .ref()
+                    .child('posts')
+                    .child(currentUid)
+                    .child('thumbnails')
+                    .child('$timestamp-$originalName.png');
+                final thumbUploadTask = thumbRef.putData(
+                  thumbData,
+                  SettableMetadata(contentType: 'image/png'),
+                );
+                final thumbSnapshot = await thumbUploadTask;
+                if (thumbSnapshot.state == TaskState.success) {
+                  thumbnailUrl = await thumbRef.getDownloadURL();
+                }
+              }
+            } catch (e) {
+              print('Web thumbnail generation failed: $e');
+            }
+          } else {
+            try {
+              final thumbData = await VideoThumbnail.thumbnailData(
+                video: entry.file.path,
+                imageFormat: ImageFormat.PNG,
+                maxHeight: 480,
+                quality: 75,
+              );
+              if (thumbData != null) {
+                final thumbRef = _storage
+                    .ref()
+                    .child('posts')
+                    .child(currentUid)
+                    .child('thumbnails')
+                    .child('$timestamp-$originalName.png');
+                final thumbUploadTask = thumbRef.putData(
+                  thumbData,
+                  SettableMetadata(contentType: 'image/png'),
+                );
+                final thumbSnapshot = await thumbUploadTask;
+                if (thumbSnapshot.state == TaskState.success) {
+                  thumbnailUrl = await thumbRef.getDownloadURL();
+                }
+              }
+            } catch (_) {
+              // Ignore thumbnail failures for now
+            }
+
+            VideoPlayerController? controller;
+            try {
+              controller = VideoPlayerController.file(File(entry.file.path));
+              await controller.initialize();
+              durationMs = controller.value.duration.inMilliseconds;
+            } catch (_) {
+              durationMs = null;
+            } finally {
+              await controller?.dispose();
+            }
           }
         }
       }

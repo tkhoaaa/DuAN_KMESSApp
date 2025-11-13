@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import 'user_profile_repository.dart';
 import '../auth/auth_repository.dart';
 import '../follow/services/follow_service.dart';
+import '../../services/cloudinary_service.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -75,6 +76,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  /// Chọn storage backend: 'firebase' hoặc 'cloudinary'
+  /// Phải khớp với PostService.storageBackend
+  static const String storageBackend = 'cloudinary'; // Thay đổi thành 'firebase' nếu muốn dùng Firebase Storage
+
   Future<void> _pickAndUploadImage(String uid, ImageSource source) async {
     setState(() {
       isUploading = true;
@@ -92,24 +97,37 @@ class _ProfileScreenState extends State<ProfileScreen> {
         return;
       }
 
-      final storageRef =
-          FirebaseStorage.instance.ref().child('user_profiles/$uid/avatar.jpg');
-
-      if (kIsWeb) {
-        final bytes = await picked.readAsBytes();
-        await storageRef.putData(
-          bytes,
-          SettableMetadata(contentType: picked.mimeType ?? 'image/jpeg'),
+      String url;
+      
+      if (storageBackend == 'cloudinary') {
+        // Dùng Cloudinary
+        url = await CloudinaryService.uploadImage(
+          file: picked,
+          folder: 'user_profiles/$uid',
+          publicId: 'avatar',
         );
       } else {
-        final file = File(picked.path);
-        await storageRef.putFile(
-          file,
-          SettableMetadata(contentType: 'image/jpeg'),
-        );
+        // Dùng Firebase Storage (code cũ)
+        final storageRef =
+            FirebaseStorage.instance.ref().child('user_profiles/$uid/avatar.jpg');
+
+        if (kIsWeb) {
+          final bytes = await picked.readAsBytes();
+          await storageRef.putData(
+            bytes,
+            SettableMetadata(contentType: picked.mimeType ?? 'image/jpeg'),
+          );
+        } else {
+          final file = File(picked.path);
+          await storageRef.putFile(
+            file,
+            SettableMetadata(contentType: 'image/jpeg'),
+          );
+        }
+
+        url = await storageRef.getDownloadURL();
       }
 
-      final url = await storageRef.getDownloadURL();
       await userProfileRepository.updateProfile(uid, photoUrl: url);
       _loadedInitial = false;
       if (mounted) {

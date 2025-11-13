@@ -23,8 +23,21 @@ flutter run -d emulator  # chạy Android emulator
 ## Deploy & Cấu hình
 
 - **[docs/deploy_guide.md](docs/deploy_guide.md)**: Hướng dẫn chi tiết deploy Firestore Rules và Cloud Functions, kiểm tra bảo mật.
+- **[docs/setup_storage.md](docs/setup_storage.md)**: Hướng dẫn setup Firebase Storage (bắt buộc cho tính năng upload ảnh/video).
+- **[docs/storage_alternatives.md](docs/storage_alternatives.md)**: So sánh các giải pháp storage miễn phí (Base64, Cloudinary, Firebase Storage).
+- **[docs/cloudinary_setup_guide.md](docs/cloudinary_setup_guide.md)**: Hướng dẫn setup Cloudinary (25GB free tier) - **Khuyến nghị cho dự án nhỏ**.
+- **[docs/FIREBASE_VS_CLOUDINARY.md](docs/FIREBASE_VS_CLOUDINARY.md)**: So sánh Firebase vs Cloudinary - **Đọc để hiểu rõ vai trò từng dịch vụ**.
+- **[docs/base64_storage_guide.md](docs/base64_storage_guide.md)**: Hướng dẫn lưu ảnh dạng Base64 trong Firestore (miễn phí, có giới hạn).
+- **[docs/NO_STORAGE_GUIDE.md](docs/NO_STORAGE_GUIDE.md)**: Hướng dẫn chạy app không cần Storage (tạm thời bỏ upload).
 - **firebase/firestore.rules**: Security rules cho posts, likes, comments (yêu cầu `request.auth`, giới hạn field, quyền sở hữu).
 - **functions/**: Cloud Functions TypeScript (thông báo like/comment, đồng bộ `postsCount`).
+
+> 💡 **Lưu ý về Storage:** App có tính năng upload ảnh/video nên cần storage. 
+> - **Cloudinary (Khuyến nghị):** 25GB free tier, không cần upgrade plan. **Chỉ thay thế Firebase Storage**, vẫn cần Firebase cho Auth + Firestore. Xem [docs/cloudinary_setup_guide.md](docs/cloudinary_setup_guide.md).
+> - **Firebase Storage:** 5GB free tier, cần Blaze plan. Xem [docs/storage_alternatives.md](docs/storage_alternatives.md).
+> - **Base64:** Miễn phí nhưng chỉ cho ảnh nhỏ. Xem [docs/base64_storage_guide.md](docs/base64_storage_guide.md).
+> 
+> **Hiểu rõ:** Cloudinary chỉ thay Firebase Storage, Firebase vẫn cần cho Authentication và Firestore. Xem [docs/FIREBASE_VS_CLOUDINARY.md](docs/FIREBASE_VS_CLOUDINARY.md).
 
 ## Tài liệu kiến trúc
 - [docs/firestore_schema.md](docs/firestore_schema.md): mô tả cấu trúc dữ liệu Firestore cho chat, follow, posts.
