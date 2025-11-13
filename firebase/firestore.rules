@@ -1,0 +1,53 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isPostOwner() {
+      return isSignedIn() && resource.data.authorUid == request.auth.uid;
+    }
+
+    match /posts/{postId} {
+      allow read: if isSignedIn();
+
+      allow create: if isSignedIn()
+        && request.resource.data.authorUid == request.auth.uid
+        && request.resource.data.keys().hasOnly([
+          'authorUid',
+          'media',
+          'caption',
+          'createdAt',
+          'likeCount',
+          'commentCount'
+        ])
+        && request.resource.data.media is list;
+
+      allow update, delete: if isPostOwner();
+
+      match /likes/{uid} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn() && request.auth.uid == uid;
+        allow delete: if isSignedIn() && request.auth.uid == uid;
+        allow update: if false;
+      }
+
+      match /comments/{commentId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn()
+          && request.resource.data.authorUid == request.auth.uid
+          && request.resource.data.text is string
+          && request.resource.data.createdAt == request.time;
+
+        allow delete: if isSignedIn() && (
+          request.auth.uid == resource.data.authorUid ||
+          isPostOwner()
+        );
+
+        allow update: if false;
+      }
+    }
+  }
+}
+

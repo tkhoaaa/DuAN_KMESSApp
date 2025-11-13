@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "370943842654",
+    "project_id": "duankmessapp",
+    "storage_bucket": "duankmessapp.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:370943842654:android:9aa3fb530453488a1197cf",
+        "android_client_info": {
+          "package_name": "com.example.duan_kmessapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCpYi3M50N_CDcaGGzmLtCtOkaU0q9bP9I"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
