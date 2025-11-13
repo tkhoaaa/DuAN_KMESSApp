@@ -93,7 +93,13 @@ service cloud.firestore {
         allow create: if isSignedIn() 
           && request.resource.data.senderId == request.auth.uid
           && request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participantIds;
-        allow update: if isSignedIn() && request.auth.uid == resource.data.senderId;
+        // Cho phép sender update hoặc participant update seenBy
+        allow update: if isSignedIn() && (
+          request.auth.uid == resource.data.senderId ||
+          (request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participantIds &&
+           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['seenBy']) &&
+           request.resource.data.seenBy is list)
+        );
         allow delete: if isSignedIn() && request.auth.uid == resource.data.senderId;
       }
     }

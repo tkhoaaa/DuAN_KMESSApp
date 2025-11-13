@@ -337,6 +337,17 @@ class PostService {
     return _repository.watchUserLike(postId: postId, uid: currentUid);
   }
 
+  Future<void> deletePost(String postId) async {
+    final currentUid = authRepository.currentUser()?.uid;
+    if (currentUid == null) {
+      throw StateError('Bạn cần đăng nhập.');
+    }
+    await _repository.deletePost(
+      postId: postId,
+      authorUid: currentUid,
+    );
+  }
+
   /// Tạo thumbnail từ video trên web bằng HTML5 video + canvas
   Future<Uint8List?> _generateWebVideoThumbnail(XFile videoFile) async {
     if (!kIsWeb) return null;

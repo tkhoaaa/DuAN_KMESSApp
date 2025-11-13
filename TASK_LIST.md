@@ -38,15 +38,16 @@
 
 ---
 
-### 3. Chat - Seen Status
+### 3. Chat - Seen Status ✅
 **Mô tả:** Hiển thị "Đã xem" cho tin nhắn đã được đọc
-- [ ] UI: Hiển thị icon "Đã xem" (checkmark) cho tin nhắn đã seen
-- [ ] Logic: Tự động mark as read khi mở conversation
-- [ ] Logic: Cập nhật `seenBy` khi user xem tin nhắn
+- [x] UI: Hiển thị icon "Đã xem" (checkmark) cho tin nhắn đã seen
+- [x] Logic: Tự động mark as read khi mở conversation
+- [x] Logic: Cập nhật `seenBy` khi user xem tin nhắn
 
-**Files cần sửa:**
-- `lib/features/chat/pages/chat_detail_page.dart` - Hiển thị seen status
+**Files đã sửa:**
+- `lib/features/chat/pages/chat_detail_page.dart` - Hiển thị seen status, mark as read khi mở
 - `lib/features/chat/repositories/chat_repository.dart` - Đã có `markConversationAsRead`
+- `firebase/firestore.rules` - Cho phép participant update `seenBy`
 
 ---
 
@@ -77,17 +78,18 @@
 
 ---
 
-### 6. Post - Xóa Bài Đăng
+### 6. Post - Xóa Bài Đăng ✅
 **Mô tả:** Cho phép chủ bài đăng xóa bài đăng
-- [ ] UI: Nút delete trong post feed (chỉ hiện cho chủ bài đăng)
-- [ ] Logic: Xóa post document
-- [ ] Logic: Xóa media trên Cloudinary (optional)
-- [ ] Logic: Cập nhật `postsCount` (decrement)
+- [x] UI: Nút delete trong post feed (chỉ hiện cho chủ bài đăng)
+- [x] Logic: Xóa post document
+- [x] Logic: Xóa likes và comments subcollections
+- [x] Logic: Cập nhật `postsCount` (decrement)
+- [ ] Logic: Xóa media trên Cloudinary (optional - skip để tối ưu)
 
-**Files cần sửa:**
-- `lib/features/posts/pages/post_feed_page.dart` - Thêm nút delete
-- `lib/features/posts/repositories/post_repository.dart` - Method `deletePost`
-- `lib/features/posts/services/post_service.dart` - Method `deletePost`
+**Files đã sửa:**
+- `lib/features/posts/pages/post_feed_page.dart` - Thêm PopupMenuButton với option delete
+- `lib/features/posts/repositories/post_repository.dart` - Method `deletePost` với batch delete
+- `lib/features/posts/services/post_service.dart` - Method `deletePost` wrapper
 
 ---
 

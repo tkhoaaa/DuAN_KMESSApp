@@ -139,6 +139,10 @@ class _PostFeedPageState extends State<PostFeedPage> {
                         builder: (_) => PostCommentsSheet(post: post),
                       );
                     },
+                    onPostDeleted: () {
+                      // Reload feed sau khi xóa post
+                      _loadInitial();
+                    },
                   );
                 },
               ),
@@ -154,12 +158,14 @@ class PostFeedItem extends StatefulWidget {
     required this.service,
     required this.onOpenProfile,
     required this.onOpenComments,
+    this.onPostDeleted,
   });
 
   final PostFeedEntry entry;
   final PostService service;
   final void Function(String uid) onOpenProfile;
   final void Function(Post post) onOpenComments;
+  final VoidCallback? onPostDeleted;
 
   @override
   State<PostFeedItem> createState() => _PostFeedItemState();
@@ -214,6 +220,71 @@ class _PostFeedItemState extends State<PostFeedItem> {
                     ? Text(post.createdAt!.toLocal().toString())
                     : null,
                 onTap: () => widget.onOpenProfile(post.authorUid),
+                trailing: authRepository.currentUser()?.uid == post.authorUid
+                    ? PopupMenuButton<String>(
+                        icon: const Icon(Icons.more_vert),
+                        onSelected: (value) async {
+                          if (value == 'delete') {
+                            final confirmed = await showDialog<bool>(
+                              context: context,
+                              builder: (context) => AlertDialog(
+                                title: const Text('Xóa bài đăng'),
+                                content: const Text(
+                                  'Bạn có chắc chắn muốn xóa bài đăng này?',
+                                ),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(context, false),
+                                    child: const Text('Hủy'),
+                                  ),
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(context, true),
+                                    style: TextButton.styleFrom(
+                                      foregroundColor: Colors.red,
+                                    ),
+                                    child: const Text('Xóa'),
+                                  ),
+                                ],
+                              ),
+                            );
+                            if (confirmed == true && mounted) {
+                              try {
+                                await widget.service.deletePost(post.id);
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Đã xóa bài đăng'),
+                                    ),
+                                  );
+                                  // Gọi callback để reload feed
+                                  widget.onPostDeleted?.call();
+                                }
+                              } catch (e) {
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('Lỗi xóa bài đăng: $e'),
+                                    ),
+                                  );
+                                }
+                              }
+                            }
+                          }
+                        },
+                        itemBuilder: (context) => [
+                          const PopupMenuItem(
+                            value: 'delete',
+                            child: Row(
+                              children: [
+                                Icon(Icons.delete, color: Colors.red),
+                                SizedBox(width: 8),
+                                Text('Xóa bài đăng'),
+                              ],
+                            ),
+                          ),
+                        ],
+                      )
+                    : null,
               ),
               _buildMediaCarousel(post),
               if (post.caption.isNotEmpty)

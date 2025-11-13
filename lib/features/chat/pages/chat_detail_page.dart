@@ -41,6 +41,22 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
     super.initState();
     _chatRepository = ChatRepository();
     _controller.addListener(_onTextChanged);
+    // Mark conversation as read khi mở
+    _markAsRead();
+  }
+
+  Future<void> _markAsRead() async {
+    final currentUid = _currentUid;
+    if (currentUid == null) return;
+    try {
+      await _chatRepository.markConversationAsRead(
+        conversationId: widget.conversationId,
+        uid: currentUid,
+      );
+    } catch (e) {
+      // Ignore errors silently
+      debugPrint('Error marking as read: $e');
+    }
   }
 
   @override
@@ -256,6 +272,7 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
                     return _ChatMessageBubble(
                       message: message,
                       isMine: isMine,
+                      otherUid: widget.otherUid,
                       onImageTap: (url) {
                         Navigator.of(context).push(
                           MaterialPageRoute(
@@ -423,11 +440,13 @@ class _ChatMessageBubble extends StatelessWidget {
   const _ChatMessageBubble({
     required this.message,
     required this.isMine,
+    required this.otherUid,
     required this.onImageTap,
   });
 
   final ChatMessage message;
   final bool isMine;
+  final String otherUid;
   final void Function(String url) onImageTap;
 
   @override
@@ -498,6 +517,36 @@ class _ChatMessageBubble extends StatelessWidget {
               Text(
                 message.text!,
                 style: const TextStyle(fontSize: 16),
+              ),
+            // Seen status - chỉ hiển thị cho tin nhắn của mình
+            if (isMine)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      message.seenBy.contains(otherUid)
+                          ? Icons.done_all
+                          : Icons.done,
+                      size: 14,
+                      color: message.seenBy.contains(otherUid)
+                          ? Theme.of(context).colorScheme.primary
+                          : Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                    if (message.seenBy.contains(otherUid))
+                      Padding(
+                        padding: const EdgeInsets.only(left: 4),
+                        child: Text(
+                          'Đã xem',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               ),
           ],
         ),

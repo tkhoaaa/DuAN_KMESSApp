@@ -162,5 +162,52 @@ class PostRepository {
       });
     });
   }
+
+  Future<void> deletePost({
+    required String postId,
+    required String authorUid,
+  }) async {
+    final postRef = _posts.doc(postId);
+    final postDoc = await postRef.get();
+    
+    if (!postDoc.exists) {
+      throw Exception('Post not found');
+    }
+    
+    final postData = postDoc.data()!;
+    if (postData['authorUid'] != authorUid) {
+      throw Exception('Not authorized to delete this post');
+    }
+
+    // Xóa tất cả subcollections (likes, comments)
+    final batch = _firestore.batch();
+    
+    // Xóa likes
+    final likes = await _postLikes(postId).get();
+    for (final like in likes.docs) {
+      batch.delete(like.reference);
+    }
+    
+    // Xóa comments
+    final comments = await _postComments(postId).get();
+    for (final comment in comments.docs) {
+      batch.delete(comment.reference);
+    }
+    
+    // Xóa post document
+    batch.delete(postRef);
+    
+    // Giảm postsCount
+    batch.set(
+      _firestore.collection('user_profiles').doc(authorUid),
+      {
+        'postsCount': FieldValue.increment(-1),
+        'updatedAt': FieldValue.serverTimestamp(),
+      },
+      SetOptions(merge: true),
+    );
+    
+    await batch.commit();
+  }
 }
 
