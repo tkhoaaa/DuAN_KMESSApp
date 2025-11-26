@@ -51,16 +51,16 @@
 
 ---
 
-### 4. Chat - Tìm Kiếm Tin Nhắn
+### 4. Chat - Tìm Kiếm Tin Nhắn ✅
 **Mô tả:** Tìm kiếm tin nhắn trong hội thoại
-- [ ] UI: Search bar trong chat detail page
-- [ ] Logic: Query messages by text (Firestore query)
-- [ ] UI: Highlight kết quả tìm kiếm
-- [ ] UI: Scroll đến tin nhắn được tìm thấy
+- [x] UI: Search bar trong chat detail page (AppBar với TextField)
+- [x] Logic: Query messages by text (Firestore query với client-side filter)
+- [x] UI: Highlight kết quả tìm kiếm (yellow background, bold)
+- [x] UI: Scroll đến tin nhắn được tìm thấy (jumpTo đầu list)
 
-**Files cần tạo/sửa:**
-- `lib/features/chat/pages/chat_detail_page.dart` - Thêm search bar
-- `lib/features/chat/repositories/chat_repository.dart` - Method `searchMessages`
+**Files đã sửa:**
+- `lib/features/chat/pages/chat_detail_page.dart` - Thêm search bar, search results view, highlight text
+- `lib/features/chat/repositories/chat_repository.dart` - Method `searchMessages` với filter
 
 ---
 
@@ -93,38 +93,42 @@
 
 ---
 
-### 7. Comment - Xóa Comment
+### 7. Comment - Xóa Comment ✅
 **Mô tả:** Cho phép tác giả comment hoặc chủ bài đăng xóa comment
-- [ ] UI: Nút delete trong comment list (chỉ hiện cho tác giả/chủ post)
-- [ ] Logic: Xóa comment document
-- [ ] Logic: Cập nhật `commentCount` (decrement)
+- [x] UI: Nút delete trong comment list (chỉ hiện cho tác giả/chủ post)
+- [x] Logic: Xóa comment document
+- [x] Logic: Kiểm tra quyền (tác giả comment hoặc chủ bài đăng)
+- [x] Logic: Cập nhật `commentCount` (decrement)
 
-**Files cần sửa:**
-- `lib/features/posts/pages/post_comments_sheet.dart` - Thêm nút delete
-- `lib/features/posts/repositories/post_repository.dart` - Method `deleteComment`
-- `lib/features/posts/services/post_service.dart` - Method `deleteComment`
+**Files đã sửa:**
+- `lib/features/posts/pages/post_comments_sheet.dart` - Thêm PopupMenuButton với option delete
+- `lib/features/posts/repositories/post_repository.dart` - Method `deleteComment` với kiểm tra quyền
+- `lib/features/posts/services/post_service.dart` - Method `deleteComment` wrapper
 
 ---
 
-### 8. Notification Center
+### 8. Notification Center ✅
 **Mô tả:** In-app notifications cho follow, like, comment, message
-- [ ] Model: `Notification` model (type, fromUid, toUid, postId?, read, createdAt)
-- [ ] Repository: `NotificationRepository` (create, markAsRead, watchNotifications)
-- [ ] Service: Tạo notification khi có like/comment/follow/message
-- [ ] UI: Notification center page (list notifications)
-- [ ] UI: Badge số lượng notifications chưa đọc
-- [ ] UI: Navigate đến post/conversation khi tap notification
+- [x] Model: `Notification` model (type, fromUid, toUid, postId?, read, createdAt)
+- [x] Repository: `NotificationRepository` (create, markAsRead, watchNotifications)
+- [x] Service: Tạo notification khi có like/comment/follow/message
+- [x] UI: Notification center page (list notifications)
+- [x] UI: Badge số lượng notifications chưa đọc (trong AppBar)
+- [x] UI: Navigate đến post/conversation khi tap notification
+- [x] Firestore rules cho notifications collection
 
-**Files cần tạo:**
-- `lib/features/notifications/models/notification.dart`
-- `lib/features/notifications/repositories/notification_repository.dart`
-- `lib/features/notifications/services/notification_service.dart`
-- `lib/features/notifications/pages/notification_center_page.dart`
+**Files đã tạo:**
+- `lib/features/notifications/models/notification.dart` - Notification model với enum type
+- `lib/features/notifications/repositories/notification_repository.dart` - CRUD operations
+- `lib/features/notifications/services/notification_service.dart` - Business logic
+- `lib/features/notifications/pages/notification_center_page.dart` - UI với list và navigation
 
-**Files cần sửa:**
-- `lib/features/posts/repositories/post_repository.dart` - Tạo notification khi like/comment
-- `lib/features/follow/repositories/follow_repository.dart` - Tạo notification khi follow
+**Files đã sửa:**
+- `lib/features/posts/services/post_service.dart` - Tạo notification khi like/comment
+- `lib/features/follow/services/follow_service.dart` - Tạo notification khi follow/accept request
 - `lib/features/chat/repositories/chat_repository.dart` - Tạo notification khi message
+- `lib/features/auth/auth_gate.dart` - Thêm notification icon với badge
+- `firebase/firestore.rules` - Rules cho notifications collection
 
 ---
 

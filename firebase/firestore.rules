@@ -120,7 +120,15 @@ service cloud.firestore {
         ])
         && request.resource.data.media is list;
 
-      allow update, delete: if isPostOwner();
+      // Cho phép owner update/delete hoặc chỉ update likeCount/commentCount
+      allow update: if isPostOwner() || (
+        isSignedIn() && 
+        request.resource.data.diff(resource.data).affectedKeys().hasAny(['likeCount', 'commentCount']) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likeCount', 'commentCount']) &&
+        (!('likeCount' in request.resource.data.diff(resource.data).affectedKeys()) || request.resource.data.likeCount is int) &&
+        (!('commentCount' in request.resource.data.diff(resource.data).affectedKeys()) || request.resource.data.commentCount is int)
+      );
+      allow delete: if isPostOwner();
 
       match /likes/{uid} {
         allow read: if isSignedIn();
@@ -134,7 +142,7 @@ service cloud.firestore {
         allow create: if isSignedIn()
           && request.resource.data.authorUid == request.auth.uid
           && request.resource.data.text is string
-          && request.resource.data.createdAt == request.time;
+          && (request.resource.data.createdAt == request.time || request.resource.data.createdAt is timestamp);
 
         allow delete: if isSignedIn() && (
           request.auth.uid == resource.data.authorUid ||
@@ -143,6 +151,19 @@ service cloud.firestore {
 
         allow update: if false;
       }
+    }
+
+    // Notifications collection
+    match /notifications/{notificationId} {
+      allow read: if isSignedIn() && request.auth.uid == resource.data.toUid;
+      allow create: if isSignedIn() 
+        && request.resource.data.fromUid == request.auth.uid
+        && request.resource.data.toUid is string
+        && request.resource.data.type is string;
+      allow update: if isSignedIn() 
+        && request.auth.uid == resource.data.toUid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+      allow delete: if isSignedIn() && request.auth.uid == resource.data.toUid;
     }
   }
 }

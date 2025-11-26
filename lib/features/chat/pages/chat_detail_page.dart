@@ -30,11 +30,16 @@ class ChatDetailPage extends StatefulWidget {
 class _ChatDetailPageState extends State<ChatDetailPage> {
   late final ChatRepository _chatRepository;
   final TextEditingController _controller = TextEditingController();
+  final TextEditingController _searchController = TextEditingController();
   final ImagePicker _imagePicker = ImagePicker();
   bool _isUploading = false;
   Timer? _typingTimer;
   bool _isTyping = false;
   bool _otherUserTyping = false;
+  bool _isSearchMode = false;
+  List<ChatMessage> _searchResults = [];
+  bool _isSearching = false;
+  final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
@@ -64,6 +69,8 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
     _typingTimer?.cancel();
     _controller.removeListener(_onTextChanged);
     _controller.dispose();
+    _searchController.dispose();
+    _scrollController.dispose();
     // Set typing false khi dispose
     final currentUid = _currentUid;
     if (currentUid != null && _isTyping) {
@@ -77,6 +84,101 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
   }
 
   String? get _currentUid => authRepository.currentUser()?.uid;
+
+  Future<void> _performSearch(String query) async {
+    if (query.trim().isEmpty) {
+      setState(() {
+        _searchResults = [];
+        _isSearching = false;
+      });
+      return;
+    }
+
+    setState(() {
+      _isSearching = true;
+    });
+
+    try {
+      final results = await _chatRepository.searchMessages(
+        conversationId: widget.conversationId,
+        searchTerm: query,
+      );
+      setState(() {
+        _searchResults = results;
+        _isSearching = false;
+      });
+
+      // Scroll đến tin nhắn đầu tiên nếu có kết quả
+      if (results.isNotEmpty && _scrollController.hasClients) {
+        // Tìm index của message đầu tiên trong list
+        // Vì ListView reverse, cần tính toán index
+        await Future.delayed(const Duration(milliseconds: 100));
+        if (_scrollController.hasClients) {
+          // Scroll đến đầu list (vì reverse: true)
+          _scrollController.jumpTo(0);
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isSearching = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Lỗi tìm kiếm: $e')),
+        );
+      }
+    }
+  }
+
+  Widget _buildSearchResults() {
+    if (_isSearching) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_searchController.text.trim().isEmpty) {
+      return const Center(
+        child: Text('Nhập từ khóa để tìm kiếm...'),
+      );
+    }
+
+    if (_searchResults.isEmpty) {
+      return Center(
+        child: Text('Không tìm thấy tin nhắn với từ khóa "${_searchController.text}"'),
+      );
+    }
+
+    final currentUid = _currentUid;
+    if (currentUid == null) {
+      return const Center(child: Text('Bạn cần đăng nhập.'));
+    }
+
+    return ListView.builder(
+      controller: _scrollController,
+      reverse: true,
+      padding: const EdgeInsets.symmetric(
+        horizontal: 12,
+        vertical: 8,
+      ),
+      itemCount: _searchResults.length,
+      itemBuilder: (context, index) {
+        final message = _searchResults[_searchResults.length - 1 - index];
+        final isMine = message.senderId == currentUid;
+        return _ChatMessageBubble(
+          message: message,
+          isMine: isMine,
+          otherUid: widget.otherUid,
+          searchTerm: _searchController.text.trim(),
+          onImageTap: (url) {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => _FullScreenImagePage(imageUrl: url),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
 
   void _onTextChanged() {
     final currentUid = _currentUid;
@@ -194,21 +296,71 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: FutureBuilder<UserProfile?>(
-          future: userProfileRepository.fetchProfile(widget.otherUid),
-          builder: (context, snapshot) {
-            final profile = snapshot.data;
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Text('Đang tải...');
-            }
-            final title = profile?.displayName?.isNotEmpty == true
-                ? profile!.displayName!
-                : (profile?.email?.isNotEmpty == true
-                    ? profile!.email!
-                    : widget.otherUid);
-            return Text(title);
-          },
-        ),
+        title: _isSearchMode
+            ? TextField(
+                controller: _searchController,
+                autofocus: true,
+                decoration: InputDecoration(
+                  hintText: 'Tìm kiếm tin nhắn...',
+                  border: InputBorder.none,
+                  suffixIcon: ValueListenableBuilder<TextEditingValue>(
+                    valueListenable: _searchController,
+                    builder: (context, value, child) {
+                      return value.text.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear),
+                              onPressed: () {
+                                _searchController.clear();
+                                setState(() {
+                                  _searchResults = [];
+                                });
+                              },
+                            )
+                          : const SizedBox.shrink();
+                    },
+                  ),
+                ),
+                onChanged: (value) {
+                  _performSearch(value);
+                },
+              )
+            : FutureBuilder<UserProfile?>(
+                future: userProfileRepository.fetchProfile(widget.otherUid),
+                builder: (context, snapshot) {
+                  final profile = snapshot.data;
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Text('Đang tải...');
+                  }
+                  final title = profile?.displayName?.isNotEmpty == true
+                      ? profile!.displayName!
+                      : (profile?.email?.isNotEmpty == true
+                          ? profile!.email!
+                          : widget.otherUid);
+                  return Text(title);
+                },
+              ),
+        actions: [
+          if (!_isSearchMode)
+            IconButton(
+              icon: const Icon(Icons.search),
+              onPressed: () {
+                setState(() {
+                  _isSearchMode = true;
+                });
+              },
+            )
+          else
+            IconButton(
+              icon: const Icon(Icons.close),
+              onPressed: () {
+                setState(() {
+                  _isSearchMode = false;
+                  _searchController.clear();
+                  _searchResults = [];
+                });
+              },
+            ),
+        ],
       ),
       body: Column(
         children: [
@@ -240,51 +392,55 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
             },
           ),
           Expanded(
-            child: StreamBuilder<List<ChatMessage>>(
-              stream: _chatRepository.watchMessages(
-                widget.conversationId,
-                limit: 50,
-              ),
-              builder: (context, snapshot) {
-
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (snapshot.hasError) {
-                  return Center(child: Text('Lỗi: ${snapshot.error}'));
-                }
-                final messages = snapshot.data ?? [];
-                if (messages.isEmpty) {
-                  return const Center(
-                    child: Text('Hãy gửi tin đầu tiên!'),
-                  );
-                }
-                return ListView.builder(
-                  reverse: true,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                  itemCount: messages.length,
-                  itemBuilder: (context, index) {
-                    final message = messages[messages.length - 1 - index];
-                    final isMine = message.senderId == currentUid;
-                    return _ChatMessageBubble(
-                      message: message,
-                      isMine: isMine,
-                      otherUid: widget.otherUid,
-                      onImageTap: (url) {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => _FullScreenImagePage(imageUrl: url),
-                          ),
+            child: _isSearchMode
+                ? _buildSearchResults()
+                : StreamBuilder<List<ChatMessage>>(
+                    stream: _chatRepository.watchMessages(
+                      widget.conversationId,
+                      limit: 50,
+                    ),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      if (snapshot.hasError) {
+                        return Center(child: Text('Lỗi: ${snapshot.error}'));
+                      }
+                      final messages = snapshot.data ?? [];
+                      if (messages.isEmpty) {
+                        return const Center(
+                          child: Text('Hãy gửi tin đầu tiên!'),
                         );
-                      },
-                    );
-                  },
-                );
-              },
-            ),
+                      }
+                      return ListView.builder(
+                        controller: _scrollController,
+                        reverse: true,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        itemCount: messages.length,
+                        itemBuilder: (context, index) {
+                          final message = messages[messages.length - 1 - index];
+                          final isMine = message.senderId == currentUid;
+                          return _ChatMessageBubble(
+                            message: message,
+                            isMine: isMine,
+                            otherUid: widget.otherUid,
+                            searchTerm: null,
+                            onImageTap: (url) {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      _FullScreenImagePage(imageUrl: url),
+                                ),
+                              );
+                            },
+                          );
+                        },
+                      );
+                    },
+                  ),
           ),
           // Typing indicator
           if (_otherUserTyping)
@@ -442,12 +598,14 @@ class _ChatMessageBubble extends StatelessWidget {
     required this.isMine,
     required this.otherUid,
     required this.onImageTap,
+    this.searchTerm,
   });
 
   final ChatMessage message;
   final bool isMine;
   final String otherUid;
   final void Function(String url) onImageTap;
+  final String? searchTerm;
 
   @override
   Widget build(BuildContext context) {
@@ -514,8 +672,9 @@ class _ChatMessageBubble extends StatelessWidget {
                         ),
                       )),
             if (message.text != null && message.text!.isNotEmpty)
-              Text(
+              _buildHighlightedText(
                 message.text!,
+                searchTerm: searchTerm,
                 style: const TextStyle(fontSize: 16),
               ),
             // Seen status - chỉ hiển thị cho tin nhắn của mình
@@ -551,6 +710,62 @@ class _ChatMessageBubble extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildHighlightedText(String text, {String? searchTerm, TextStyle? style}) {
+    if (searchTerm == null || searchTerm.isEmpty) {
+      return Text(text, style: style);
+    }
+
+    final lowerText = text.toLowerCase();
+    final lowerSearchTerm = searchTerm.toLowerCase();
+    final matches = <({int start, int end})>[];
+    
+    int start = 0;
+    while (start < lowerText.length) {
+      final index = lowerText.indexOf(lowerSearchTerm, start);
+      if (index == -1) break;
+      matches.add((start: index, end: index + searchTerm.length));
+      start = index + 1;
+    }
+
+    if (matches.isEmpty) {
+      return Text(text, style: style);
+    }
+
+    final spans = <TextSpan>[];
+    int lastEnd = 0;
+    
+    for (final match in matches) {
+      // Text trước match
+      if (match.start > lastEnd) {
+        spans.add(TextSpan(
+          text: text.substring(lastEnd, match.start),
+          style: style,
+        ));
+      }
+      // Text được highlight
+      spans.add(TextSpan(
+        text: text.substring(match.start, match.end),
+        style: (style ?? const TextStyle()).copyWith(
+          backgroundColor: Colors.yellow,
+          fontWeight: FontWeight.bold,
+        ),
+      ));
+      lastEnd = match.end;
+    }
+    
+    // Text sau match cuối cùng
+    if (lastEnd < text.length) {
+      spans.add(TextSpan(
+        text: text.substring(lastEnd),
+        style: style,
+      ));
+    }
+
+    return RichText(
+      text: TextSpan(children: spans),
     );
   }
 }

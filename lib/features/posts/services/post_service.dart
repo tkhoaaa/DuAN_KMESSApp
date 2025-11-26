@@ -10,6 +10,7 @@ import 'package:video_player/video_player.dart';
 import 'package:video_thumbnail/video_thumbnail.dart';
 
 import '../../auth/auth_repository.dart';
+import '../../notifications/services/notification_service.dart';
 import '../../profile/user_profile_repository.dart';
 import '../../../services/cloudinary_service.dart';
 import '../models/post.dart';
@@ -75,6 +76,7 @@ class PostService {
 
   final PostRepository _repository;
   final UserProfileRepository _profiles;
+  final NotificationService _notificationService = NotificationService();
   final FirebaseStorage _storage;
 
   Future<PostFeedPageResult> fetchFeedPage({
@@ -296,7 +298,36 @@ class PostService {
       throw StateError('Bạn cần đăng nhập.');
     }
     if (like) {
+      // Lấy post để lấy authorUid trước khi like (với timeout và error handling)
+      Post post;
+      try {
+        post = await _repository.watchPost(postId).first.timeout(
+          const Duration(seconds: 5),
+          onTimeout: () {
+            throw TimeoutException('Không thể lấy thông tin bài đăng. Vui lòng thử lại.');
+          },
+        );
+      } catch (e) {
+        // Nếu không lấy được post, vẫn thử like (có thể post đã bị xóa)
+        // Nhưng không tạo notification
+        await _repository.likePost(postId: postId, uid: currentUid);
+        debugPrint('Warning: Could not fetch post info for notification: $e');
+        return;
+      }
+      
+      // Like post trước (với retry logic)
       await _repository.likePost(postId: postId, uid: currentUid);
+      
+      // Tạo notification sau (không block, không throw exception)
+      // Chạy async và bỏ qua lỗi để không ảnh hưởng đến like operation
+      _notificationService.createLikeNotification(
+        postId: postId,
+        likerUid: currentUid,
+        postAuthorUid: post.authorUid,
+      ).catchError((e) {
+        // Chỉ log lỗi, không throw để không ảnh hưởng đến like operation
+        debugPrint('Error creating like notification: $e');
+      });
     } else {
       await _repository.unlikePost(postId: postId, uid: currentUid);
     }
@@ -320,11 +351,46 @@ class PostService {
     if (currentUid == null) {
       throw StateError('Bạn cần đăng nhập.');
     }
-    await _repository.addComment(
+    // Lấy post để lấy authorUid trước khi comment (với timeout và error handling)
+    Post post;
+    try {
+      post = await _repository.watchPost(postId).first.timeout(
+        const Duration(seconds: 5),
+        onTimeout: () {
+          throw TimeoutException('Không thể lấy thông tin bài đăng. Vui lòng thử lại.');
+        },
+      );
+    } catch (e) {
+      // Nếu không lấy được post, vẫn thử comment (có thể post đã bị xóa)
+      // Nhưng không tạo notification
+      await _repository.addComment(
+        postId: postId,
+        authorUid: currentUid,
+        text: text,
+      );
+      debugPrint('Warning: Could not fetch post info for notification: $e');
+      return;
+    }
+    
+    // Tạo comment và lấy commentId (với retry logic)
+    final commentId = await _repository.addComment(
       postId: postId,
       authorUid: currentUid,
       text: text,
     );
+    
+    // Tạo notification sau (không block, không throw exception)
+    // Chạy async và bỏ qua lỗi để không ảnh hưởng đến comment operation
+    _notificationService.createCommentNotification(
+      postId: postId,
+      commentId: commentId,
+      commenterUid: currentUid,
+      postAuthorUid: post.authorUid,
+      commentText: text,
+    ).catchError((e) {
+      // Chỉ log lỗi, không throw để không ảnh hưởng đến comment operation
+      debugPrint('Error creating comment notification: $e');
+    });
   }
 
   Stream<Post> watchPost(String postId) => _repository.watchPost(postId);
@@ -345,6 +411,21 @@ class PostService {
     await _repository.deletePost(
       postId: postId,
       authorUid: currentUid,
+    );
+  }
+
+  Future<void> deleteComment({
+    required String postId,
+    required String commentId,
+  }) async {
+    final currentUid = authRepository.currentUser()?.uid;
+    if (currentUid == null) {
+      throw StateError('Bạn cần đăng nhập.');
+    }
+    await _repository.deleteComment(
+      postId: postId,
+      commentId: commentId,
+      currentUid: currentUid,
     );
   }
 

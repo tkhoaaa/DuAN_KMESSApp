@@ -3,6 +3,8 @@ import 'email_verification_screen.dart';
 import 'login_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import '../notifications/pages/notification_center_page.dart';
+import '../notifications/services/notification_service.dart';
 import '../profile/user_profile_repository.dart';
 import '../profile/profile_screen.dart';
 import '../contacts/pages/contacts_page.dart';
@@ -119,6 +121,54 @@ class _SignedInHomeState extends State<_SignedInHome> {
             },
             icon: const Icon(Icons.chat_outlined),
             tooltip: 'Hội thoại',
+          ),
+          StreamBuilder<int>(
+            stream: user != null
+                ? NotificationService().watchUnreadCount(user.uid)
+                : Stream<int>.value(0),
+            builder: (context, snapshot) {
+              final unreadCount = snapshot.data ?? 0;
+              return Stack(
+                children: [
+                  IconButton(
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const NotificationCenterPage(),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.notifications_outlined),
+                    tooltip: 'Thông báo',
+                  ),
+                  if (unreadCount > 0)
+                    Positioned(
+                      right: 8,
+                      top: 8,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(
+                          color: Colors.red,
+                          shape: BoxShape.circle,
+                        ),
+                        constraints: const BoxConstraints(
+                          minWidth: 16,
+                          minHeight: 16,
+                        ),
+                        child: Text(
+                          unreadCount > 99 ? '99+' : '$unreadCount',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
           ),
           IconButton(
             onPressed: () {

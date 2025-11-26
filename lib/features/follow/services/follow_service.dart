@@ -1,7 +1,9 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import '../../auth/auth_repository.dart';
+import '../../notifications/services/notification_service.dart';
 import '../../profile/user_profile_repository.dart';
 import '../models/follow_request.dart';
 import '../models/follow_state.dart';
@@ -45,6 +47,7 @@ class FollowService {
   final FollowRepository _repository;
   final UserProfileRepository _profiles;
   final FirebaseFirestore _firestore;
+  final NotificationService _notificationService = NotificationService();
 
   Future<List<UserProfile>> searchUsers({
     required String keyword,
@@ -138,6 +141,11 @@ class FollowService {
       followerUid: currentUid,
       targetUid: targetUid,
     );
+    // Tạo notification
+    _notificationService.createFollowNotification(
+      followerUid: currentUid,
+      followedUid: targetUid,
+    ).catchError((e) => debugPrint('Error creating follow notification: $e'));
     return FollowStatus.following;
   }
 
@@ -166,6 +174,11 @@ class FollowService {
       targetUid: currentUid,
       followerUid: followerUid,
     );
+    // Tạo notification khi accept follow request
+    _notificationService.createFollowNotification(
+      followerUid: followerUid,
+      followedUid: currentUid,
+    ).catchError((e) => debugPrint('Error creating follow notification: $e'));
   }
 
   Future<void> declineRequest(String followerUid) async {

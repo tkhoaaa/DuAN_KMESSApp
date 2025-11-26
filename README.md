@@ -21,6 +21,7 @@ flutter run -d emulator  # chạy Android emulator
 ```
 
 ## Deploy & Cấu hình
+firebase deploy --only firestore:rules
 
 - **[docs/deploy_guide.md](docs/deploy_guide.md)**: Hướng dẫn chi tiết deploy Firestore Rules và Cloud Functions, kiểm tra bảo mật.
 - **[docs/setup_storage.md](docs/setup_storage.md)**: Hướng dẫn setup Firebase Storage (bắt buộc cho tính năng upload ảnh/video).

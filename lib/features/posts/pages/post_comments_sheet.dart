@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../auth/auth_repository.dart';
 import '../models/post.dart';
 import '../services/post_service.dart';
 
@@ -99,6 +100,11 @@ class _PostCommentsSheetState extends State<PostCommentsSheet> {
                         final title = author?.displayName?.isNotEmpty == true
                             ? author!.displayName!
                             : (author?.email ?? entry.comment.authorUid);
+                        final currentUid = authRepository.currentUser()?.uid;
+                        final canDelete = currentUid != null &&
+                            (currentUid == entry.comment.authorUid ||
+                                currentUid == widget.post.authorUid);
+                        
                         return ListTile(
                           leading: CircleAvatar(
                             backgroundImage: author?.photoUrl != null
@@ -110,16 +116,94 @@ class _PostCommentsSheetState extends State<PostCommentsSheet> {
                           ),
                           title: Text(title),
                           subtitle: Text(entry.comment.text),
-                          trailing: entry.comment.createdAt != null
-                              ? Text(
-                                  entry.comment.createdAt!
-                                      .toLocal()
-                                      .toString(),
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .bodySmall,
-                                )
-                              : null,
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (entry.comment.createdAt != null)
+                                Padding(
+                                  padding: const EdgeInsets.only(right: 8),
+                                  child: Text(
+                                    entry.comment.createdAt!
+                                        .toLocal()
+                                        .toString(),
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodySmall,
+                                  ),
+                                ),
+                              if (canDelete)
+                                PopupMenuButton<String>(
+                                  icon: const Icon(Icons.more_vert, size: 20),
+                                  onSelected: (value) async {
+                                    if (value == 'delete') {
+                                      final confirmed = await showDialog<bool>(
+                                        context: context,
+                                        builder: (context) => AlertDialog(
+                                          title: const Text('Xóa bình luận'),
+                                          content: const Text(
+                                            'Bạn có chắc chắn muốn xóa bình luận này?',
+                                          ),
+                                          actions: [
+                                            TextButton(
+                                              onPressed: () =>
+                                                  Navigator.pop(context, false),
+                                              child: const Text('Hủy'),
+                                            ),
+                                            TextButton(
+                                              onPressed: () =>
+                                                  Navigator.pop(context, true),
+                                              style: TextButton.styleFrom(
+                                                foregroundColor: Colors.red,
+                                              ),
+                                              child: const Text('Xóa'),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                      if (confirmed == true && mounted) {
+                                        try {
+                                          await _postService.deleteComment(
+                                            postId: widget.post.id,
+                                            commentId: entry.comment.id,
+                                          );
+                                          if (mounted) {
+                                            ScaffoldMessenger.of(context)
+                                                .showSnackBar(
+                                              const SnackBar(
+                                                content: Text('Đã xóa bình luận'),
+                                              ),
+                                            );
+                                          }
+                                        } catch (e) {
+                                          if (mounted) {
+                                            ScaffoldMessenger.of(context)
+                                                .showSnackBar(
+                                              SnackBar(
+                                                content: Text(
+                                                  'Lỗi xóa bình luận: $e',
+                                                ),
+                                              ),
+                                            );
+                                          }
+                                        }
+                                      }
+                                    }
+                                  },
+                                  itemBuilder: (context) => [
+                                    const PopupMenuItem(
+                                      value: 'delete',
+                                      child: Row(
+                                        children: [
+                                          Icon(Icons.delete, color: Colors.red),
+                                          SizedBox(width: 8),
+                                          Text('Xóa bình luận'),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                            ],
+                          ),
                         );
                       },
                     );

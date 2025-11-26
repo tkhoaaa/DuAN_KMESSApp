@@ -100,37 +100,65 @@ class PostRepository {
   Future<void> likePost({
     required String postId,
     required String uid,
+    int maxRetries = 3,
   }) async {
     final postRef = _posts.doc(postId);
     final likeRef = _postLikes(postId).doc(uid);
 
-    await _firestore.runTransaction((txn) async {
-      final likeSnap = await txn.get(likeRef);
-      if (likeSnap.exists) return;
-      txn.set(likeRef, {
-        'likedAt': FieldValue.serverTimestamp(),
-      });
-      txn.update(postRef, {
-        'likeCount': FieldValue.increment(1),
-      });
-    });
+    int retries = 0;
+    while (retries <= maxRetries) {
+      try {
+        await _firestore.runTransaction((txn) async {
+          final likeSnap = await txn.get(likeRef);
+          if (likeSnap.exists) return;
+          txn.set(likeRef, {
+            'likedAt': FieldValue.serverTimestamp(),
+          });
+          txn.update(postRef, {
+            'likeCount': FieldValue.increment(1),
+          });
+        });
+        return; // Thành công, thoát khỏi loop
+      } catch (e) {
+        if (retries >= maxRetries) {
+          rethrow; // Đã hết số lần retry, throw exception
+        }
+        // Đợi một chút trước khi retry (exponential backoff)
+        await Future.delayed(Duration(milliseconds: 500 * (retries + 1)));
+        retries++;
+      }
+    }
   }
 
   Future<void> unlikePost({
     required String postId,
     required String uid,
+    int maxRetries = 3,
   }) async {
     final postRef = _posts.doc(postId);
     final likeRef = _postLikes(postId).doc(uid);
 
-    await _firestore.runTransaction((txn) async {
-      final likeSnap = await txn.get(likeRef);
-      if (!likeSnap.exists) return;
-      txn.delete(likeRef);
-      txn.update(postRef, {
-        'likeCount': FieldValue.increment(-1),
-      });
-    });
+    int retries = 0;
+    while (retries <= maxRetries) {
+      try {
+        await _firestore.runTransaction((txn) async {
+          final likeSnap = await txn.get(likeRef);
+          if (!likeSnap.exists) return;
+          txn.delete(likeRef);
+          txn.update(postRef, {
+            'likeCount': FieldValue.increment(-1),
+          });
+        });
+        return; // Thành công, thoát khỏi loop
+      } catch (e) {
+        if (retries >= maxRetries) {
+          rethrow; // Đã hết số lần retry, throw exception
+        }
+        // Đợi một chút trước khi retry (exponential backoff)
+        await Future.delayed(Duration(milliseconds: 500 * (retries + 1)));
+        retries++;
+      }
+    }
   }
 
   Stream<List<PostComment>> watchComments(String postId) {
@@ -142,23 +170,78 @@ class PostRepository {
             snapshot.docs.map(PostComment.fromDoc).toList());
   }
 
-  Future<void> addComment({
+  Future<String> addComment({
     required String postId,
     required String authorUid,
     required String text,
+    int maxRetries = 3,
   }) async {
     final postRef = _posts.doc(postId);
     final commentsRef = _postComments(postId);
+    String commentId = '';
 
+    int retries = 0;
+    while (retries <= maxRetries) {
+      try {
+        await _firestore.runTransaction((txn) async {
+          final newCommentRef = commentsRef.doc();
+          commentId = newCommentRef.id;
+          txn.set(newCommentRef, {
+            'authorUid': authorUid,
+            'text': text,
+            'createdAt': FieldValue.serverTimestamp(),
+          });
+          txn.update(postRef, {
+            'commentCount': FieldValue.increment(1),
+          });
+        });
+        return commentId; // Thành công, return commentId
+      } catch (e) {
+        if (retries >= maxRetries) {
+          rethrow; // Đã hết số lần retry, throw exception
+        }
+        // Đợi một chút trước khi retry (exponential backoff)
+        await Future.delayed(Duration(milliseconds: 500 * (retries + 1)));
+        retries++;
+      }
+    }
+    return commentId; // Không bao giờ đến đây, nhưng để tránh lỗi compile
+  }
+
+  Future<void> deleteComment({
+    required String postId,
+    required String commentId,
+    required String currentUid,
+  }) async {
+    final postRef = _posts.doc(postId);
+    final commentRef = _postComments(postId).doc(commentId);
+    
+    // Lấy thông tin post và comment để kiểm tra quyền
+    final postDoc = await postRef.get();
+    final commentDoc = await commentRef.get();
+    
+    if (!postDoc.exists) {
+      throw Exception('Post not found');
+    }
+    if (!commentDoc.exists) {
+      throw Exception('Comment not found');
+    }
+    
+    final postData = postDoc.data()!;
+    final commentData = commentDoc.data()!;
+    final postAuthorUid = postData['authorUid'] as String? ?? '';
+    final commentAuthorUid = commentData['authorUid'] as String? ?? '';
+    
+    // Chỉ cho phép tác giả comment hoặc chủ bài đăng xóa
+    if (currentUid != commentAuthorUid && currentUid != postAuthorUid) {
+      throw Exception('Not authorized to delete this comment');
+    }
+
+    // Xóa comment và giảm commentCount
     await _firestore.runTransaction((txn) async {
-      final newCommentRef = commentsRef.doc();
-      txn.set(newCommentRef, {
-        'authorUid': authorUid,
-        'text': text,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
+      txn.delete(commentRef);
       txn.update(postRef, {
-        'commentCount': FieldValue.increment(1),
+        'commentCount': FieldValue.increment(-1),
       });
     });
   }

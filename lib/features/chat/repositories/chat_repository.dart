@@ -1,7 +1,9 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 
+import '../../notifications/services/notification_service.dart';
 import '../models/conversation_summary.dart';
 import '../models/message.dart';
 import '../models/message_attachment.dart';
@@ -11,6 +13,7 @@ class ChatRepository {
       : _firestore = firestore ?? FirebaseFirestore.instance;
 
   final FirebaseFirestore _firestore;
+  final NotificationService _notificationService = NotificationService();
 
   CollectionReference<Map<String, dynamic>> get _conversationCollection =>
       _firestore.collection('conversations');
@@ -151,6 +154,12 @@ class ChatRepository {
       seenBy: [senderId],
     );
 
+    // Lấy conversation để lấy participantIds
+    final conversationDoc = await _conversationCollection.doc(conversationId).get();
+    final participantIds = (conversationDoc.data()?['participantIds'] as List<dynamic>? ?? [])
+        .map((e) => e.toString())
+        .toList();
+    
     final batch = _firestore.batch();
     batch.set(messageRef, message.toMap());
     batch.set(
@@ -166,6 +175,18 @@ class ChatRepository {
       SetOptions(merge: true),
     );
     await batch.commit();
+    
+    // Tạo notification cho các participants khác (không phải sender)
+    for (final participantId in participantIds) {
+      if (participantId != senderId) {
+        _notificationService.createMessageNotification(
+          conversationId: conversationId,
+          senderUid: senderId,
+          receiverUid: participantId,
+          messageText: text.isNotEmpty ? text : (attachments.isNotEmpty ? '[media]' : null),
+        ).catchError((e) => debugPrint('Error creating message notification: $e'));
+      }
+    }
   }
 
   /// Gửi tin nhắn có hình ảnh
@@ -222,6 +243,35 @@ class ChatRepository {
           : FieldValue.arrayRemove([conversationId]),
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
+  }
+
+  /// Tìm kiếm tin nhắn trong conversation
+  Future<List<ChatMessage>> searchMessages({
+    required String conversationId,
+    required String searchTerm,
+    int limit = 200,
+  }) async {
+    if (searchTerm.trim().isEmpty) {
+      return [];
+    }
+    
+    final query = _messagesRef(conversationId)
+        .orderBy('createdAt', descending: true)
+        .limit(limit);
+    
+    final snapshot = await query.get();
+    final allMessages = snapshot.docs
+        .map(ChatMessage.fromDoc)
+        .toList()
+        .reversed
+        .toList();
+    
+    // Filter messages by text (case-insensitive)
+    final lowerSearchTerm = searchTerm.toLowerCase();
+    return allMessages.where((message) {
+      final text = message.text?.toLowerCase() ?? '';
+      return text.contains(lowerSearchTerm);
+    }).toList();
   }
 }
 
