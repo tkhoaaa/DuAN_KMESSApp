@@ -178,11 +178,19 @@
 
 ### 12. Group Chat Nâng Cao
 **Mô tả:** Hỗ trợ chat nhóm với quản lý thành viên và quyền admin
-- [ ] Model: Mở rộng `conversations` với type `group`, name, avatarUrl, description
-- [ ] UI: Tạo nhóm mới, chọn thành viên, đặt tên/ảnh nhóm
-- [ ] Logic: Thêm/xoá thành viên, rời nhóm, chuyển quyền admin
-- [ ] UI: Màn hình "Thông tin nhóm" (danh sách thành viên, nút thêm/xoá)
-- [ ] Logic: Pin tin nhắn quan trọng (field `pinnedMessage`)
+- [ ] Model: Mở rộng `conversations` với type `group`, name, avatarUrl, description, admins, membersCount
+- [ ] Model: Bổ sung phân biệt message trong group (ví dụ: hiển thị authorName, system messages: user joined/left, changed name,…)
+- [ ] Service: Thêm API trong `group_chat_service` / `chat_repository` để tạo group, thêm/xoá thành viên, rời nhóm, chuyển quyền admin
+- [ ] Service: Thêm API đổi tên nhóm, đổi avatar nhóm, cập nhật description
+- [ ] Service: Logic pin/unpin tin nhắn quan trọng (field `pinnedMessageId` hoặc `pinnedMessages`)
+- [ ] UI: Màn hình tạo nhóm mới (chọn nhiều thành viên, nhập tên nhóm, chọn avatar nhóm)
+- [ ] UI: Hiển thị conversation group trong `ConversationsPage` (tên nhóm, avatar nhóm, số thành viên)
+- [ ] UI: Màn hình "Thông tin nhóm" (danh sách thành viên, role admin/member, nút thêm/xoá thành viên, rời nhóm, chuyển quyền admin)
+- [ ] UI: Hiển thị badge/section cho tin nhắn được pin trong `ChatDetailPage` (tap để scroll tới message)
+- [ ] Logic: Phân quyền – chỉ admin mới được đổi tên nhóm, đổi avatar, thêm/xoá thành viên, pin/unpin, chuyển quyền admin
+- [ ] Firestore: Thiết kế structure và rules cho group (group conversations, participants với role, các thao tác admin)
+- [ ] Migration: Xử lý tương thích để conversation 1-1 cũ vẫn hoạt động bình thường bên cạnh group
+- [ ] UX: Thêm confirm dialog cho các action nhạy cảm (rời nhóm, xoá thành viên, chuyển quyền admin)
 
 **Files dự kiến:**
 - `lib/features/chat/pages/create_group_page.dart`

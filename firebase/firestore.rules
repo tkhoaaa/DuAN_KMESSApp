@@ -87,6 +87,35 @@ service cloud.firestore {
       allow update: if isSignedIn() && request.auth.uid in resource.data.participantIds;
       allow delete: if false; // Không cho xóa conversation
 
+      // Participants subcollection: lưu role, joinedAt, lastReadAt, notificationsEnabled
+      match /participants/{participantUid} {
+        allow read: if isSignedIn()
+          && request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participantIds;
+        // Cho phép:
+        // - Admin tạo participant cho thành viên khác (khi thêm vào group)
+        // - Chính participant update các field của mình (lastReadAt, notificationsEnabled)
+        // - Admin update role của thành viên
+        allow create: if isSignedIn()
+          && (
+            // Tự tạo bản ghi của chính mình
+            (request.auth.uid == participantUid &&
+             request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participantIds)
+            ||
+            // Admin tạo bản ghi cho thành viên khác
+            (request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.admins)
+          );
+        allow update: if isSignedIn()
+          && (
+            // Participant tự update
+            (request.auth.uid == participantUid &&
+             request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participantIds)
+            ||
+            // Admin update (ví dụ đổi role)
+            (request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.admins)
+          );
+        allow delete: if false;
+      }
+
       // Messages subcollection
       match /messages/{messageId} {
         allow read: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participantIds;

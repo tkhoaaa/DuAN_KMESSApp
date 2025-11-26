@@ -7,6 +7,9 @@ class ConversationSummary {
     required this.participantIds,
     this.name,
     this.avatarUrl,
+    this.description,
+    this.adminIds = const [],
+    this.membersCount,
     this.lastMessagePreview,
     this.lastMessageSenderId,
     this.lastMessageAt,
@@ -17,6 +20,9 @@ class ConversationSummary {
   final List<String> participantIds;
   final String? name;
   final String? avatarUrl;
+  final String? description;
+  final List<String> adminIds;
+  final int? membersCount;
   final String? lastMessagePreview;
   final String? lastMessageSenderId;
   final DateTime? lastMessageAt;
@@ -34,11 +40,18 @@ class ConversationSummary {
           .toList(),
       name: data['name'] as String?,
       avatarUrl: data['avatarUrl'] as String?,
+      description: data['description'] as String?,
+      adminIds: (data['admins'] as List<dynamic>? ?? [])
+          .map((e) => e.toString())
+          .toList(),
+      membersCount: data['membersCount'] as int?,
       lastMessagePreview: lastMessage?['text'] as String?,
       lastMessageSenderId: lastMessage?['senderId'] as String?,
       lastMessageAt:
           (lastMessage?['createdAt'] as Timestamp?)?.toDate(),
     );
   }
+
+  bool get isGroup => type == 'group';
 }
 

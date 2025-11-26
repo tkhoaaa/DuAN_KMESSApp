@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../auth/auth_repository.dart';
 import '../services/conversation_service.dart';
 import 'chat_detail_page.dart';
+import 'create_group_page.dart';
 
 class ConversationsPage extends StatefulWidget {
   const ConversationsPage({super.key});
@@ -35,6 +36,20 @@ class _ConversationsPageState extends State<ConversationsPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Hội thoại'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.group_add),
+            tooltip: 'Tạo nhóm mới',
+            onPressed: () async {
+              if (uid == null) return;
+              await Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const CreateGroupPage(),
+                ),
+              );
+            },
+          ),
+        ],
       ),
       body: StreamBuilder(
         stream: _conversationService.watchConversationEntries(uid),

@@ -77,6 +77,7 @@ class ChatRepository {
     required List<String> memberIds,
     required String name,
     String? avatarUrl,
+    String? description,
   }) async {
     final participants = <String>{ownerUid, ...memberIds}.toList()..sort();
 
@@ -86,6 +87,9 @@ class ChatRepository {
       'createdBy': ownerUid,
       'name': name,
       'avatarUrl': avatarUrl,
+      'description': description,
+      'admins': [ownerUid],
+      'membersCount': participants.length,
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
       'lastMessage': null,
@@ -109,6 +113,249 @@ class ChatRepository {
     await batch.commit();
 
     return doc.id;
+  }
+
+  /// Thêm thành viên mới vào group (chỉ admin được phép)
+  Future<void> addMembersToGroup({
+    required String conversationId,
+    required String requesterId,
+    required List<String> newMemberIds,
+  }) async {
+    if (newMemberIds.isEmpty) return;
+
+    await _firestore.runTransaction((txn) async {
+      final convRef = _conversationCollection.doc(conversationId);
+      final convSnap = await txn.get(convRef);
+      if (!convSnap.exists) return;
+      final data = convSnap.data() ?? {};
+
+      if (data['type'] != 'group') return;
+
+      final admins = (data['admins'] as List<dynamic>? ?? [])
+          .map((e) => e.toString())
+          .toList();
+      if (!admins.contains(requesterId)) {
+        throw StateError('Bạn không có quyền thêm thành viên.');
+      }
+
+      final participants = (data['participantIds'] as List<dynamic>? ?? [])
+          .map((e) => e.toString())
+          .toSet();
+
+      final toAdd =
+          newMemberIds.where((id) => !participants.contains(id)).toList();
+      if (toAdd.isEmpty) return;
+
+      for (final uid in toAdd) {
+        txn.set(_participantsRef(conversationId).doc(uid), {
+          'role': 'member',
+          'joinedAt': FieldValue.serverTimestamp(),
+          'lastReadAt': FieldValue.serverTimestamp(),
+          'notificationsEnabled': true,
+        }, SetOptions(merge: true));
+        participants.add(uid);
+      }
+
+      txn.update(convRef, {
+        'participantIds': participants.toList()..sort(),
+        'membersCount': participants.length,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    });
+  }
+
+  /// Xóa một thành viên khỏi group (chỉ admin được phép, không dùng cho chính mình)
+  Future<void> removeMemberFromGroup({
+    required String conversationId,
+    required String requesterId,
+    required String targetUid,
+  }) async {
+    await _firestore.runTransaction((txn) async {
+      final convRef = _conversationCollection.doc(conversationId);
+      final convSnap = await txn.get(convRef);
+      if (!convSnap.exists) return;
+      final data = convSnap.data() ?? {};
+
+      if (data['type'] != 'group') return;
+
+      if (targetUid == requesterId) {
+        // Với trường hợp tự rời nhóm, dùng [leaveGroup]
+        return;
+      }
+
+      final admins = (data['admins'] as List<dynamic>? ?? [])
+          .map((e) => e.toString())
+          .toList();
+      if (!admins.contains(requesterId)) {
+        throw StateError('Bạn không có quyền xóa thành viên.');
+      }
+
+      final participants = (data['participantIds'] as List<dynamic>? ?? [])
+          .map((e) => e.toString())
+          .toSet();
+      if (!participants.contains(targetUid)) {
+        return;
+      }
+
+      participants.remove(targetUid);
+
+      // Nếu targetUid là admin thì xóa khỏi danh sách admins
+      admins.remove(targetUid);
+
+      txn.delete(_participantsRef(conversationId).doc(targetUid));
+      txn.update(convRef, {
+        'participantIds': participants.toList()..sort(),
+        'admins': admins,
+        'membersCount': participants.length,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    });
+  }
+
+  /// Thành viên rời group.
+  /// Nếu là admin cuối cùng thì tự động chuyển quyền admin cho một thành viên khác (nếu còn).
+  Future<void> leaveGroup({
+    required String conversationId,
+    required String uid,
+  }) async {
+    await _firestore.runTransaction((txn) async {
+      final convRef = _conversationCollection.doc(conversationId);
+      final convSnap = await txn.get(convRef);
+      if (!convSnap.exists) return;
+      final data = convSnap.data() ?? {};
+
+      if (data['type'] != 'group') return;
+
+      final participants = (data['participantIds'] as List<dynamic>? ?? [])
+          .map((e) => e.toString())
+          .toSet();
+      if (!participants.contains(uid)) return;
+
+      final admins = (data['admins'] as List<dynamic>? ?? [])
+          .map((e) => e.toString())
+          .toList();
+
+      participants.remove(uid);
+      var adminList = admins.toList();
+
+      final isAdmin = adminList.contains(uid);
+      if (isAdmin) {
+        adminList.remove(uid);
+        // Nếu không còn admin nào nhưng vẫn còn thành viên -> đặt một thành viên khác làm admin
+        if (adminList.isEmpty && participants.isNotEmpty) {
+          final newAdmin = participants.first;
+          adminList.add(newAdmin);
+          txn.set(_participantsRef(conversationId).doc(newAdmin), {
+            'role': 'admin',
+          }, SetOptions(merge: true));
+        }
+      }
+
+      txn.delete(_participantsRef(conversationId).doc(uid));
+      txn.update(convRef, {
+        'participantIds': participants.toList()..sort(),
+        'admins': adminList,
+        'membersCount': participants.length,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    });
+  }
+
+  /// Cập nhật thông tin nhóm (tên, avatar, mô tả) - chỉ admin được phép.
+  Future<void> updateGroupInfo({
+    required String conversationId,
+    required String requesterId,
+    String? name,
+    String? avatarUrl,
+    String? description,
+  }) async {
+    if (name == null && avatarUrl == null && description == null) {
+      return;
+    }
+
+    await _firestore.runTransaction((txn) async {
+      final convRef = _conversationCollection.doc(conversationId);
+      final convSnap = await txn.get(convRef);
+      if (!convSnap.exists) return;
+      final data = convSnap.data() ?? {};
+
+      if (data['type'] != 'group') return;
+
+      final admins = (data['admins'] as List<dynamic>? ?? [])
+          .map((e) => e.toString())
+          .toList();
+      if (!admins.contains(requesterId)) {
+        throw StateError('Bạn không có quyền chỉnh sửa thông tin nhóm.');
+      }
+
+      final updates = <String, dynamic>{};
+      if (name != null) updates['name'] = name;
+      if (avatarUrl != null) updates['avatarUrl'] = avatarUrl;
+      if (description != null) updates['description'] = description;
+      updates['updatedAt'] = FieldValue.serverTimestamp();
+
+      txn.update(convRef, updates);
+    });
+  }
+
+  /// Thêm hoặc gỡ quyền admin cho một thành viên (chỉ admin khác được phép).
+  Future<void> setAdminForMember({
+    required String conversationId,
+    required String requesterId,
+    required String targetUid,
+    required bool isAdmin,
+  }) async {
+    await _firestore.runTransaction((txn) async {
+      final convRef = _conversationCollection.doc(conversationId);
+      final convSnap = await txn.get(convRef);
+      if (!convSnap.exists) return;
+      final data = convSnap.data() ?? {};
+
+      if (data['type'] != 'group') return;
+
+      final admins = (data['admins'] as List<dynamic>? ?? [])
+          .map((e) => e.toString())
+          .toList();
+
+      if (!admins.contains(requesterId)) {
+        throw StateError('Bạn không có quyền thay đổi quyền admin.');
+      }
+
+      final participants = (data['participantIds'] as List<dynamic>? ?? [])
+          .map((e) => e.toString())
+          .toSet();
+      if (!participants.contains(targetUid)) {
+        return;
+      }
+
+      var adminList = admins.toList();
+      if (isAdmin) {
+        if (!adminList.contains(targetUid)) {
+          adminList.add(targetUid);
+        }
+        txn.set(_participantsRef(conversationId).doc(targetUid), {
+          'role': 'admin',
+        }, SetOptions(merge: true));
+      } else {
+        adminList.remove(targetUid);
+        // Đảm bảo luôn còn ít nhất một admin
+        if (adminList.isEmpty && participants.isNotEmpty) {
+          final newAdmin = participants.first;
+          adminList.add(newAdmin);
+          txn.set(_participantsRef(conversationId).doc(newAdmin), {
+            'role': 'admin',
+          }, SetOptions(merge: true));
+        }
+        txn.set(_participantsRef(conversationId).doc(targetUid), {
+          'role': 'member',
+        }, SetOptions(merge: true));
+      }
+
+      txn.update(convRef, {
+        'admins': adminList,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    });
   }
 
   Stream<List<ConversationSummary>> watchConversations(String uid) {
