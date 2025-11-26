@@ -208,7 +208,13 @@ class _SignedInHomeState extends State<_SignedInHome> {
                 if (profile != null) ...[
                   const SizedBox(height: 8),
                   Text('Tên hiển thị: ${profile.displayName?.isNotEmpty == true ? profile.displayName : "(chưa có)"}'),
-                  Text('Trạng thái: ${profile.isOnline ? "Online" : "Offline"}'),
+                  Text(
+                    profile.isOnline
+                        ? 'Trạng thái: Online'
+                        : (profile.lastSeen != null
+                            ? 'Hoạt động lần cuối: ${profile.lastSeen}'
+                            : 'Trạng thái: Offline'),
+                  ),
                   const SizedBox(height: 8),
                   Text('Bài đăng: ${profile.postsCount}'),
                   Text('Đang theo dõi: ${profile.followingCount}'),

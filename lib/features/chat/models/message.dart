@@ -13,6 +13,7 @@ class ChatMessage {
     this.seenBy = const [],
     this.replyTo,
     this.systemPayload,
+    this.reactions = const {},
   });
 
   final String id;
@@ -24,6 +25,8 @@ class ChatMessage {
   final List<String> seenBy;
   final String? replyTo;
   final Map<String, dynamic>? systemPayload;
+  /// Map<emoji, List<uid>>
+  final Map<String, List<String>> reactions;
 
   Map<String, dynamic> toMap() {
     return {
@@ -35,11 +38,18 @@ class ChatMessage {
       'seenBy': seenBy,
       'replyTo': replyTo,
       'systemPayload': systemPayload,
+      'reactions': reactions.map((key, value) => MapEntry(key, value)),
     };
   }
 
   factory ChatMessage.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data() ?? {};
+    final rawReactions =
+        (data['reactions'] as Map<String, dynamic>?) ?? <String, dynamic>{};
+    final reactions = rawReactions.map((key, value) {
+      final list = (value as List<dynamic>? ?? []).map((e) => e.toString()).toList();
+      return MapEntry(key, list);
+    });
     return ChatMessage(
       id: doc.id,
       senderId: data['senderId'] as String? ?? '',
@@ -60,6 +70,7 @@ class ChatMessage {
           ? null
           : Map<String, dynamic>.from(
               data['systemPayload'] as Map<String, dynamic>),
+      reactions: reactions,
     );
   }
 }

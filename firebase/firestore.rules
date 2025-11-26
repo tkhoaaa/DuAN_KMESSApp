@@ -93,12 +93,14 @@ service cloud.firestore {
         allow create: if isSignedIn() 
           && request.resource.data.senderId == request.auth.uid
           && request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participantIds;
-        // Cho phép sender update hoặc participant update seenBy
+        // Cho phép sender update hoặc participant update seenBy/reactions
         allow update: if isSignedIn() && (
           request.auth.uid == resource.data.senderId ||
           (request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participantIds &&
-           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['seenBy']) &&
-           request.resource.data.seenBy is list)
+           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['seenBy', 'reactions']) &&
+           (!('seenBy' in request.resource.data.diff(resource.data).affectedKeys()) || request.resource.data.seenBy is list) &&
+           (!('reactions' in request.resource.data.diff(resource.data).affectedKeys()) || request.resource.data.reactions is map)
+          )
         );
         allow delete: if isSignedIn() && request.auth.uid == resource.data.senderId;
       }

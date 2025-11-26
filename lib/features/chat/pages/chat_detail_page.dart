@@ -175,6 +175,23 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
               ),
             );
           },
+          onReact: (emoji) async {
+            try {
+              final currentUid = _currentUid;
+              if (currentUid == null) return;
+              await _chatRepository.toggleReaction(
+                conversationId: widget.conversationId,
+                messageId: message.id,
+                uid: currentUid,
+                emoji: emoji,
+              );
+            } catch (e) {
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Lỗi cập nhật reaction: $e')),
+              );
+            }
+          },
         );
       },
     );
@@ -436,6 +453,25 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
                                 ),
                               );
                             },
+                            onReact: (emoji) async {
+                              try {
+                                final uid = _currentUid;
+                                if (uid == null) return;
+                                await _chatRepository.toggleReaction(
+                                  conversationId: widget.conversationId,
+                                  messageId: message.id,
+                                  uid: uid,
+                                  emoji: emoji,
+                                );
+                              } catch (e) {
+                                if (!mounted) return;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                      content: Text(
+                                          'Lỗi cập nhật reaction: $e')),
+                                );
+                              }
+                            },
                           );
                         },
                       );
@@ -598,6 +634,7 @@ class _ChatMessageBubble extends StatelessWidget {
     required this.isMine,
     required this.otherUid,
     required this.onImageTap,
+    required this.onReact,
     this.searchTerm,
   });
 
@@ -605,6 +642,8 @@ class _ChatMessageBubble extends StatelessWidget {
   final bool isMine;
   final String otherUid;
   final void Function(String url) onImageTap;
+   /// Gọi khi user chọn một emoji reaction
+  final void Function(String emoji) onReact;
   final String? searchTerm;
 
   @override
@@ -612,28 +651,70 @@ class _ChatMessageBubble extends StatelessWidget {
     final hasImages = message.attachments.isNotEmpty &&
         message.attachments.any((a) => a.mimeType.startsWith('image/'));
 
+    final reactionEntries = message.reactions.entries
+        .where((e) => e.value.isNotEmpty)
+        .toList();
+
     return Align(
       alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 4),
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.75,
-        ),
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: isMine
-              ? Theme.of(context).colorScheme.primaryContainer
-              : Theme.of(context).colorScheme.surfaceVariant,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Column(
-          crossAxisAlignment:
-              isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-          children: [
-            if (hasImages)
-              ...message.attachments
-                  .where((a) => a.mimeType.startsWith('image/'))
-                  .map((attachment) => Padding(
+      child: GestureDetector(
+        onLongPress: () async {
+          final selected = await showModalBottomSheet<String>(
+            context: context,
+            builder: (context) {
+              final emojis = <String>['👍', '❤️', '😂', '😮', '😢', '🙏'];
+              return SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: emojis.map((emoji) {
+                      return InkWell(
+                        onTap: () {
+                          Navigator.of(context).pop(emoji);
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.all(8),
+                          child: Text(
+                            emoji,
+                            style: const TextStyle(fontSize: 24),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+              );
+            },
+          );
+          if (selected != null) {
+            onReact(selected);
+          }
+        },
+        child: Container(
+          margin: const EdgeInsets.symmetric(vertical: 4),
+          constraints: BoxConstraints(
+            maxWidth: MediaQuery.of(context).size.width * 0.75,
+          ),
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: isMine
+                ? Theme.of(context).colorScheme.primaryContainer
+                : Theme.of(context).colorScheme.surfaceVariant,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(
+            crossAxisAlignment:
+                isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+            children: [
+              if (hasImages)
+                ...message.attachments
+                    .where((a) => a.mimeType.startsWith('image/'))
+                    .map(
+                      (attachment) => Padding(
                         padding: const EdgeInsets.only(bottom: 8),
                         child: GestureDetector(
                           onTap: () => onImageTap(attachment.url),
@@ -643,18 +724,21 @@ class _ChatMessageBubble extends StatelessWidget {
                               attachment.url,
                               fit: BoxFit.cover,
                               width: double.infinity,
-                              loadingBuilder: (context, child, loadingProgress) {
+                              loadingBuilder:
+                                  (context, child, loadingProgress) {
                                 if (loadingProgress == null) return child;
                                 return Container(
                                   height: 200,
                                   color: Colors.grey[300],
                                   child: Center(
                                     child: CircularProgressIndicator(
-                                      value: loadingProgress.expectedTotalBytes !=
+                                      value: loadingProgress
+                                                  .expectedTotalBytes !=
                                               null
                                           ? loadingProgress
                                                   .cumulativeBytesLoaded /
-                                              loadingProgress.expectedTotalBytes!
+                                              loadingProgress
+                                                  .expectedTotalBytes!
                                           : null,
                                     ),
                                   ),
@@ -670,44 +754,71 @@ class _ChatMessageBubble extends StatelessWidget {
                             ),
                           ),
                         ),
-                      )),
-            if (message.text != null && message.text!.isNotEmpty)
-              _buildHighlightedText(
-                message.text!,
-                searchTerm: searchTerm,
-                style: const TextStyle(fontSize: 16),
-              ),
-            // Seen status - chỉ hiển thị cho tin nhắn của mình
-            if (isMine)
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      message.seenBy.contains(otherUid)
-                          ? Icons.done_all
-                          : Icons.done,
-                      size: 14,
-                      color: message.seenBy.contains(otherUid)
-                          ? Theme.of(context).colorScheme.primary
-                          : Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
                     ),
-                    if (message.seenBy.contains(otherUid))
-                      Padding(
-                        padding: const EdgeInsets.only(left: 4),
-                        child: Text(
-                          'Đã xem',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+              if (message.text != null && message.text!.isNotEmpty)
+                _buildHighlightedText(
+                  message.text!,
+                  searchTerm: searchTerm,
+                  style: const TextStyle(fontSize: 16),
+                ),
+              if (reactionEntries.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Wrap(
+                  spacing: 4,
+                  children: reactionEntries.map((entry) {
+                    final emoji = entry.key;
+                    final count = entry.value.length;
+                    return Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.7),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        '$emoji $count',
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ],
+              if (isMine)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        message.seenBy.contains(otherUid)
+                            ? Icons.done_all
+                            : Icons.done,
+                        size: 14,
+                        color: message.seenBy.contains(otherUid)
+                            ? Theme.of(context).colorScheme.primary
+                            : Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                      if (message.seenBy.contains(otherUid))
+                        Padding(
+                          padding: const EdgeInsets.only(left: 4),
+                          child: Text(
+                            'Đã xem',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant,
+                            ),
                           ),
                         ),
-                      ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );

@@ -204,6 +204,51 @@ class ChatRepository {
     );
   }
 
+  /// Thêm/xóa reaction cho một tin nhắn
+  Future<void> toggleReaction({
+    required String conversationId,
+    required String messageId,
+    required String uid,
+    required String emoji,
+  }) async {
+    final messageRef = _messagesRef(conversationId).doc(messageId);
+
+    await _firestore.runTransaction((txn) async {
+      final snap = await txn.get(messageRef);
+      if (!snap.exists) return;
+      final data = snap.data() ?? {};
+
+      final rawReactions =
+          (data['reactions'] as Map<String, dynamic>?) ?? <String, dynamic>{};
+      // Sao chép map để tránh mutate trực tiếp
+      final Map<String, List<String>> reactions = {};
+      rawReactions.forEach((key, value) {
+        reactions[key] =
+            (value as List<dynamic>? ?? []).map((e) => e.toString()).toList();
+      });
+
+      final current = reactions[emoji] ?? <String>[];
+      final hasReacted = current.contains(uid);
+      final updated = List<String>.from(current);
+
+      if (hasReacted) {
+        updated.remove(uid);
+      } else {
+        updated.add(uid);
+      }
+
+      if (updated.isEmpty) {
+        reactions.remove(emoji);
+      } else {
+        reactions[emoji] = updated;
+      }
+
+      txn.update(messageRef, {
+        'reactions': reactions,
+      });
+    });
+  }
+
   Future<void> markConversationAsRead({
     required String conversationId,
     required String uid,

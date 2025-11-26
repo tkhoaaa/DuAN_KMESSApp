@@ -16,6 +16,7 @@ class UserProfile {
     this.followingCount = 0,
     this.postsCount = 0,
     this.updatedAt,
+    this.lastSeen,
   });
 
   final String uid;
@@ -32,6 +33,7 @@ class UserProfile {
   final int followingCount;
   final int postsCount;
   final DateTime? updatedAt;
+  final DateTime? lastSeen;
 
   Map<String, dynamic> toMap() {
     return {
@@ -48,6 +50,7 @@ class UserProfile {
       'followingCount': followingCount,
       'postsCount': postsCount,
       'updatedAt': updatedAt,
+      'lastSeen': lastSeen,
     };
   }
 
@@ -68,6 +71,7 @@ class UserProfile {
       followingCount: (data['followingCount'] as num?)?.toInt() ?? 0,
       postsCount: (data['postsCount'] as num?)?.toInt() ?? 0,
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
+      lastSeen: (data['lastSeen'] as Timestamp?)?.toDate(),
     );
   }
 }
@@ -196,7 +200,7 @@ class UserProfileRepository {
   Future<void> setPresence(String uid, bool isOnline) async {
     await _collection.doc(uid).set({
       'isOnline': isOnline,
-      'updatedAt': FieldValue.serverTimestamp(),
+      'lastSeen': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
   }
 }

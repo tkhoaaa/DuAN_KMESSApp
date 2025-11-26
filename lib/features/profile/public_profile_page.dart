@@ -39,6 +39,24 @@ class PublicProfilePage extends StatelessWidget {
                   ? profile.email!
                   : profile.uid);
 
+          String statusText;
+          if (profile.isOnline) {
+            statusText = 'Đang hoạt động';
+          } else if (profile.lastSeen != null) {
+            final diff = DateTime.now().difference(profile.lastSeen!);
+            if (diff.inMinutes < 1) {
+              statusText = 'Vừa mới hoạt động';
+            } else if (diff.inHours < 1) {
+              statusText = 'Hoạt động ${diff.inMinutes} phút trước';
+            } else if (diff.inDays < 1) {
+              statusText = 'Hoạt động ${diff.inHours} giờ trước';
+            } else {
+              statusText = 'Hoạt động ${diff.inDays} ngày trước';
+            }
+          } else {
+            statusText = 'Ngoại tuyến';
+          }
+
           return Column(
             children: [
               const SizedBox(height: 24),
@@ -57,6 +75,14 @@ class PublicProfilePage extends StatelessWidget {
                 style: const TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                statusText,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
               ),
               if (profile.bio?.isNotEmpty == true) ...[
