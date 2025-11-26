@@ -101,11 +101,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
       
       if (storageBackend == 'cloudinary') {
         // Dùng Cloudinary
-        url = await CloudinaryService.uploadImage(
+        final result = await CloudinaryService.uploadImage(
           file: picked,
           folder: 'user_profiles/$uid',
           publicId: 'avatar',
         );
+        url = result['url']!;
       } else {
         // Dùng Firebase Storage (code cũ)
         final storageRef =

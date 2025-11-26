@@ -6,12 +6,15 @@ class PostMedia {
     required this.type,
     this.thumbnailUrl,
     this.durationMs,
+    this.publicId,
   });
 
   final String url;
   final PostMediaType type;
   final String? thumbnailUrl;
   final int? durationMs;
+  /// Cloudinary public_id (nếu dùng Cloudinary)
+  final String? publicId;
 
   Map<String, dynamic> toMap() {
     return {
@@ -19,6 +22,7 @@ class PostMedia {
       'type': type.name,
       if (thumbnailUrl != null) 'thumbnailUrl': thumbnailUrl,
       if (durationMs != null) 'durationMs': durationMs,
+      if (publicId != null) 'publicId': publicId,
     };
   }
 
@@ -33,6 +37,7 @@ class PostMedia {
       type: type,
       thumbnailUrl: map['thumbnailUrl'] as String?,
       durationMs: (map['durationMs'] as num?)?.toInt(),
+      publicId: map['publicId'] as String?,
     );
   }
 }

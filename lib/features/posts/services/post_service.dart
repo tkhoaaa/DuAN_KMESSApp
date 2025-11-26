@@ -134,6 +134,8 @@ class PostService {
       String? thumbnailUrl;
       int? durationMs;
 
+      String? publicId;
+
       if (storageBackend == 'cloudinary') {
         // Dùng Cloudinary
         if (entry.type == PostMediaType.video) {
@@ -145,12 +147,15 @@ class PostService {
           downloadUrl = result['url'] as String;
           thumbnailUrl = result['thumbnailUrl'] as String?;
           durationMs = result['durationMs'] as int?;
+          publicId = result['publicId'] as String?;
         } else {
-          downloadUrl = await CloudinaryService.uploadImage(
+          final result = await CloudinaryService.uploadImage(
             file: entry.file,
             folder: 'posts/$currentUid',
             publicId: '$timestamp-$originalName',
           );
+          downloadUrl = result['url'] as String;
+          publicId = result['publicId'] as String?;
         }
       } else {
         // Dùng Firebase Storage (code cũ)
@@ -279,6 +284,7 @@ class PostService {
         'type': entry.type.name,
         if (thumbnailUrl != null) 'thumbnailUrl': thumbnailUrl,
         if (durationMs != null) 'durationMs': durationMs,
+        if (publicId != null) 'publicId': publicId,
       });
     }
 
@@ -408,10 +414,32 @@ class PostService {
     if (currentUid == null) {
       throw StateError('Bạn cần đăng nhập.');
     }
-    await _repository.deletePost(
-      postId: postId,
-      authorUid: currentUid,
-    );
+    // Lấy thông tin post để biết danh sách media trước khi xóa
+    try {
+      final post = await _repository.watchPost(postId).first;
+      await _repository.deletePost(
+        postId: postId,
+        authorUid: currentUid,
+      );
+
+      // Nếu dùng Cloudinary, xóa media tương ứng (best effort, không throw)
+      if (PostService.storageBackend == 'cloudinary') {
+        for (final media in post.media) {
+          if (media.publicId == null || media.publicId!.isEmpty) continue;
+          final resourceType =
+              media.type == PostMediaType.video ? 'video' : 'image';
+          CloudinaryService.deleteFile(
+            media.publicId!,
+            resourceType: resourceType,
+          ).catchError((e) {
+            debugPrint('Error deleting Cloudinary media: $e');
+          });
+        }
+      }
+    } catch (e) {
+      // Nếu có lỗi trong quá trình lấy/xóa, throw như cũ
+      rethrow;
+    }
   }
 
   Future<void> deleteComment({

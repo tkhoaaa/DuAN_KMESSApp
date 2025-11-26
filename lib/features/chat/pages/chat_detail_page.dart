@@ -250,11 +250,12 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
 
       // Upload ảnh lên Cloudinary
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final imageUrl = await CloudinaryService.uploadImage(
+      final uploadResult = await CloudinaryService.uploadImage(
         file: picked,
         folder: 'chat/${widget.conversationId}',
         publicId: '$timestamp-${picked.name}',
       );
+      final imageUrl = uploadResult['url']!;
 
       // Lấy file size
       int fileSize = 0;

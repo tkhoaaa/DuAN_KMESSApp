@@ -14,8 +14,8 @@ class CloudinaryService {
   /// [folder]: Thư mục lưu trữ (ví dụ: 'user_profiles/user123' hoặc 'posts/user123')
   /// [publicId]: Tên file (nếu null, Cloudinary tự tạo)
   /// 
-  /// Returns: URL của ảnh đã upload
-  static Future<String> uploadImage({
+  /// Returns: Map chứa url và publicId
+  static Future<Map<String, String>> uploadImage({
     required XFile file,
     String? folder,
     String? publicId,
@@ -113,12 +113,16 @@ class CloudinaryService {
       // Lấy secure_url hoặc url
       final url = jsonResponse['secure_url'] as String? ?? 
                   jsonResponse['url'] as String?;
+      final publicIdResult = jsonResponse['public_id'] as String? ?? publicId;
       
-      if (url == null) {
-        throw Exception('No URL returned from Cloudinary');
+      if (url == null || publicIdResult == null) {
+        throw Exception('No URL or public_id returned from Cloudinary');
       }
       
-      return url;
+      return {
+        'url': url,
+        'publicId': publicIdResult,
+      };
     } catch (e) {
       throw Exception('Failed to upload image to Cloudinary: $e');
     }
@@ -261,7 +265,10 @@ class CloudinaryService {
     // Loại bỏ các params không cần sign
     final paramsToSign = <String, String>{};
     params.forEach((key, value) {
-      if (key != 'file' && key != 'signature' && key != 'api_key') {
+      if (key != 'file' &&
+          key != 'signature' &&
+          key != 'api_key' &&
+          key != 'resource_type') {
         paramsToSign[key] = value;
       }
     });
