@@ -167,6 +167,32 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
       allow delete: if isSignedIn() && request.auth.uid == resource.data.toUid;
     }
+
+    // Stories collection
+    // Cấu trúc: stories/{uid}/items/{storyId}
+    match /stories/{uid} {
+      match /items/{storyId} {
+        allow read: if isSignedIn(); // Có thể siết lại sau: chỉ followers
+        allow create: if isSignedIn()
+          && request.auth.uid == uid
+          && request.resource.data.authorUid == uid
+          && request.resource.data.mediaUrl is string
+          && request.resource.data.type is string
+          && request.resource.data.createdAt is timestamp
+          && request.resource.data.expiresAt is timestamp;
+        allow delete: if isSignedIn() && request.auth.uid == uid;
+        allow update: if false;
+
+        // Viewers subcollection: stories/{uid}/items/{storyId}/viewers/{viewerUid}
+        match /viewers/{viewerUid} {
+          allow read: if isSignedIn() && request.auth.uid == uid; // chỉ chủ story xem
+          allow create: if isSignedIn()
+            && request.auth.uid == viewerUid
+            && request.resource.data.viewedAt is timestamp;
+          allow update, delete: if false;
+        }
+      }
+    }
   }
 }
 

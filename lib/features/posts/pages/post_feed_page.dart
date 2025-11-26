@@ -3,6 +3,11 @@ import 'package:flutter/material.dart';
 
 import '../../auth/auth_repository.dart';
 import '../../profile/public_profile_page.dart';
+import '../../stories/pages/story_create_page.dart';
+import '../../stories/pages/story_viewer_page.dart';
+import '../../stories/models/story.dart';
+import '../../stories/repositories/story_repository.dart';
+import '../../follow/services/follow_service.dart';
 import '../models/post.dart';
 import '../models/post_media.dart';
 import '../services/post_service.dart';
@@ -19,6 +24,7 @@ class PostFeedPage extends StatefulWidget {
 
 class _PostFeedPageState extends State<PostFeedPage> {
   final PostService _postService = PostService();
+  final StoryRepository _storyRepository = StoryRepository();
   final List<PostFeedEntry> _entries = [];
   final ScrollController _scrollController = ScrollController();
 
@@ -94,6 +100,17 @@ class _PostFeedPageState extends State<PostFeedPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Bảng tin'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.history),
+            tooltip: 'Story của bạn',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const StoryCreatePage()),
+              );
+            },
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () async {
@@ -113,15 +130,19 @@ class _PostFeedPageState extends State<PostFeedPage> {
             : ListView.builder(
                 controller: _scrollController,
                 padding: const EdgeInsets.only(bottom: 80),
-                itemCount: _entries.length + (_hasMore ? 1 : 0),
+                itemCount: _entries.length + 1 + (_hasMore ? 1 : 0),
                 itemBuilder: (context, index) {
-                  if (index >= _entries.length) {
+                  if (index == 0) {
+                    return _StoriesBar(storyRepository: _storyRepository);
+                  }
+                  final postIndex = index - 1;
+                  if (postIndex >= _entries.length) {
                     return const Padding(
                       padding: EdgeInsets.all(16),
                       child: Center(child: CircularProgressIndicator()),
                     );
                   }
-                  final entry = _entries[index];
+                  final entry = _entries[postIndex];
                   return PostFeedItem(
                     entry: entry,
                     service: _postService,
@@ -506,6 +527,182 @@ class _PostFeedItemState extends State<PostFeedItem> {
     final minutesStr = minutes.toString().padLeft(1, '0');
     final secondsStr = seconds.toString().padLeft(2, '0');
     return '$minutesStr:$secondsStr';
+  }
+}
+
+class _StoriesBar extends StatelessWidget {
+  const _StoriesBar({required this.storyRepository});
+
+  final StoryRepository storyRepository;
+
+  @override
+  Widget build(BuildContext context) {
+    final user = authRepository.currentUser();
+    if (user == null) {
+      return const SizedBox.shrink();
+    }
+
+    final followService = FollowService();
+
+    return SizedBox(
+      height: 110,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        child: StreamBuilder<List<FollowEntry>>(
+          stream: followService.watchFollowingEntries(user.uid),
+          builder: (context, snapshot) {
+            final following = snapshot.data ?? [];
+
+            return ListView(
+              scrollDirection: Axis.horizontal,
+              children: [
+                // Story của chính mình
+                StreamBuilder<List<Story>>(
+                  stream: storyRepository.watchUserStories(user.uid),
+                  builder: (context, userStorySnap) {
+                    final myStories = userStorySnap.data ?? [];
+                    final hasMyStories = myStories.isNotEmpty;
+                    return GestureDetector(
+                      onTap: () {
+                        if (hasMyStories) {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  StoryViewerPage(authorUid: user.uid),
+                            ),
+                          );
+                        } else {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const StoryCreatePage(),
+                            ),
+                          );
+                        }
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.only(right: 12),
+                        child: Column(
+                          children: [
+                            Stack(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(2),
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    gradient: hasMyStories
+                                        ? const LinearGradient(
+                                            colors: [
+                                              Colors.orange,
+                                              Colors.pink
+                                            ],
+                                          )
+                                        : null,
+                                    color: hasMyStories
+                                        ? null
+                                        : Colors.grey.shade300,
+                                  ),
+                                  child: const CircleAvatar(
+                                    radius: 30,
+                                    child: Icon(Icons.person),
+                                  ),
+                                ),
+                                Positioned(
+                                  right: 0,
+                                  bottom: 0,
+                                  child: Container(
+                                    decoration: const BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: Colors.blue,
+                                    ),
+                                    padding: const EdgeInsets.all(2),
+                                    child: const Icon(
+                                      Icons.add,
+                                      size: 16,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              hasMyStories ? 'Story của bạn' : 'Thêm story',
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                // Stories của những người đang theo dõi
+                ...following.map((entry) {
+                  final profile = entry.profile;
+                  final displayName = profile?.displayName?.isNotEmpty == true
+                      ? profile!.displayName!
+                      : entry.uid;
+                  return StreamBuilder<List<Story>>(
+                    stream: storyRepository.watchUserStories(entry.uid),
+                    builder: (context, storySnap) {
+                      final stories = storySnap.data ?? [];
+                      if (stories.isEmpty) {
+                        return const SizedBox.shrink();
+                      }
+                      return GestureDetector(
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  StoryViewerPage(authorUid: entry.uid),
+                            ),
+                          );
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.only(right: 12),
+                          child: Column(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(2),
+                                decoration: const BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  gradient: LinearGradient(
+                                    colors: [Colors.orange, Colors.pink],
+                                  ),
+                                ),
+                                child: CircleAvatar(
+                                  radius: 30,
+                                  backgroundImage: profile?.photoUrl != null
+                                      ? NetworkImage(profile!.photoUrl!)
+                                      : null,
+                                  child: profile?.photoUrl == null
+                                      ? const Icon(Icons.person)
+                                      : null,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              SizedBox(
+                                width: 70,
+                                child: Text(
+                                  displayName,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontSize: 12),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                }),
+              ],
+            );
+          },
+        ),
+      ),
+    );
   }
 }
 

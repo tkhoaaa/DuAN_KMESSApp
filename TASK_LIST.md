@@ -13,11 +13,11 @@
 
 ### 1. Chat - Gửi Hình Ảnh
 **Mô tả:** Cho phép gửi hình ảnh trong chat
-- [ ] UI: Nút chọn ảnh trong chat input
-- [ ] Upload ảnh lên Cloudinary (folder: `chat/{conversationId}`)
-- [ ] Hiển thị ảnh trong message bubble
+- [x] UI: Nút chọn ảnh trong chat input
+- [x] Upload ảnh lên Cloudinary (folder: `chat/{conversationId}`)
+- [x] Hiển thị ảnh trong message bubble
 - [ ] Preview ảnh trước khi gửi
-- [ ] Tap để xem ảnh fullscreen
+- [x] Tap để xem ảnh fullscreen
 
 **Files cần tạo/sửa:**
 - `lib/features/chat/pages/chat_detail_page.dart` - Thêm UI chọn ảnh
@@ -28,10 +28,10 @@
 
 ### 2. Chat - Typing Indicator
 **Mô tả:** Hiển thị "Đang gõ..." khi đối phương đang nhập
-- [ ] Logic: Gọi `setTyping(true)` khi user bắt đầu gõ
-- [ ] Logic: Gọi `setTyping(false)` khi user dừng gõ (debounce 2s)
-- [ ] UI: Hiển thị "Đang gõ..." trong chat bubble
-- [ ] Realtime: Listen `typingIn` field trong `user_profiles`
+- [x] Logic: Gọi `setTyping(true)` khi user bắt đầu gõ
+- [x] Logic: Gọi `setTyping(false)` khi user dừng gõ (debounce 2s)
+- [x] UI: Hiển thị "Đang gõ..." trong chat bubble
+- [x] Realtime: Listen `typingIn` field trong `user_profiles`
 
 **Files cần sửa:**
 - `lib/features/chat/pages/chat_detail_page.dart` - Thêm typing indicator UI và logic
@@ -66,10 +66,10 @@
 
 ### 5. Chat - Quick Reactions
 **Mô tả:** Thêm emoji reactions cho tin nhắn (like, love, haha, etc.)
-- [ ] Model: Thêm `reactions` field vào `ChatMessage` (Map<String, List<String>>)
-- [ ] UI: Long press message để hiển thị reaction picker
-- [ ] UI: Hiển thị reactions dưới message
-- [ ] Logic: Toggle reaction (thêm/xóa)
+- [x] Model: Thêm `reactions` field vào `ChatMessage` (Map<String, List<String>>)
+- [x] UI: Long press message để hiển thị reaction picker
+- [x] UI: Hiển thị reactions dưới message
+- [x] Logic: Toggle reaction (thêm/xóa)
 
 **Files cần sửa:**
 - `lib/features/chat/models/message.dart` - Thêm `reactions` field
@@ -84,7 +84,7 @@
 - [x] Logic: Xóa post document
 - [x] Logic: Xóa likes và comments subcollections
 - [x] Logic: Cập nhật `postsCount` (decrement)
-- [ ] Logic: Xóa media trên Cloudinary (optional - skip để tối ưu)
+- [x] Logic: Xóa media trên Cloudinary (optional - skip để tối ưu)
 
 **Files đã sửa:**
 - `lib/features/posts/pages/post_feed_page.dart` - Thêm PopupMenuButton với option delete
@@ -148,10 +148,10 @@
 
 ### 10. Realtime Presence (Online/Offline)
 **Mô tả:** Hiển thị online/offline status
-- [ ] Logic: Cập nhật `isOnline` khi app mở/đóng
-- [ ] Logic: Cập nhật `lastSeen` khi user offline
+- [x] Logic: Cập nhật `isOnline` khi app mở/đóng
+- [x] Logic: Cập nhật `lastSeen` khi user offline
 - [ ] UI: Hiển thị green dot cho online users
-- [ ] UI: Hiển thị "Hoạt động X phút trước" cho offline users
+- [x] UI: Hiển thị "Hoạt động X phút trước" cho offline users
 
 **Files cần sửa:**
 - `lib/features/profile/user_profile_repository.dart` - Methods `setOnline`, `setOffline`
@@ -159,6 +159,122 @@
 - `lib/features/profile/public_profile_page.dart` - Hiển thị online status
 
 ---
+
+### 11. Stories (Tin nổi bật 24h)
+**Mô tả:** Người dùng đăng ảnh/video dạng story, tự xoá sau 24h
+- [ ] Model: `Story` (authorUid, mediaUrl, type, createdAt, viewers)
+- [ ] UI: Vòng avatar có viền story trên home, list story trên đầu feed
+- [ ] Logic: Tạo/xem/xoá story (auto expire sau 24h bằng field `expiresAt`)
+- [ ] UI: Story viewer (swipe qua lại, hiển thị danh sách đã xem)
+- [ ] Logic: Trả lời story bằng tin nhắn (mở direct chat kèm context)
+
+**Files dự kiến:**
+- `lib/features/stories/models/story.dart`
+- `lib/features/stories/repositories/story_repository.dart`
+- `lib/features/stories/pages/story_viewer_page.dart`
+- `lib/features/stories/widgets/story_avatar_ring.dart`
+
+---
+
+### 12. Group Chat Nâng Cao
+**Mô tả:** Hỗ trợ chat nhóm với quản lý thành viên và quyền admin
+- [ ] Model: Mở rộng `conversations` với type `group`, name, avatarUrl, description
+- [ ] UI: Tạo nhóm mới, chọn thành viên, đặt tên/ảnh nhóm
+- [ ] Logic: Thêm/xoá thành viên, rời nhóm, chuyển quyền admin
+- [ ] UI: Màn hình "Thông tin nhóm" (danh sách thành viên, nút thêm/xoá)
+- [ ] Logic: Pin tin nhắn quan trọng (field `pinnedMessage`)
+
+**Files dự kiến:**
+- `lib/features/chat/pages/create_group_page.dart`
+- `lib/features/chat/pages/group_info_page.dart`
+- `lib/features/chat/services/group_chat_service.dart`
+
+---
+
+### 13. Voice & Video Messages
+**Mô tả:** Gửi voice message và video message ngắn trong chat
+- [ ] UI: Nút giữ để ghi âm, hiển thị sóng âm đơn giản
+- [ ] Logic: Ghi âm, upload file audio/video (Cloudinary hoặc Storage)
+- [ ] UI: Bubble voice (play/pause, duration), bubble video message
+- [ ] Firestore: Thêm `type = 'voice' | 'video_message'` và metadata tương ứng
+
+**Files dự kiến:**
+- `lib/features/chat/models/message_attachment.dart` (mở rộng)
+- `lib/features/chat/pages/chat_detail_page.dart` (UI ghi âm và phát)
+- `lib/services/cloudinary_service.dart` (nếu tái sử dụng upload)
+
+---
+
+### 14. Blocking & Reporting
+**Mô tả:** Cho phép block user và report post/user
+- [ ] Model: Collection `blocks` (blockerUid, blockedUid)
+- [ ] Logic: Ẩn bài viết, không cho nhắn tin/follow khi đã block
+- [ ] Model: Collection `reports` (reporterUid, targetType, targetId, reason, createdAt)
+- [ ] UI: Nút "Chặn" và "Báo cáo" trong profile/post menu
+- [ ] Firestore rules: Bảo vệ dữ liệu block/report, hạn chế đọc công khai
+
+**Files dự kiến:**
+- `lib/features/safety/models/block.dart`, `report.dart`
+- `lib/features/safety/repositories/block_repository.dart`, `report_repository.dart`
+- `lib/features/posts/pages/post_feed_page.dart` (thêm menu báo cáo/chặn)
+- `lib/features/profile/public_profile_page.dart` (thêm menu chặn)
+
+---
+
+### 15. Saved Posts / Bookmarks
+**Mô tả:** Lưu bài viết để xem lại sau
+- [ ] Model: Collection `saved_posts/{uid}/items/{postId}`
+- [ ] UI: Icon bookmark trên mỗi post (toggle save/unsave)
+- [ ] UI: Màn hình "Bài viết đã lưu" với grid/list posts
+- [ ] Logic: Chỉ chủ tài khoản thấy saved posts của mình
+
+**Files dự kiến:**
+- `lib/features/saved/repositories/saved_posts_repository.dart`
+- `lib/features/saved/pages/saved_posts_page.dart`
+- `lib/features/posts/pages/post_feed_page.dart` (thêm icon save)
+
+---
+
+### 16. Mute Conversation / Notification Controls
+**Mô tả:** Tắt thông báo cho từng cuộc hội thoại hoặc user
+- [ ] Model: Trường `notificationsEnabled` per participant trong `participants` subcollection
+- [ ] UI: Menu "Tắt thông báo" trong `ChatDetailPage` hoặc `ConversationsPage`
+- [ ] Logic: Notification service skip gửi nếu `notificationsEnabled == false`
+- [ ] Tuỳ chọn mute tạm thời (1h, 8h, 24h)
+
+**Files dự kiến:**
+- `lib/features/chat/repositories/chat_repository.dart` (update participant settings)
+- `lib/features/chat/pages/chat_detail_page.dart` (UI mute)
+- `lib/features/notifications/services/notification_service.dart` (kiểm tra mute)
+
+---
+
+### 17. Advanced Search (Users & Posts)
+**Mô tả:** Tìm kiếm nâng cao người dùng và bài viết
+- [ ] UI: Màn hình search global với tab "Người dùng" và "Bài viết"
+- [ ] Logic: Tìm user theo displayName/email/phone (client-side + index đơn giản)
+- [ ] Logic: Tìm post theo caption (lowercase field `captionLower`)
+- [ ] UI: List kết quả với avatar, follow button, post preview
+
+**Files dự kiến:**
+- `lib/features/search/pages/search_page.dart`
+- `lib/features/search/services/search_service.dart`
+- `lib/features/profile/user_profile_repository.dart` (bổ sung field search)
+- `lib/features/posts/repositories/post_repository.dart` (query theo captionLower)
+
+---
+
+### 18. Profile Customization
+**Mô tả:** Tùy biến profile người dùng
+- [ ] Model: Thêm `themeColor`, `links` (list URL + label) vào `user_profiles`
+- [ ] UI: Chọn màu chủ đạo cho profile (áp dụng cho avatar ring, nút follow,…)
+- [ ] UI: Thêm/hiển thị các link ngoài (website, social)
+- [ ] Logic: Lưu và hiển thị trên PublicProfilePage
+
+**Files dự kiến:**
+- `lib/features/profile/user_profile_repository.dart`
+- `lib/features/profile/profile_screen.dart` (UI chọn màu, link)
+- `lib/features/profile/public_profile_page.dart` (hiển thị theme/link)
 
 ## 📝 Lưu Ý
 
