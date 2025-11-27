@@ -4,10 +4,8 @@ import 'package:flutter/material.dart';
 import '../../auth/auth_repository.dart';
 import '../../chat/pages/chat_detail_page.dart';
 import '../../chat/repositories/chat_repository.dart';
-import '../../follow/models/follow_state.dart';
 import '../../follow/services/follow_service.dart';
 import '../../profile/public_profile_page.dart';
-import '../../profile/user_profile_repository.dart';
 import '../widgets/contact_search_delegate.dart';
 
 class ContactsPage extends StatefulWidget {

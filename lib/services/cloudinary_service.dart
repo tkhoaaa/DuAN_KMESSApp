@@ -256,6 +256,109 @@ class CloudinaryService {
       throw Exception('Failed to upload video to Cloudinary: $e');
     }
   }
+
+  /// Upload audio/voice lên Cloudinary
+  ///
+  /// Trả về: url, durationMs (nếu Cloudinary trả về), publicId
+  static Future<Map<String, dynamic>> uploadAudio({
+    required XFile file,
+    String? folder,
+    String? publicId,
+  }) async {
+    try {
+      final bytes = await file.readAsBytes();
+
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final params = <String, String>{
+        'timestamp': timestamp.toString(),
+        'api_key': CloudinaryConfig.apiKey,
+        'resource_type': 'video', // Cloudinary thường dùng chung endpoint video cho audio
+      };
+
+      if (folder != null && folder.isNotEmpty) {
+        params['folder'] = folder;
+      }
+
+      if (publicId != null && publicId.isNotEmpty) {
+        params['public_id'] = publicId.trim().replaceAll(RegExp(r'\s+'), '_');
+      }
+
+      final signature = _generateSignature(params);
+      params['signature'] = signature;
+
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse(CloudinaryConfig.videoUploadUrl),
+      );
+
+      params.forEach((key, value) {
+        request.fields[key] = value;
+      });
+
+      if (kIsWeb) {
+        request.files.add(
+          http.MultipartFile.fromBytes(
+            'file',
+            bytes,
+            filename: file.name.isNotEmpty ? file.name : 'audio.m4a',
+          ),
+        );
+      } else {
+        final fileObj = File(file.path);
+        request.files.add(
+          await http.MultipartFile.fromPath(
+            'file',
+            fileObj.path,
+            filename: file.name.isNotEmpty ? file.name : 'audio.m4a',
+          ),
+        );
+      }
+
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode != 200) {
+        try {
+          final errorJson = json.decode(response.body) as Map<String, dynamic>;
+          if (errorJson['error'] != null) {
+            final error = errorJson['error'];
+            final message = error['message'] ?? 'Unknown error';
+            throw Exception('Cloudinary upload failed: $message');
+          }
+        } catch (_) {}
+        throw Exception(
+          'Upload failed: ${response.statusCode} - ${response.body}',
+        );
+      }
+
+      final jsonResponse = json.decode(response.body) as Map<String, dynamic>;
+
+      if (jsonResponse['error'] != null) {
+        final error = jsonResponse['error'];
+        final message = error['message'] ?? 'Unknown error';
+        throw Exception('Cloudinary error: $message');
+      }
+
+      final audioUrl = jsonResponse['secure_url'] as String? ??
+          jsonResponse['url'] as String?;
+      final publicIdResult = jsonResponse['public_id'] as String? ?? publicId;
+
+      if (audioUrl == null || publicIdResult == null) {
+        throw Exception('No URL or public_id returned from Cloudinary');
+      }
+
+      final duration = jsonResponse['duration'] as num?;
+      final durationMs = duration != null ? (duration * 1000).round() : null;
+
+      return {
+        'url': audioUrl,
+        'durationMs': durationMs,
+        'publicId': publicIdResult,
+      };
+    } catch (e) {
+      throw Exception('Failed to upload audio to Cloudinary: $e');
+    }
+  }
   
   /// Tạo signature cho Cloudinary API
   /// 

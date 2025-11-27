@@ -451,6 +451,36 @@ class ChatRepository {
     );
   }
 
+  /// Gửi voice message (sử dụng attachments với type = 'voice')
+  Future<void> sendVoiceMessage({
+    required String conversationId,
+    required String senderId,
+    required List<MessageAttachment> attachments,
+    String? text,
+  }) async {
+    await sendTextMessage(
+      conversationId: conversationId,
+      senderId: senderId,
+      text: text ?? '',
+      attachments: attachments,
+    );
+  }
+
+  /// Gửi video message (sử dụng attachments với type = 'video_message')
+  Future<void> sendVideoMessage({
+    required String conversationId,
+    required String senderId,
+    required List<MessageAttachment> attachments,
+    String? text,
+  }) async {
+    await sendTextMessage(
+      conversationId: conversationId,
+      senderId: senderId,
+      text: text ?? '',
+      attachments: attachments,
+    );
+  }
+
   /// Thêm/xóa reaction cho một tin nhắn
   Future<void> toggleReaction({
     required String conversationId,

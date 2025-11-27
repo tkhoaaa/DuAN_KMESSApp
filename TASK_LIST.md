@@ -178,17 +178,17 @@
 
 ### 12. Group Chat Nâng Cao
 **Mô tả:** Hỗ trợ chat nhóm với quản lý thành viên và quyền admin
-- [ ] Model: Mở rộng `conversations` với type `group`, name, avatarUrl, description, admins, membersCount
+- [x] Model: Mở rộng `conversations` với type `group`, name, avatarUrl, description, admins, membersCount
 - [ ] Model: Bổ sung phân biệt message trong group (ví dụ: hiển thị authorName, system messages: user joined/left, changed name,…)
-- [ ] Service: Thêm API trong `group_chat_service` / `chat_repository` để tạo group, thêm/xoá thành viên, rời nhóm, chuyển quyền admin
-- [ ] Service: Thêm API đổi tên nhóm, đổi avatar nhóm, cập nhật description
+- [x] Service: Thêm API trong `group_chat_service` / `chat_repository` để tạo group, thêm/xoá thành viên, rời nhóm, chuyển quyền admin
+- [x] Service: Thêm API đổi tên nhóm, đổi avatar nhóm, cập nhật description
 - [ ] Service: Logic pin/unpin tin nhắn quan trọng (field `pinnedMessageId` hoặc `pinnedMessages`)
-- [ ] UI: Màn hình tạo nhóm mới (chọn nhiều thành viên, nhập tên nhóm, chọn avatar nhóm)
+- [x] UI: Màn hình tạo nhóm mới (chọn nhiều thành viên, nhập tên nhóm, chọn avatar nhóm)
 - [ ] UI: Hiển thị conversation group trong `ConversationsPage` (tên nhóm, avatar nhóm, số thành viên)
 - [ ] UI: Màn hình "Thông tin nhóm" (danh sách thành viên, role admin/member, nút thêm/xoá thành viên, rời nhóm, chuyển quyền admin)
 - [ ] UI: Hiển thị badge/section cho tin nhắn được pin trong `ChatDetailPage` (tap để scroll tới message)
-- [ ] Logic: Phân quyền – chỉ admin mới được đổi tên nhóm, đổi avatar, thêm/xoá thành viên, pin/unpin, chuyển quyền admin
-- [ ] Firestore: Thiết kế structure và rules cho group (group conversations, participants với role, các thao tác admin)
+- [x] Logic: Phân quyền – chỉ admin mới được đổi tên nhóm, đổi avatar, thêm/xoá thành viên, pin/unpin, chuyển quyền admin
+- [x] Firestore: Thiết kế structure và rules cho group (group conversations, participants với role, các thao tác admin)
 - [ ] Migration: Xử lý tương thích để conversation 1-1 cũ vẫn hoạt động bình thường bên cạnh group
 - [ ] UX: Thêm confirm dialog cho các action nhạy cảm (rời nhóm, xoá thành viên, chuyển quyền admin)
 
@@ -201,15 +201,20 @@
 
 ### 13. Voice & Video Messages
 **Mô tả:** Gửi voice message và video message ngắn trong chat
-- [ ] UI: Nút giữ để ghi âm, hiển thị sóng âm đơn giản
-- [ ] Logic: Ghi âm, upload file audio/video (Cloudinary hoặc Storage)
-- [ ] UI: Bubble voice (play/pause, duration), bubble video message
-- [ ] Firestore: Thêm `type = 'voice' | 'video_message'` và metadata tương ứng
+- [ ] Model: Mở rộng `MessageAttachment` để hỗ trợ type `voice` và `video_message` (duration, waveform? url thumbnail,…)
+- [ ] Firestore: Chuẩn hoá cách lưu message voice/video (type, urls, duration, fileSize, createdAt,…)
+- [ ] Service: Hàm gửi voice message (ghi âm xong → upload file → tạo message type `voice`)
+- [ ] Service: Hàm gửi video message (quay/chọn video ngắn → upload → tạo message type `video_message`)
+- [ ] UI: Nút giữ để ghi âm (voice) trong `ChatDetailPage`, hiển thị trạng thái đang ghi
+- [ ] UI: Bubble voice với nút play/pause, thanh progress, thời lượng
+- [ ] UI: Bubble video message (thumbnail, nút play mở fullscreen/video player)
+- [ ] Tích hợp Cloudinary/Firebase Storage cho upload audio/video (tái sử dụng `CloudinaryService` nếu phù hợp)
+- [ ] Logic: Giới hạn độ dài voice/video (ví dụ ≤ 1 phút) và xử lý lỗi upload (retry / báo lỗi thân thiện)
 
 **Files dự kiến:**
 - `lib/features/chat/models/message_attachment.dart` (mở rộng)
-- `lib/features/chat/pages/chat_detail_page.dart` (UI ghi âm và phát)
-- `lib/services/cloudinary_service.dart` (nếu tái sử dụng upload)
+- `lib/features/chat/pages/chat_detail_page.dart` (UI ghi âm, gửi, hiển thị voice/video)
+- `lib/services/cloudinary_service.dart` (nếu tái sử dụng upload cho audio/video)
 
 ---
 

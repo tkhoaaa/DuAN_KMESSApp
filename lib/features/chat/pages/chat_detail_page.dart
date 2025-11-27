@@ -1,10 +1,13 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:audioplayers/audioplayers.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:record/record.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../../auth/auth_repository.dart';
 import '../../profile/user_profile_repository.dart';
@@ -12,6 +15,7 @@ import '../../../services/cloudinary_service.dart';
 import '../models/message.dart';
 import '../models/message_attachment.dart';
 import '../repositories/chat_repository.dart';
+import '../../posts/pages/post_video_page.dart';
 
 class ChatDetailPage extends StatefulWidget {
   const ChatDetailPage({
@@ -29,9 +33,11 @@ class ChatDetailPage extends StatefulWidget {
 
 class _ChatDetailPageState extends State<ChatDetailPage> {
   late final ChatRepository _chatRepository;
+  final AudioRecorder _recorder = AudioRecorder();
   final TextEditingController _controller = TextEditingController();
   final TextEditingController _searchController = TextEditingController();
   final ImagePicker _imagePicker = ImagePicker();
+  bool _isRecording = false;
   bool _isUploading = false;
   Timer? _typingTimer;
   bool _isTyping = false;
@@ -80,6 +86,7 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
         isTyping: false,
       );
     }
+    _recorder.dispose();
     super.dispose();
   }
 
@@ -303,6 +310,174 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
     }
   }
 
+  Future<void> _pickAndSendVideo() async {
+    final currentUid = _currentUid;
+    if (currentUid == null) return;
+
+    try {
+      final picked = await _imagePicker.pickVideo(
+        source: ImageSource.gallery,
+        maxDuration: const Duration(minutes: 5),
+      );
+      if (picked == null) return;
+
+      setState(() {
+        _isUploading = true;
+      });
+
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final uploadResult = await CloudinaryService.uploadVideo(
+        file: picked,
+        folder: 'chat/${widget.conversationId}',
+        publicId: '$timestamp-${picked.name}',
+      );
+
+      final videoUrl = uploadResult['url'] as String?;
+      if (videoUrl == null) {
+        throw Exception('Không nhận được URL video từ Cloudinary');
+      }
+      final thumbnailUrl = uploadResult['thumbnailUrl'] as String?;
+      final durationMs = (uploadResult['durationMs'] as num?)?.toInt();
+
+      int fileSize = 0;
+      try {
+        final file = File(picked.path);
+        fileSize = await file.length();
+      } catch (_) {
+        fileSize = 0;
+      }
+
+      final attachment = MessageAttachment(
+        url: videoUrl,
+        name: picked.name,
+        size: fileSize,
+        mimeType: 'video/mp4',
+        type: 'video_message',
+        durationMs: durationMs,
+        thumbnailUrl: thumbnailUrl,
+      );
+
+      await _chatRepository.sendVideoMessage(
+        conversationId: widget.conversationId,
+        senderId: currentUid,
+        attachments: [attachment],
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Lỗi gửi video: $e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isUploading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _toggleRecord() async {
+    if (kIsWeb) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Voice message chưa hỗ trợ trên web')),
+      );
+      return;
+    }
+
+    final currentUid = _currentUid;
+    if (currentUid == null) return;
+
+    try {
+      final hasPermission = await _recorder.hasPermission();
+      if (!hasPermission) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Ứng dụng cần quyền micro để ghi âm')),
+        );
+        return;
+      }
+
+      if (!_isRecording) {
+        // Bắt đầu ghi âm
+        // record 5.x yêu cầu truyền sẵn đường dẫn file đầu ra (path)
+        final tempDir = await getTemporaryDirectory();
+        final timestamp = DateTime.now().millisecondsSinceEpoch;
+        final outputPath = '${tempDir.path}/voice_$timestamp.m4a';
+
+        await _recorder.start(
+          const RecordConfig(
+            encoder: AudioEncoder.aacLc,
+            bitRate: 128000,
+            sampleRate: 44100,
+          ),
+          path: outputPath,
+        );
+        setState(() {
+          _isRecording = true;
+        });
+      } else {
+        // Dừng ghi âm và gửi
+        final path = await _recorder.stop();
+        setState(() {
+          _isRecording = false;
+        });
+        if (path == null) return;
+
+        setState(() {
+          _isUploading = true;
+        });
+
+        final timestamp = DateTime.now().millisecondsSinceEpoch;
+        final file = XFile(path, name: 'voice-$timestamp.m4a');
+
+        final uploadResult = await CloudinaryService.uploadAudio(
+          file: file,
+          folder: 'chat/${widget.conversationId}',
+          publicId: 'voice-$timestamp',
+        );
+
+        final audioUrl = uploadResult['url'] as String?;
+        if (audioUrl == null) {
+          throw Exception('Không nhận được URL audio từ Cloudinary');
+        }
+        final durationMs = (uploadResult['durationMs'] as num?)?.toInt();
+
+        int fileSize = 0;
+        try {
+          final f = File(path);
+          fileSize = await f.length();
+        } catch (_) {
+          fileSize = 0;
+        }
+
+        final attachment = MessageAttachment(
+          url: audioUrl,
+          name: file.name,
+          size: fileSize,
+          mimeType: 'audio/m4a',
+          type: 'voice',
+          durationMs: durationMs,
+        );
+
+        await _chatRepository.sendVoiceMessage(
+          conversationId: widget.conversationId,
+          senderId: currentUid,
+          attachments: [attachment],
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Lỗi ghi âm: $e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isUploading = false;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final currentUid = _currentUid;
@@ -491,7 +666,7 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
                     vertical: 8,
                   ),
                   decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surfaceVariant,
+                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Row(
@@ -529,6 +704,16 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
               child: Row(
                 children: [
                   IconButton(
+                    icon: Icon(
+                      _isRecording ? Icons.mic_off : Icons.mic,
+                      color: _isRecording
+                          ? Theme.of(context).colorScheme.error
+                          : null,
+                    ),
+                    onPressed: _isUploading ? null : _toggleRecord,
+                    tooltip: 'Gửi voice',
+                  ),
+                  IconButton(
                     icon: const Icon(Icons.image),
                     onPressed: _isUploading
                         ? null
@@ -553,6 +738,14 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
                                       onTap: () {
                                         Navigator.pop(context);
                                         _pickAndSendImage(ImageSource.camera);
+                                      },
+                                    ),
+                                    ListTile(
+                                      leading: const Icon(Icons.video_library),
+                                      title: const Text('Gửi video'),
+                                      onTap: () {
+                                        Navigator.pop(context);
+                                        _pickAndSendVideo();
                                       },
                                     ),
                                   ],
@@ -592,24 +785,24 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
                         final text = _controller.text.trim();
                         if (text.isEmpty) return;
                         try {
-                        await _chatRepository.sendTextMessage(
-                          conversationId: widget.conversationId,
-                          senderId: currentUid,
-                          text: text,
-                        );
-                        _controller.clear();
-                        // Set typing false sau khi gửi
-                        if (_isTyping) {
-                          setState(() {
-                            _isTyping = false;
-                          });
-                          _chatRepository.setTyping(
-                            uid: currentUid,
+                          await _chatRepository.sendTextMessage(
                             conversationId: widget.conversationId,
-                            isTyping: false,
+                            senderId: currentUid,
+                            text: text,
                           );
-                        }
-                        _typingTimer?.cancel();
+                          _controller.clear();
+                          // Set typing false sau khi gửi
+                          if (_isTyping) {
+                            setState(() {
+                              _isTyping = false;
+                            });
+                            _chatRepository.setTyping(
+                              uid: currentUid,
+                              conversationId: widget.conversationId,
+                              isTyping: false,
+                            );
+                          }
+                          _typingTimer?.cancel();
                         } catch (e) {
                           if (!mounted) return;
                           ScaffoldMessenger.of(context).showSnackBar(
@@ -651,6 +844,12 @@ class _ChatMessageBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     final hasImages = message.attachments.isNotEmpty &&
         message.attachments.any((a) => a.mimeType.startsWith('image/'));
+    final voiceAttachments = message.attachments
+        .where((a) => a.type == 'voice')
+        .toList();
+    final videoAttachments = message.attachments
+        .where((a) => a.type == 'video' || a.type == 'video_message')
+        .toList();
 
     final reactionEntries = message.reactions.entries
         .where((e) => e.value.isNotEmpty)
@@ -704,7 +903,7 @@ class _ChatMessageBubble extends StatelessWidget {
           decoration: BoxDecoration(
             color: isMine
                 ? Theme.of(context).colorScheme.primaryContainer
-                : Theme.of(context).colorScheme.surfaceVariant,
+                : Theme.of(context).colorScheme.surfaceContainerHighest,
             borderRadius: BorderRadius.circular(12),
           ),
           child: Column(
@@ -757,6 +956,67 @@ class _ChatMessageBubble extends StatelessWidget {
                         ),
                       ),
                     ),
+              if (voiceAttachments.isNotEmpty) ...[
+                ...voiceAttachments.map(
+                  (attachment) => Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: _VoiceMessagePlayer(
+                      attachment: attachment,
+                      isMine: isMine,
+                    ),
+                  ),
+                ),
+              ],
+              if (videoAttachments.isNotEmpty) ...[
+                ...videoAttachments.map(
+                  (attachment) => Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: GestureDetector(
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => PostVideoPage(
+                              videoUrl: attachment.url,
+                            ),
+                          ),
+                        );
+                      },
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: attachment.thumbnailUrl != null
+                                ? Image.network(
+                                    attachment.thumbnailUrl!,
+                                    fit: BoxFit.cover,
+                                    width: double.infinity,
+                                    height: 200,
+                                  )
+                                : Container(
+                                    width: double.infinity,
+                                    height: 200,
+                                    color: Colors.black12,
+                                  ),
+                          ),
+                          Container(
+                            decoration: const BoxDecoration(
+                              color: Colors.black45,
+                              shape: BoxShape.circle,
+                            ),
+                            padding: const EdgeInsets.all(8),
+                            child: const Icon(
+                              Icons.play_arrow,
+                              color: Colors.white,
+                              size: 32,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
               if (message.text != null && message.text!.isNotEmpty)
                 _buildHighlightedText(
                   message.text!,
@@ -825,61 +1085,220 @@ class _ChatMessageBubble extends StatelessWidget {
     );
   }
 
-  Widget _buildHighlightedText(String text, {String? searchTerm, TextStyle? style}) {
-    if (searchTerm == null || searchTerm.isEmpty) {
-      return Text(text, style: style);
-    }
+}
 
-    final lowerText = text.toLowerCase();
-    final lowerSearchTerm = searchTerm.toLowerCase();
-    final matches = <({int start, int end})>[];
-    
-    int start = 0;
-    while (start < lowerText.length) {
-      final index = lowerText.indexOf(lowerSearchTerm, start);
-      if (index == -1) break;
-      matches.add((start: index, end: index + searchTerm.length));
-      start = index + 1;
-    }
+class _VoiceMessagePlayer extends StatefulWidget {
+  const _VoiceMessagePlayer({
+    required this.attachment,
+    required this.isMine,
+  });
 
-    if (matches.isEmpty) {
-      return Text(text, style: style);
-    }
+  final MessageAttachment attachment;
+  final bool isMine;
 
-    final spans = <TextSpan>[];
-    int lastEnd = 0;
-    
-    for (final match in matches) {
-      // Text trước match
-      if (match.start > lastEnd) {
-        spans.add(TextSpan(
-          text: text.substring(lastEnd, match.start),
-          style: style,
-        ));
-      }
-      // Text được highlight
-      spans.add(TextSpan(
-        text: text.substring(match.start, match.end),
-        style: (style ?? const TextStyle()).copyWith(
-          backgroundColor: Colors.yellow,
-          fontWeight: FontWeight.bold,
+  @override
+  State<_VoiceMessagePlayer> createState() => _VoiceMessagePlayerState();
+}
+
+class _VoiceMessagePlayerState extends State<_VoiceMessagePlayer> {
+  late final AudioPlayer _player;
+  bool _isPlaying = false;
+  bool _isLoading = false;
+  Duration _position = Duration.zero;
+  Duration? _duration;
+
+  @override
+  void initState() {
+    super.initState();
+    _player = AudioPlayer();
+    _player.onPlayerStateChanged.listen((state) {
+      if (!mounted) return;
+      setState(() {
+        _isPlaying = state == PlayerState.playing;
+        if (state == PlayerState.stopped) {
+          _position = Duration.zero;
+        }
+      });
+    });
+    _player.onDurationChanged.listen((duration) {
+      if (!mounted) return;
+      setState(() {
+        _duration = duration;
+      });
+    });
+    _player.onPositionChanged.listen((position) {
+      if (!mounted) return;
+      setState(() {
+        _position = position;
+      });
+    });
+    _player.onPlayerComplete.listen((_) {
+      if (!mounted) return;
+      setState(() {
+        _isPlaying = false;
+        _position = Duration.zero;
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _player.dispose();
+    super.dispose();
+  }
+
+  double? get _progress {
+    if (_duration == null || _duration!.inMilliseconds == 0) return null;
+    final ratio =
+        _position.inMilliseconds / _duration!.inMilliseconds;
+    return ratio.clamp(0, 1);
+  }
+
+  String get _displayDuration {
+    if (_duration != null && _duration!.inMilliseconds > 0) {
+      return _formatDurationMs(_duration!.inMilliseconds);
+    }
+    if (widget.attachment.durationMs != null) {
+      return _formatDurationMs(widget.attachment.durationMs!);
+    }
+    return '--:--';
+  }
+
+  Future<void> _togglePlayback() async {
+    if (_isPlaying) {
+      await _player.stop();
+      setState(() {
+        _position = Duration.zero;
+      });
+      return;
+    }
+    setState(() {
+      _isLoading = true;
+    });
+    try {
+      await _player.stop();
+      await _player.play(UrlSource(widget.attachment.url));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Không phát được voice: $e')),
+      );
+    } finally {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          decoration: BoxDecoration(
+            color: widget.isMine
+                ? Theme.of(context).colorScheme.primary.withOpacity(0.15)
+                : Theme.of(context).colorScheme.surfaceVariant,
+            borderRadius: BorderRadius.circular(30),
+          ),
+          child: IconButton(
+            iconSize: 20,
+            onPressed: _isLoading ? null : _togglePlayback,
+            icon: _isLoading
+                ? const SizedBox(
+                    height: 16,
+                    width: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : Icon(_isPlaying ? Icons.stop : Icons.play_arrow),
+          ),
         ),
-      ));
-      lastEnd = match.end;
-    }
-    
-    // Text sau match cuối cùng
-    if (lastEnd < text.length) {
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              LinearProgressIndicator(
+                value: _progress,
+                minHeight: 4,
+                backgroundColor:
+                    Theme.of(context).colorScheme.surfaceContainerHighest,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                _displayDuration,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+String _formatDurationMs(int ms) {
+  final totalSeconds = (ms / 1000).round();
+  final minutes = totalSeconds ~/ 60;
+  final seconds = totalSeconds % 60;
+  return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+}
+
+Widget _buildHighlightedText(String text, {String? searchTerm, TextStyle? style}) {
+  if (searchTerm == null || searchTerm.isEmpty) {
+    return Text(text, style: style);
+  }
+
+  final lowerText = text.toLowerCase();
+  final lowerSearchTerm = searchTerm.toLowerCase();
+  final matches = <({int start, int end})>[];
+  
+  int start = 0;
+  while (start < lowerText.length) {
+    final index = lowerText.indexOf(lowerSearchTerm, start);
+    if (index == -1) break;
+    matches.add((start: index, end: index + searchTerm.length));
+    start = index + 1;
+  }
+
+  if (matches.isEmpty) {
+    return Text(text, style: style);
+  }
+
+  final spans = <TextSpan>[];
+  int lastEnd = 0;
+  
+  for (final match in matches) {
+    // Text trước match
+    if (match.start > lastEnd) {
       spans.add(TextSpan(
-        text: text.substring(lastEnd),
+        text: text.substring(lastEnd, match.start),
         style: style,
       ));
     }
-
-    return RichText(
-      text: TextSpan(children: spans),
-    );
+    // Text được highlight
+    spans.add(TextSpan(
+      text: text.substring(match.start, match.end),
+      style: (style ?? const TextStyle()).copyWith(
+        backgroundColor: Colors.yellow,
+        fontWeight: FontWeight.bold,
+      ),
+    ));
+    lastEnd = match.end;
   }
+  
+  // Text sau match cuối cùng
+  if (lastEnd < text.length) {
+    spans.add(TextSpan(
+      text: text.substring(lastEnd),
+      style: style,
+    ));
+  }
+
+  return RichText(
+    text: TextSpan(children: spans),
+  );
 }
 
 /// Trang xem ảnh fullscreen

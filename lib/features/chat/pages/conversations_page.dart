@@ -41,7 +41,6 @@ class _ConversationsPageState extends State<ConversationsPage> {
             icon: const Icon(Icons.group_add),
             tooltip: 'Tạo nhóm mới',
             onPressed: () async {
-              if (uid == null) return;
               await Navigator.of(context).push(
                 MaterialPageRoute(
                   builder: (_) => const CreateGroupPage(),

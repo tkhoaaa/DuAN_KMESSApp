@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../../auth/auth_repository.dart';
 import '../../follow/services/follow_service.dart';
-import '../../follow/services/follow_service.dart' show FollowEntry;
 import '../services/conversation_service.dart';
 
 class CreateGroupPage extends StatefulWidget {

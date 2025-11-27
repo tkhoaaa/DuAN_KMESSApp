@@ -155,7 +155,7 @@ class PostService {
             publicId: '$timestamp-$originalName',
           );
           downloadUrl = result['url'] as String;
-          publicId = result['publicId'] as String?;
+          publicId = result['publicId'];
         }
       } else {
         // Dùng Firebase Storage (code cũ)

@@ -1,4 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../profile/user_profile_repository.dart';
 import '../models/conversation_summary.dart';
