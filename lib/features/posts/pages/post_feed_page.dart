@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../auth/auth_repository.dart';
 import '../../profile/public_profile_page.dart';
+import '../../saved_posts/services/saved_posts_service.dart';
 import '../../safety/services/block_service.dart';
 import '../../safety/services/report_service.dart';
 import '../../stories/pages/story_create_page.dart';
@@ -199,6 +200,7 @@ class _PostFeedItemState extends State<PostFeedItem> {
   int _currentPage = 0;
   final BlockService _blockService = blockService;
   final ReportService _reportService = reportService;
+  final SavedPostsService _savedPostsService = savedPostsService;
 
   @override
   void dispose() {
@@ -523,6 +525,20 @@ class _PostFeedItemState extends State<PostFeedItem> {
                 ),
                 Text('${post.commentCount}'),
                 const Spacer(),
+                if (!isOwner && currentUid != null)
+                  StreamBuilder<bool>(
+                    stream: _savedPostsService.watchIsPostSaved(post.id),
+                    builder: (context, snapshot) {
+                      final isSaved = snapshot.data ?? false;
+                      return IconButton(
+                        icon: Icon(
+                          isSaved ? Icons.bookmark : Icons.bookmark_border,
+                          color: isSaved ? Colors.blueAccent : Colors.grey,
+                        ),
+                        onPressed: () => _handleToggleSave(post, isSaved),
+                      );
+                    },
+                  ),
                 IconButton(
                   icon: const Icon(Icons.share),
                   onPressed: () {},
@@ -533,6 +549,27 @@ class _PostFeedItemState extends State<PostFeedItem> {
         ],
       ),
     );
+  }
+
+  Future<void> _handleToggleSave(Post post, bool isSaved) async {
+    try {
+      final saved = await _savedPostsService.toggleSaved(
+        postId: post.id,
+        postOwnerUid: post.authorUid,
+        postUrl: SavedPostsService.buildPostLink(post.id),
+      );
+      if (!mounted) return;
+      final message =
+          saved ? 'Đã lưu bài viết.' : 'Đã bỏ lưu bài viết khỏi mục đã lưu.';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message)),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Không thể cập nhật lưu bài viết: $e')),
+      );
+    }
   }
 
   Widget? _buildTrailingMenu({

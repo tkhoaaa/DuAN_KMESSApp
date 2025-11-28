@@ -270,5 +270,39 @@ service cloud.firestore {
         );
       allow read, update, delete: if false;
     }
+
+    // Saved posts collection
+    match /saved_posts/{uid} {
+      // Không cho truy cập trực tiếp document gốc, chỉ qua subcollection items
+      allow read, write: if false;
+
+      match /items/{postId} {
+        allow read: if isSignedIn() && request.auth.uid == uid;
+        allow create: if isSignedIn()
+          && request.auth.uid == uid
+          && request.resource.data.keys().hasOnly([
+            'postId',
+            'postOwnerUid',
+            'savedAt',
+            'postUrl',
+          ])
+          && request.resource.data.postId == postId
+          && request.resource.data.postId is string
+          && (
+            request.resource.data.postOwnerUid == null ||
+            request.resource.data.postOwnerUid is string
+          )
+          && (
+            request.resource.data.postUrl == null ||
+            request.resource.data.postUrl is string
+          )
+          && (
+            request.resource.data.savedAt == request.time ||
+            request.resource.data.savedAt is timestamp
+          );
+        allow delete: if isSignedIn() && request.auth.uid == uid;
+        allow update: if false;
+      }
+    }
   }
 }

@@ -6,6 +6,7 @@
 3. ✅ Like & comment (realtime)
 4. ✅ Upload ảnh/video lên Cloudinary
 5. ✅ Chat cơ bản (gửi text, xem messages)
+6. ✅ Chat permissions (contacts → tạo hội thoại, block/permission guard)
 
 ---
 
@@ -251,15 +252,40 @@
 
 ### 15. Saved Posts / Bookmarks
 **Mô tả:** Lưu bài viết để xem lại sau
-- [ ] Model: Collection `saved_posts/{uid}/items/{postId}`
-- [ ] UI: Icon bookmark trên mỗi post (toggle save/unsave)
-- [ ] UI: Màn hình "Bài viết đã lưu" với grid/list posts
-- [ ] Logic: Chỉ chủ tài khoản thấy saved posts của mình
 
-**Files dự kiến:**
-- `lib/features/saved/repositories/saved_posts_repository.dart`
-- `lib/features/saved/pages/saved_posts_page.dart`
+#### Phase 1 – Data & Rules
+- [x] Thiết kế collection `saved_posts/{uid}/items/{postId}` (postId, savedAt, postOwnerUid)
+- [x] Cập nhật `firebase/firestore.rules` để chỉ owner đọc/ghi saved posts của mình
+- [ ] (Optional) Index `saved_posts` theo `savedAt DESC` cho màn list
+
+#### Phase 2 – Repository & Service
+- [x] Tạo `SavedPostsRepository` (watch, toggleSave, isSaved, fetchSavedPosts)
+- [x] Tạo `SavedPostsService` (wrap repository, handle optimistic UI/logging)
+- [ ] Viết unit/widget test tối thiểu cho toggle save
+
+#### Phase 3 – UI Integration
+- [x] Thêm icon bookmark (stateful) vào `PostCard/PostFeed` (+ SnackBar khi save/un-save)
+- [x] Disable/ẩn icon với bài viết của chính mình (nếu không cần lưu)
+- [ ] Đồng bộ badge/bộ đếm saved trong `UserProfile` (nếu có)
+
+#### Phase 4 – Saved Posts Page
+- [x] Tạo `SavedPostsPage` (list, preview)
+- [x] Hiển thị trạng thái trống + CTA trở lại feed khi chưa có bài lưu
+- [x] Cho phép mở chi tiết post từ danh sách saved (preview bottom sheet)
+
+#### Phase 5 – QA & Polish
+- [ ] Viết checklist test (save/un-save, offline retry, quyền truy cập chéo user)
+- [ ] Đảm bảo analytics/logging ghi lại hành động save (nếu có)
+- [ ] Cập nhật dokument/FAQ cho người dùng cuối
+
+**Files đã tạo/sửa:**
+- `lib/features/saved_posts/repositories/saved_posts_repository.dart`
+- `lib/features/saved_posts/services/saved_posts_service.dart`
+- `lib/features/saved_posts/models/saved_post.dart`
+- `lib/features/saved_posts/pages/saved_posts_page.dart`
 - `lib/features/posts/pages/post_feed_page.dart` (thêm icon save)
+- `lib/features/profile/profile_screen.dart` (nút mở Saved Posts)
+- `firebase/firestore.rules` (rule saved_posts)
 
 ---
 

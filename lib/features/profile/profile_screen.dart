@@ -9,6 +9,7 @@ import 'user_profile_repository.dart';
 import '../auth/auth_repository.dart';
 import '../follow/services/follow_service.dart';
 import '../../services/cloudinary_service.dart';
+import '../saved_posts/pages/saved_posts_page.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -196,6 +197,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Hồ sơ của bạn'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.bookmark),
+            tooltip: 'Bài viết đã lưu',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const SavedPostsPage(),
+                ),
+              );
+            },
+          ),
+        ],
       ),
       body: StreamBuilder<UserProfile?>(
         stream: userProfileRepository.watchProfile(user.uid),
