@@ -12,6 +12,7 @@ import 'package:path_provider/path_provider.dart';
 import '../../auth/auth_repository.dart';
 import '../../profile/user_profile_repository.dart';
 import '../../../services/cloudinary_service.dart';
+import '../../safety/services/block_service.dart';
 import '../models/message.dart';
 import '../models/message_attachment.dart';
 import '../repositories/chat_repository.dart';
@@ -46,6 +47,10 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
   List<ChatMessage> _searchResults = [];
   bool _isSearching = false;
   final ScrollController _scrollController = ScrollController();
+  bool _isBlockedByMe = false;
+  bool _isBlockedByOther = false;
+  StreamSubscription<bool>? _blockedByMeSub;
+  StreamSubscription<bool>? _blockedByOtherSub;
 
   @override
   void initState() {
@@ -54,6 +59,16 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
     _controller.addListener(_onTextChanged);
     // Mark conversation as read khi mở
     _markAsRead();
+    _listenBlockStatus();
+  }
+
+  @override
+  void didUpdateWidget(covariant ChatDetailPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.otherUid != widget.otherUid ||
+        oldWidget.conversationId != widget.conversationId) {
+      _listenBlockStatus();
+    }
   }
 
   Future<void> _markAsRead() async {
@@ -68,6 +83,55 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
       // Ignore errors silently
       debugPrint('Error marking as read: $e');
     }
+  }
+
+  void _listenBlockStatus() {
+    final currentUid = _currentUid;
+    if (currentUid == null) return;
+    _blockedByMeSub?.cancel();
+    _blockedByOtherSub?.cancel();
+    _blockedByMeSub = blockService
+        .watchIsBlocked(
+          blockerUid: currentUid,
+          blockedUid: widget.otherUid,
+        )
+        .listen((value) {
+      if (!mounted) return;
+      setState(() {
+        _isBlockedByMe = value;
+      });
+    });
+    _blockedByOtherSub = blockService
+        .watchIsBlocked(
+          blockerUid: widget.otherUid,
+          blockedUid: currentUid,
+        )
+        .listen((value) {
+      if (!mounted) return;
+      setState(() {
+        _isBlockedByOther = value;
+      });
+    });
+  }
+
+  bool get _canSendMessages => !_isBlockedByMe && !_isBlockedByOther;
+
+  String get _blockedMessage {
+    if (_isBlockedByMe) {
+      return 'Bạn đã chặn người này. Bỏ chặn để tiếp tục theo dõi hoặc nhắn tin.';
+    }
+    if (_isBlockedByOther) {
+      return 'Người này đã chặn bạn. Bạn không thể nhắn tin.';
+    }
+    return '';
+  }
+
+  void _showBlockedSnack() {
+    if (!_isBlockedByMe && !_isBlockedByOther) return;
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(_blockedMessage)),
+    );
   }
 
   @override
@@ -87,6 +151,8 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
       );
     }
     _recorder.dispose();
+    _blockedByMeSub?.cancel();
+    _blockedByOtherSub?.cancel();
     super.dispose();
   }
 
@@ -205,6 +271,7 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
   }
 
   void _onTextChanged() {
+    if (!_canSendMessages) return;
     final currentUid = _currentUid;
     if (currentUid == null) return;
 
@@ -239,6 +306,10 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
   }
 
   Future<void> _pickAndSendImage(ImageSource source) async {
+    if (!_canSendMessages) {
+      _showBlockedSnack();
+      return;
+    }
     final currentUid = _currentUid;
     if (currentUid == null) return;
 
@@ -311,6 +382,10 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
   }
 
   Future<void> _pickAndSendVideo() async {
+    if (!_canSendMessages) {
+      _showBlockedSnack();
+      return;
+    }
     final currentUid = _currentUid;
     if (currentUid == null) return;
 
@@ -377,6 +452,10 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
   }
 
   Future<void> _toggleRecord() async {
+    if (!_canSendMessages) {
+      _showBlockedSnack();
+      return;
+    }
     if (kIsWeb) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Voice message chưa hỗ trợ trên web')),
@@ -697,10 +776,23 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
               ),
             ),
           const Divider(height: 1),
+          if (_isBlockedByMe || _isBlockedByOther)
+            Container(
+              width: double.infinity,
+              color: Theme.of(context).colorScheme.errorContainer,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Text(
+                _blockedMessage,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onErrorContainer,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
           SafeArea(
             child: Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               child: Row(
                 children: [
                   IconButton(
@@ -710,12 +802,13 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
                           ? Theme.of(context).colorScheme.error
                           : null,
                     ),
-                    onPressed: _isUploading ? null : _toggleRecord,
+                    onPressed:
+                        _isUploading || !_canSendMessages ? null : _toggleRecord,
                     tooltip: 'Gửi voice',
                   ),
                   IconButton(
                     icon: const Icon(Icons.image),
-                    onPressed: _isUploading
+                    onPressed: _isUploading || !_canSendMessages
                         ? null
                         : () {
                             showModalBottomSheet(
@@ -765,7 +858,7 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
                         border: OutlineInputBorder(),
                         isDense: true,
                       ),
-                      enabled: !_isUploading,
+                      enabled: !_isUploading && _canSendMessages,
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -782,6 +875,10 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
                     IconButton(
                       icon: const Icon(Icons.send),
                       onPressed: () async {
+                        if (!_canSendMessages) {
+                          _showBlockedSnack();
+                          return;
+                        }
                         final text = _controller.text.trim();
                         if (text.isEmpty) return;
                         try {
