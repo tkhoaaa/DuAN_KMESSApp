@@ -30,6 +30,48 @@ class ChatRepository {
           .doc(conversationId)
           .collection('participants');
 
+  Stream<ParticipantNotificationSettings>
+      watchParticipantNotificationSettings({
+    required String conversationId,
+    required String uid,
+  }) {
+    return _participantsRef(conversationId)
+        .doc(uid)
+        .snapshots()
+        .map(ParticipantNotificationSettings.fromSnapshot);
+  }
+
+  Future<ParticipantNotificationSettings>
+      fetchParticipantNotificationSettings({
+    required String conversationId,
+    required String uid,
+  }) async {
+    final snap = await _participantsRef(conversationId).doc(uid).get();
+    return ParticipantNotificationSettings.fromSnapshot(snap);
+  }
+
+  Future<void> updateParticipantNotificationSettings({
+    required String conversationId,
+    required String uid,
+    bool? notificationsEnabled,
+    DateTime? mutedUntil,
+    bool clearMutedUntil = false,
+  }) async {
+    final data = <String, dynamic>{};
+    if (notificationsEnabled != null) {
+      data['notificationsEnabled'] = notificationsEnabled;
+    }
+    if (mutedUntil != null) {
+      data['mutedUntil'] = Timestamp.fromDate(mutedUntil);
+    } else if (clearMutedUntil) {
+      data['mutedUntil'] = FieldValue.delete();
+    }
+    if (data.isEmpty) return;
+    await _participantsRef(conversationId)
+        .doc(uid)
+        .set(data, SetOptions(merge: true));
+  }
+
   Future<void> ensureParticipantEntry({
     required String conversationId,
     required String uid,
@@ -456,14 +498,23 @@ class ChatRepository {
     
     // Tạo notification cho các participants khác (không phải sender)
     for (final participantId in participantIds) {
-      if (participantId != senderId) {
-        _notificationService.createMessageNotification(
-          conversationId: conversationId,
-          senderUid: senderId,
-          receiverUid: participantId,
-          messageText: text.isNotEmpty ? text : (attachments.isNotEmpty ? '[media]' : null),
-        ).catchError((e) => debugPrint('Error creating message notification: $e'));
-      }
+      if (participantId == senderId) continue;
+      final shouldNotify = await _shouldSendNotification(
+        conversationId: conversationId,
+        receiverUid: participantId,
+        referenceTime: now,
+      );
+      if (!shouldNotify) continue;
+      _notificationService
+          .createMessageNotification(
+        conversationId: conversationId,
+        senderUid: senderId,
+        receiverUid: participantId,
+        messageText:
+            text.isNotEmpty ? text : (attachments.isNotEmpty ? '[media]' : null),
+      )
+          .catchError(
+              (e) => debugPrint('Error creating message notification: $e'));
     }
   }
 
@@ -625,6 +676,59 @@ class ChatRepository {
       final text = message.text?.toLowerCase() ?? '';
       return text.contains(lowerSearchTerm);
     }).toList();
+  }
+
+  Future<bool> _shouldSendNotification({
+    required String conversationId,
+    required String receiverUid,
+    required DateTime referenceTime,
+  }) async {
+    try {
+      final settings = await fetchParticipantNotificationSettings(
+        conversationId: conversationId,
+        uid: receiverUid,
+      );
+      if (!settings.notificationsEnabled) return false;
+      if (settings.mutedUntil != null &&
+          settings.mutedUntil!.isAfter(referenceTime)) {
+        return false;
+      }
+      return true;
+    } catch (e) {
+      debugPrint('Warning: cannot determine mute state ($e), defaulting to notify');
+      return true;
+    }
+  }
+}
+
+class ParticipantNotificationSettings {
+  const ParticipantNotificationSettings({
+    required this.notificationsEnabled,
+    this.mutedUntil,
+  });
+
+  final bool notificationsEnabled;
+  final DateTime? mutedUntil;
+
+  bool isMutedAt(DateTime reference) {
+    if (!notificationsEnabled) return true;
+    if (mutedUntil == null) return false;
+    return mutedUntil!.isAfter(reference);
+  }
+
+  static ParticipantNotificationSettings fromSnapshot(
+    DocumentSnapshot<Map<String, dynamic>>? snapshot,
+  ) {
+    final data = snapshot?.data();
+    final timestamp = data?['mutedUntil'];
+    DateTime? muted;
+    if (timestamp is Timestamp) {
+      muted = timestamp.toDate();
+    }
+    return ParticipantNotificationSettings(
+      notificationsEnabled: (data?['notificationsEnabled'] as bool?) ?? true,
+      mutedUntil: muted,
+    );
   }
 }
 

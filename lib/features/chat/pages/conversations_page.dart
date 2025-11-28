@@ -70,10 +70,29 @@ class _ConversationsPageState extends State<ConversationsPage> {
             separatorBuilder: (_, __) => const Divider(height: 0),
             itemBuilder: (context, index) {
               final entry = entries[index];
-              final subtitle = entry.subtitle ??
+              final subtitleText = entry.subtitle ??
                   (entry.summary.lastMessageAt != null
                       ? 'Tin nhắn cuối lúc ${entry.summary.lastMessageAt}'
                       : null);
+              final muteLabel = entry.muteDescription();
+              Widget? subtitleWidget;
+              if (subtitleText != null || muteLabel != null) {
+                subtitleWidget = Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (subtitleText != null) Text(subtitleText),
+                    if (muteLabel != null)
+                      Text(
+                        muteLabel,
+                        style: TextStyle(
+                          color: Colors.orange.shade700,
+                          fontSize: 12,
+                        ),
+                      ),
+                  ],
+                );
+              }
               return ListTile(
                 leading: CircleAvatar(
                   backgroundImage: entry.avatarUrl != null
@@ -84,8 +103,10 @@ class _ConversationsPageState extends State<ConversationsPage> {
                       : null,
                 ),
                 title: Text(entry.title),
-                subtitle:
-                    subtitle != null ? Text(subtitle) : const SizedBox(),
+                subtitle: subtitleWidget,
+                trailing: entry.isMuted
+                    ? const Icon(Icons.notifications_off, color: Colors.orange)
+                    : null,
                 onTap: () {
                   final otherUid = entry.summary.type == 'direct'
                       ? entry.summary.participantIds

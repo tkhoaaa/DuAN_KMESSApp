@@ -51,6 +51,11 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
   bool _isBlockedByOther = false;
   StreamSubscription<bool>? _blockedByMeSub;
   StreamSubscription<bool>? _blockedByOtherSub;
+  StreamSubscription<ParticipantNotificationSettings>?
+      _notificationSettingsSub;
+  bool _notificationsEnabled = true;
+  DateTime? _mutedUntil;
+  bool _isUpdatingNotifications = false;
 
   @override
   void initState() {
@@ -60,6 +65,7 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
     // Mark conversation as read khi mở
     _markAsRead();
     _listenBlockStatus();
+    _listenNotificationSettings();
   }
 
   @override
@@ -68,6 +74,7 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
     if (oldWidget.otherUid != widget.otherUid ||
         oldWidget.conversationId != widget.conversationId) {
       _listenBlockStatus();
+      _listenNotificationSettings();
     }
   }
 
@@ -114,6 +121,24 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
     });
   }
 
+  void _listenNotificationSettings() {
+    final currentUid = _currentUid;
+    if (currentUid == null) return;
+    _notificationSettingsSub?.cancel();
+    _notificationSettingsSub = _chatRepository
+        .watchParticipantNotificationSettings(
+          conversationId: widget.conversationId,
+          uid: currentUid,
+        )
+        .listen((settings) {
+      if (!mounted) return;
+      setState(() {
+        _notificationsEnabled = settings.notificationsEnabled;
+        _mutedUntil = settings.mutedUntil;
+      });
+    });
+  }
+
   bool get _canSendMessages => !_isBlockedByMe && !_isBlockedByOther;
 
   String get _blockedMessage {
@@ -132,6 +157,206 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(_blockedMessage)),
     );
+  }
+
+  bool get _isMuteActive =>
+      !_notificationsEnabled ||
+      (_mutedUntil != null && _mutedUntil!.isAfter(DateTime.now()));
+
+  String get _muteStatusMessage {
+    if (!_isMuteActive) return '';
+    if (!_notificationsEnabled) {
+      return 'Bạn đã tắt thông báo cho hội thoại này.';
+    }
+    if (_mutedUntil != null) {
+      return 'Thông báo sẽ bật lại lúc ${_formatMuteUntil(_mutedUntil!)}.';
+    }
+    return 'Thông báo đã bị tắt.';
+  }
+
+  String _formatMuteUntil(DateTime dateTime) {
+    final local = dateTime.toLocal();
+    final day = local.day.toString().padLeft(2, '0');
+    final month = local.month.toString().padLeft(2, '0');
+    final hour = local.hour.toString().padLeft(2, '0');
+    final minute = local.minute.toString().padLeft(2, '0');
+    return '$hour:$minute $day/$month';
+  }
+
+  Widget? _buildMuteBanner() {
+    if (!_isMuteActive) return null;
+    return Container(
+      width: double.infinity,
+      color: Colors.orange.withOpacity(0.1),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Row(
+        children: [
+          const Icon(Icons.notifications_off, color: Colors.orange),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              _muteStatusMessage,
+              style: TextStyle(
+                color: Colors.orange.shade800,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: _isUpdatingNotifications
+                ? null
+                : () => _setNotificationPreference(enable: true),
+            child: const Text('Bật lại'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showNotificationSettingsSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.notifications_active),
+                title: const Text('Bật thông báo'),
+                onTap: _isUpdatingNotifications
+                    ? null
+                    : () {
+                        Navigator.of(sheetContext).pop();
+                        _setNotificationPreference(enable: true);
+                      },
+              ),
+              ListTile(
+                leading: const Icon(Icons.notifications_off),
+                title: const Text('Tắt thông báo'),
+                subtitle:
+                    const Text('Không nhận thông báo cho đến khi bật lại'),
+                onTap: _isUpdatingNotifications
+                    ? null
+                    : () {
+                        Navigator.of(sheetContext).pop();
+                        _setNotificationPreference(enable: false);
+                      },
+              ),
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.timer),
+                title: const Text('Tắt 1 giờ'),
+                onTap: _isUpdatingNotifications
+                    ? null
+                    : () {
+                        Navigator.of(sheetContext).pop();
+                        _setNotificationPreference(
+                          enable: true,
+                          muteDuration: const Duration(hours: 1),
+                        );
+                      },
+              ),
+              ListTile(
+                leading: const Icon(Icons.timer),
+                title: const Text('Tắt 8 giờ'),
+                onTap: _isUpdatingNotifications
+                    ? null
+                    : () {
+                        Navigator.of(sheetContext).pop();
+                        _setNotificationPreference(
+                          enable: true,
+                          muteDuration: const Duration(hours: 8),
+                        );
+                      },
+              ),
+              ListTile(
+                leading: const Icon(Icons.timer),
+                title: const Text('Tắt 24 giờ'),
+                onTap: _isUpdatingNotifications
+                    ? null
+                    : () {
+                        Navigator.of(sheetContext).pop();
+                        _setNotificationPreference(
+                          enable: true,
+                          muteDuration: const Duration(hours: 24),
+                        );
+                      },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _setNotificationPreference({
+    required bool enable,
+    Duration? muteDuration,
+  }) async {
+    final currentUid = _currentUid;
+    if (currentUid == null) return;
+    if (_isUpdatingNotifications) return;
+    setState(() {
+      _isUpdatingNotifications = true;
+    });
+    try {
+      if (!enable) {
+        await _chatRepository.updateParticipantNotificationSettings(
+          conversationId: widget.conversationId,
+          uid: currentUid,
+          notificationsEnabled: false,
+          clearMutedUntil: true,
+        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Đã tắt thông báo cho hội thoại này.'),
+            ),
+          );
+        }
+      } else if (muteDuration != null) {
+        final until = DateTime.now().add(muteDuration);
+        await _chatRepository.updateParticipantNotificationSettings(
+          conversationId: widget.conversationId,
+          uid: currentUid,
+          notificationsEnabled: true,
+          mutedUntil: until,
+        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Đã tắt thông báo đến ${_formatMuteUntil(until)}.',
+              ),
+            ),
+          );
+        }
+      } else {
+        await _chatRepository.updateParticipantNotificationSettings(
+          conversationId: widget.conversationId,
+          uid: currentUid,
+          notificationsEnabled: true,
+          clearMutedUntil: true,
+        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Đã bật thông báo.')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Không thể cập nhật thông báo: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isUpdatingNotifications = false;
+        });
+      }
+    }
   }
 
   @override
@@ -153,6 +378,7 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
     _recorder.dispose();
     _blockedByMeSub?.cancel();
     _blockedByOtherSub?.cancel();
+    _notificationSettingsSub?.cancel();
     super.dispose();
   }
 
@@ -565,6 +791,7 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
         body: Center(child: Text('Bạn cần đăng nhập để nhắn tin.')),
       );
     }
+    final muteBanner = _buildMuteBanner();
 
     return Scaffold(
       appBar: AppBar(
@@ -612,7 +839,18 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
                 },
               ),
         actions: [
-          if (!_isSearchMode)
+          if (!_isSearchMode) ...[
+            IconButton(
+              icon: Icon(
+                _isMuteActive
+                    ? Icons.notifications_off
+                    : Icons.notifications_active,
+              ),
+              tooltip:
+                  _isMuteActive ? 'Thông báo đang tắt' : 'Thông báo đang bật',
+              onPressed:
+                  _isUpdatingNotifications ? null : _showNotificationSettingsSheet,
+            ),
             IconButton(
               icon: const Icon(Icons.search),
               onPressed: () {
@@ -620,8 +858,8 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
                   _isSearchMode = true;
                 });
               },
-            )
-          else
+            ),
+          ] else
             IconButton(
               icon: const Icon(Icons.close),
               onPressed: () {
@@ -636,6 +874,7 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
       ),
       body: Column(
         children: [
+          if (muteBanner != null) muteBanner,
           // Listen typing status của đối phương
           StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
             stream: FirebaseFirestore.instance

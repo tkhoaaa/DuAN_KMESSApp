@@ -290,16 +290,34 @@
 ---
 
 ### 16. Mute Conversation / Notification Controls
-**Mô tả:** Tắt thông báo cho từng cuộc hội thoại hoặc user
-- [ ] Model: Trường `notificationsEnabled` per participant trong `participants` subcollection
-- [ ] UI: Menu "Tắt thông báo" trong `ChatDetailPage` hoặc `ConversationsPage`
-- [ ] Logic: Notification service skip gửi nếu `notificationsEnabled == false`
-- [ ] Tuỳ chọn mute tạm thời (1h, 8h, 24h)
+**Mô tả:** Cho phép người dùng tắt thông báo cho từng hội thoại (vĩnh viễn hoặc tạm thời).
+
+#### Phase 1 – Data & Rules
+- [ ] Thêm trường `notificationsEnabled` (bool) và `mutedUntil` (timestamp, optional) vào participant document.
+- [ ] Cập nhật Firestore rules để chính participant có thể cập nhật 2 trường này, admin vẫn được cập nhật cho người khác.
+
+#### Phase 2 – Repository & Services
+- [ ] `ChatRepository.updateParticipantNotificationSettings(conversationId, uid, {notificationsEnabled, mutedUntil})`.
+- [ ] `NotificationService` kiểm tra trạng thái mute trước khi gửi push/in-app notification (bỏ qua nếu mutedUntil > now hoặc notificationsEnabled == false).
+
+#### Phase 3 – UI & UX
+- [ ] Thêm action "Thông báo" trong `ChatDetailPage` (ví dụ trong menu 3 chấm) với lựa chọn:
+  - Bật thông báo trở lại.
+  - Tắt thông báo vô thời hạn.
+  - Tắt thông báo 1 giờ / 8 giờ / 24 giờ.
+- [ ] Hiển thị trạng thái mute trong `ChatDetailPage` (badge hoặc text dưới tên hội thoại) và icon mute trong danh sách `ConversationsPage`.
+- [ ] SnackBar hoặc toast xác nhận sau khi bật/tắt.
+
+#### Phase 4 – QA
+- [ ] Test các trường hợp: mute tự động hết hạn, vào lại chat vẫn giữ trạng thái, mute group vs 1-1.
+- [ ] Đảm bảo block/report không ảnh hưởng logic mute.
 
 **Files dự kiến:**
-- `lib/features/chat/repositories/chat_repository.dart` (update participant settings)
-- `lib/features/chat/pages/chat_detail_page.dart` (UI mute)
-- `lib/features/notifications/services/notification_service.dart` (kiểm tra mute)
+- `lib/features/chat/repositories/chat_repository.dart`
+- `lib/features/chat/pages/chat_detail_page.dart`
+- `lib/features/chat/pages/conversations_page.dart`
+- `lib/features/notifications/services/notification_service.dart`
+- `firebase/firestore.rules`
 
 ---
 

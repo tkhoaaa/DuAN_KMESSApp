@@ -55,11 +55,18 @@ class ConversationService {
       subtitle = summary.lastMessagePreview;
     }
 
+    final settings = await _chatRepository.fetchParticipantNotificationSettings(
+      conversationId: summary.id,
+      uid: currentUid,
+    );
+
     return ConversationEntry(
       summary: summary,
       title: title,
       avatarUrl: avatarUrl,
       subtitle: subtitle,
+      notificationsEnabled: settings.notificationsEnabled,
+      mutedUntil: settings.mutedUntil,
     );
   }
 
@@ -149,15 +156,45 @@ class ConversationEntry {
   ConversationEntry({
     required this.summary,
     required this.title,
+    required this.notificationsEnabled,
     this.avatarUrl,
     this.subtitle,
+    this.mutedUntil,
   });
 
   final ConversationSummary summary;
   final String title;
   final String? avatarUrl;
   final String? subtitle;
+  final bool notificationsEnabled;
+  final DateTime? mutedUntil;
 
   DateTime? get lastMessageAt => summary.lastMessageAt;
+
+  bool get isMuted {
+    if (!notificationsEnabled) return true;
+    if (mutedUntil == null) return false;
+    return mutedUntil!.isAfter(DateTime.now());
+  }
+
+  String? muteDescription() {
+    if (!isMuted) return null;
+    if (!notificationsEnabled) {
+      return 'Đã tắt thông báo';
+    }
+    if (mutedUntil != null) {
+      return 'Tắt thông báo đến ${_formatMuteUntil(mutedUntil!)}';
+    }
+    return 'Đã tắt thông báo';
+  }
+
+  static String _formatMuteUntil(DateTime dateTime) {
+    final local = dateTime.toLocal();
+    final day = local.day.toString().padLeft(2, '0');
+    final month = local.month.toString().padLeft(2, '0');
+    final hour = local.hour.toString().padLeft(2, '0');
+    final minute = local.minute.toString().padLeft(2, '0');
+    return '$hour:$minute $day/$month';
+  }
 }
 
