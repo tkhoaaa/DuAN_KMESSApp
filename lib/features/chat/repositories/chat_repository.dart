@@ -30,6 +30,23 @@ class ChatRepository {
           .doc(conversationId)
           .collection('participants');
 
+  Future<void> ensureParticipantEntry({
+    required String conversationId,
+    required String uid,
+    String role = 'member',
+  }) async {
+    final participantDoc = _participantsRef(conversationId).doc(uid);
+    final snapshot = await participantDoc.get();
+    if (snapshot.exists) return;
+
+    await participantDoc.set({
+      'role': role,
+      'joinedAt': FieldValue.serverTimestamp(),
+      'lastReadAt': FieldValue.serverTimestamp(),
+      'notificationsEnabled': true,
+    }, SetOptions(merge: true));
+  }
+
   /// Tạo hoặc lấy conversation 1-1 dựa trên hai UID
   Future<String> createOrGetDirectConversation({
     required String currentUid,
@@ -44,7 +61,12 @@ class ChatRepository {
         .get();
 
     if (existing.docs.isNotEmpty) {
-      return existing.docs.first.id;
+      final conversationId = existing.docs.first.id;
+      await ensureParticipantEntry(
+        conversationId: conversationId,
+        uid: currentUid,
+      );
+      return conversationId;
     }
 
     final doc = await _conversationCollection.add({

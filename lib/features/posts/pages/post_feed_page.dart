@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 
 import '../../auth/auth_repository.dart';
 import '../../profile/public_profile_page.dart';
+import '../../safety/services/block_service.dart';
+import '../../safety/services/report_service.dart';
 import '../../stories/pages/story_create_page.dart';
 import '../../stories/pages/story_viewer_page.dart';
 import '../../stories/models/story.dart';
@@ -195,6 +197,8 @@ class PostFeedItem extends StatefulWidget {
 class _PostFeedItemState extends State<PostFeedItem> {
   final PageController _pageController = PageController();
   int _currentPage = 0;
+  final BlockService _blockService = blockService;
+  final ReportService _reportService = reportService;
 
   @override
   void dispose() {
@@ -204,6 +208,7 @@ class _PostFeedItemState extends State<PostFeedItem> {
 
   @override
   Widget build(BuildContext context) {
+    final currentUid = authRepository.currentUser()?.uid;
     return StreamBuilder<Post>(
       stream: widget.service.watchPost(widget.entry.doc.id),
       builder: (context, snapshot) {
@@ -212,6 +217,7 @@ class _PostFeedItemState extends State<PostFeedItem> {
         }
         final post = snapshot.data!;
         final author = widget.entry.author;
+        final authorPhotoUrl = author?.photoUrl;
         final displayName = author?.displayName?.isNotEmpty == true
             ? author!.displayName!
             : (author?.email?.isNotEmpty == true
@@ -222,150 +228,45 @@ class _PostFeedItemState extends State<PostFeedItem> {
           _currentPage = 0;
         }
 
-        return Card(
-          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              ListTile(
-                leading: CircleAvatar(
-                  backgroundImage: author?.photoUrl != null
-                      ? NetworkImage(author!.photoUrl!)
-                      : null,
-                  child: author?.photoUrl == null
-                      ? const Icon(Icons.person)
-                      : null,
-                ),
-                title: Text(displayName),
-                subtitle: post.createdAt != null
-                    ? Text(post.createdAt!.toLocal().toString())
-                    : null,
-                onTap: () => widget.onOpenProfile(post.authorUid),
-                trailing: authRepository.currentUser()?.uid == post.authorUid
-                    ? PopupMenuButton<String>(
-                        icon: const Icon(Icons.more_vert),
-                        onSelected: (value) async {
-                          if (value == 'delete') {
-                            final confirmed = await showDialog<bool>(
-                              context: context,
-                              builder: (context) => AlertDialog(
-                                title: const Text('Xóa bài đăng'),
-                                content: const Text(
-                                  'Bạn có chắc chắn muốn xóa bài đăng này?',
-                                ),
-                                actions: [
-                                  TextButton(
-                                    onPressed: () => Navigator.pop(context, false),
-                                    child: const Text('Hủy'),
-                                  ),
-                                  TextButton(
-                                    onPressed: () => Navigator.pop(context, true),
-                                    style: TextButton.styleFrom(
-                                      foregroundColor: Colors.red,
-                                    ),
-                                    child: const Text('Xóa'),
-                                  ),
-                                ],
-                              ),
-                            );
-                            if (confirmed == true && mounted) {
-                              try {
-                                await widget.service.deletePost(post.id);
-                                if (mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text('Đã xóa bài đăng'),
-                                    ),
-                                  );
-                                  // Gọi callback để reload feed
-                                  widget.onPostDeleted?.call();
-                                }
-                              } catch (e) {
-                                if (mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text('Lỗi xóa bài đăng: $e'),
-                                    ),
-                                  );
-                                }
-                              }
-                            }
-                          }
-                        },
-                        itemBuilder: (context) => [
-                          const PopupMenuItem(
-                            value: 'delete',
-                            child: Row(
-                              children: [
-                                Icon(Icons.delete, color: Colors.red),
-                                SizedBox(width: 8),
-                                Text('Xóa bài đăng'),
-                              ],
-                            ),
-                          ),
-                        ],
-                      )
-                    : null,
-              ),
-              _buildMediaCarousel(post),
-              if (post.caption.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                  child: Text(post.caption),
-                ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: Row(
-                  children: [
-                    StreamBuilder<bool>(
-                      stream: widget.service.watchLikeStatus(post.id),
-                      builder: (context, likeSnapshot) {
-                        final isLiked = likeSnapshot.data ?? false;
-                        final isLoggedIn = authRepository.currentUser() != null;
-                        return IconButton(
-                          icon: Icon(
-                            isLiked ? Icons.favorite : Icons.favorite_border,
-                            color: isLiked ? Colors.red : Colors.grey,
-                          ),
-                          onPressed: isLoggedIn
-                              ? () async {
-                                  try {
-                                    await widget.service.toggleLike(
-                                      postId: post.id,
-                                      like: !isLiked,
-                                    );
-                                  } catch (e) {
-                                    if (!mounted) return;
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text('Lỗi cập nhật lượt thích: $e'),
-                                      ),
-                                    );
-                                  }
-                                }
-                              : null,
-                        );
-                      },
-                    ),
-                    Text('${post.likeCount}'),
-                    IconButton(
-                      icon: const Icon(Icons.comment_outlined),
-                      onPressed: () => widget.onOpenComments(post),
-                    ),
-                    Text('${post.commentCount}'),
-                    const Spacer(),
-                    IconButton(
-                      icon: const Icon(Icons.share),
-                      onPressed: () {},
-                    ),
-                  ],
-                ),
-              ),
-            ],
+        final isOwner = currentUid == post.authorUid;
+        if (currentUid == null || isOwner) {
+          return _buildPostCard(
+            context: context,
+            post: post,
+            displayName: displayName,
+            authorPhotoUrl: authorPhotoUrl,
+            blockedByMe: false,
+            blockedByAuthor: false,
+            currentUid: currentUid,
+          );
+        }
+
+        return StreamBuilder<bool>(
+          stream: _blockService.watchIsBlocked(
+            blockerUid: currentUid,
+            blockedUid: post.authorUid,
           ),
+          builder: (context, blockedByMeSnapshot) {
+            final blockedByMe = blockedByMeSnapshot.data ?? false;
+            return StreamBuilder<bool>(
+              stream: _blockService.watchIsBlocked(
+                blockerUid: post.authorUid,
+                blockedUid: currentUid,
+              ),
+              builder: (context, blockedMeSnapshot) {
+                final blockedByAuthor = blockedMeSnapshot.data ?? false;
+                return _buildPostCard(
+                  context: context,
+                  post: post,
+                  displayName: displayName,
+                  authorPhotoUrl: authorPhotoUrl,
+                  blockedByMe: blockedByMe,
+                  blockedByAuthor: blockedByAuthor,
+                  currentUid: currentUid,
+                );
+              },
+            );
+          },
         );
       },
     );
@@ -520,6 +421,234 @@ class _PostFeedItemState extends State<PostFeedItem> {
     );
   }
 
+  Widget _buildPostCard({
+    required BuildContext context,
+    required Post post,
+    required String displayName,
+    required String? authorPhotoUrl,
+    required bool blockedByMe,
+    required bool blockedByAuthor,
+    required String? currentUid,
+  }) {
+    if (blockedByAuthor) {
+      return _HiddenPostNotice(
+        message: '$displayName đã chặn bạn. Bài đăng bị ẩn.',
+      );
+    }
+    if (blockedByMe) {
+      return _HiddenPostNotice(
+        message: 'Bạn đã chặn $displayName. Bỏ chặn để xem bài viết.',
+        action: TextButton(
+          onPressed: () => _unblockAuthor(post.authorUid),
+          child: const Text('Bỏ chặn'),
+        ),
+      );
+    }
+
+    final isOwner = currentUid == post.authorUid;
+
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ListTile(
+            leading: CircleAvatar(
+              backgroundImage:
+                  authorPhotoUrl != null ? NetworkImage(authorPhotoUrl) : null,
+              child: authorPhotoUrl == null
+                  ? const Icon(Icons.person)
+                  : null,
+            ),
+            title: Text(displayName),
+            subtitle: post.createdAt != null
+                ? Text(post.createdAt!.toLocal().toString())
+                : null,
+            onTap: () => widget.onOpenProfile(post.authorUid),
+            trailing: _buildTrailingMenu(
+              context: context,
+              post: post,
+              isOwner: isOwner,
+              blockedByMe: blockedByMe,
+            ),
+          ),
+          _buildMediaCarousel(post),
+          if (post.caption.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 8,
+              ),
+              child: Text(post.caption),
+            ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Row(
+              children: [
+                StreamBuilder<bool>(
+                  stream: widget.service.watchLikeStatus(post.id),
+                  builder: (context, likeSnapshot) {
+                    final isLiked = likeSnapshot.data ?? false;
+                    final isLoggedIn = authRepository.currentUser() != null;
+                    return IconButton(
+                      icon: Icon(
+                        isLiked ? Icons.favorite : Icons.favorite_border,
+                        color: isLiked ? Colors.red : Colors.grey,
+                      ),
+                      onPressed: isLoggedIn
+                          ? () async {
+                              try {
+                                await widget.service.toggleLike(
+                                  postId: post.id,
+                                  like: !isLiked,
+                                );
+                              } catch (e) {
+                                if (!mounted) return;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content:
+                                        Text('Lỗi cập nhật lượt thích: $e'),
+                                  ),
+                                );
+                              }
+                            }
+                          : null,
+                    );
+                  },
+                ),
+                Text('${post.likeCount}'),
+                IconButton(
+                  icon: const Icon(Icons.comment_outlined),
+                  onPressed: () => widget.onOpenComments(post),
+                ),
+                Text('${post.commentCount}'),
+                const Spacer(),
+                IconButton(
+                  icon: const Icon(Icons.share),
+                  onPressed: () {},
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget? _buildTrailingMenu({
+    required BuildContext context,
+    required Post post,
+    required bool isOwner,
+    required bool blockedByMe,
+  }) {
+    final currentUid = authRepository.currentUser()?.uid;
+    if (currentUid == null) return null;
+    if (isOwner) {
+      return PopupMenuButton<String>(
+        icon: const Icon(Icons.more_vert),
+        onSelected: (value) async {
+          if (value == 'delete') {
+            final confirmed = await showDialog<bool>(
+              context: context,
+              builder: (context) => AlertDialog(
+                title: const Text('Xóa bài đăng'),
+                content: const Text(
+                  'Bạn có chắc chắn muốn xóa bài đăng này?',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    child: const Text('Hủy'),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.pop(context, true),
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.red,
+                    ),
+                    child: const Text('Xóa'),
+                  ),
+                ],
+              ),
+            );
+            if (confirmed == true && mounted) {
+              try {
+                await widget.service.deletePost(post.id);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Đã xóa bài đăng'),
+                    ),
+                  );
+                  widget.onPostDeleted?.call();
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Lỗi xóa bài đăng: $e'),
+                    ),
+                  );
+                }
+              }
+            }
+          }
+        },
+        itemBuilder: (context) => const [
+          PopupMenuItem(
+            value: 'delete',
+            child: Row(
+              children: [
+                Icon(Icons.delete, color: Colors.red),
+                SizedBox(width: 8),
+                Text('Xóa bài đăng'),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
+
+    return PopupMenuButton<String>(
+      icon: const Icon(Icons.more_vert),
+      onSelected: (value) async {
+        if (value == 'report') {
+          await _reportPost(post);
+        } else if (value == 'block') {
+          await _confirmBlockAuthor(post.authorUid);
+        } else if (value == 'unblock') {
+          await _unblockAuthor(post.authorUid);
+        }
+      },
+      itemBuilder: (context) => [
+        const PopupMenuItem(
+          value: 'report',
+          child: Row(
+            children: [
+              Icon(Icons.flag_outlined, color: Colors.orange),
+              SizedBox(width: 8),
+              Text('Báo cáo bài viết'),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          value: blockedByMe ? 'unblock' : 'block',
+          child: Row(
+            children: [
+              Icon(
+                blockedByMe ? Icons.lock_open : Icons.block,
+                color: blockedByMe ? Colors.green : Colors.red,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                blockedByMe ? 'Bỏ chặn tác giả' : 'Chặn tác giả',
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   String _formatDuration(int durationMs) {
     final duration = Duration(milliseconds: durationMs);
     final minutes = duration.inMinutes;
@@ -527,6 +656,129 @@ class _PostFeedItemState extends State<PostFeedItem> {
     final minutesStr = minutes.toString().padLeft(1, '0');
     final secondsStr = seconds.toString().padLeft(2, '0');
     return '$minutesStr:$secondsStr';
+  }
+
+  Future<void> _confirmBlockAuthor(String authorUid) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Chặn tác giả'),
+        content: const Text(
+          'Bạn sẽ không nhìn thấy bài viết hoặc nhận thông báo từ người này.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Hủy'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Chặn'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      try {
+        await _blockService.blockUser(targetUid: authorUid);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Đã chặn tác giả.')),
+        );
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Không thể chặn: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _unblockAuthor(String authorUid) async {
+    try {
+      await _blockService.unblockUser(authorUid);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Đã bỏ chặn.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Không thể bỏ chặn: $e')),
+      );
+    }
+  }
+
+  Future<void> _reportPost(Post post) async {
+    final reasons = [
+      'Spam / Quảng cáo',
+      'Nội dung phản cảm',
+      'Giả mạo',
+      'Bạo lực / Thù ghét',
+      'Khác',
+    ];
+    final reason = await showModalBottomSheet<String>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: reasons
+              .map(
+                (item) => ListTile(
+                  title: Text(item),
+                  onTap: () => Navigator.pop(context, item),
+                ),
+              )
+              .toList(),
+        ),
+      ),
+    );
+    if (reason == null) return;
+    try {
+      await _reportService.reportPost(
+        postId: post.id,
+        ownerUid: post.authorUid,
+        reason: reason,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Đã gửi báo cáo bài viết.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Không thể báo cáo: $e')),
+      );
+    }
+  }
+}
+
+class _HiddenPostNotice extends StatelessWidget {
+  const _HiddenPostNotice({required this.message, this.action});
+
+  final String message;
+  final Widget? action;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Text(
+              message,
+              textAlign: TextAlign.center,
+            ),
+            if (action != null) ...[
+              const SizedBox(height: 8),
+              action!,
+            ],
+          ],
+        ),
+      ),
+    );
   }
 }
 

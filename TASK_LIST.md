@@ -199,17 +199,17 @@
 
 ---
 
-### 13. Voice & Video Messages
+### 13. Voice & Video Messages ✅
 **Mô tả:** Gửi voice message và video message ngắn trong chat
-- [ ] Model: Mở rộng `MessageAttachment` để hỗ trợ type `voice` và `video_message` (duration, waveform? url thumbnail,…)
-- [ ] Firestore: Chuẩn hoá cách lưu message voice/video (type, urls, duration, fileSize, createdAt,…)
-- [ ] Service: Hàm gửi voice message (ghi âm xong → upload file → tạo message type `voice`)
-- [ ] Service: Hàm gửi video message (quay/chọn video ngắn → upload → tạo message type `video_message`)
-- [ ] UI: Nút giữ để ghi âm (voice) trong `ChatDetailPage`, hiển thị trạng thái đang ghi
-- [ ] UI: Bubble voice với nút play/pause, thanh progress, thời lượng
-- [ ] UI: Bubble video message (thumbnail, nút play mở fullscreen/video player)
-- [ ] Tích hợp Cloudinary/Firebase Storage cho upload audio/video (tái sử dụng `CloudinaryService` nếu phù hợp)
-- [ ] Logic: Giới hạn độ dài voice/video (ví dụ ≤ 1 phút) và xử lý lỗi upload (retry / báo lỗi thân thiện)
+- [x] Model: Mở rộng `MessageAttachment` hỗ trợ type `voice` & `video_message` (duration, thumbnail,…)
+- [x] Firestore: Chuẩn hoá cách lưu message voice/video (type, urls, duration, fileSize, createdAt,…)
+- [x] Service: Hàm gửi voice message (ghi âm → upload Cloudinary → tạo message type `voice`)
+- [x] Service: Hàm gửi video message (chọn/quay → upload → tạo message type `video_message`)
+- [x] UI: Nút ghi âm trong `ChatDetailPage`, hiển thị trạng thái đang ghi
+- [x] UI: Bubble voice với nút play/stop, thanh progress, thời lượng
+- [x] UI: Bubble video message (thumbnail, tap mở `PostVideoPage`)
+- [x] Tích hợp Cloudinary cho upload audio/video
+- [x] Logic: Giới hạn thời lượng & xử lý lỗi upload (SnackBar báo lỗi, retry thủ công)
 
 **Files dự kiến:**
 - `lib/features/chat/models/message_attachment.dart` (mở rộng)
@@ -220,11 +220,26 @@
 
 ### 14. Blocking & Reporting
 **Mô tả:** Cho phép block user và report post/user
-- [ ] Model: Collection `blocks` (blockerUid, blockedUid)
-- [ ] Logic: Ẩn bài viết, không cho nhắn tin/follow khi đã block
-- [ ] Model: Collection `reports` (reporterUid, targetType, targetId, reason, createdAt)
-- [ ] UI: Nút "Chặn" và "Báo cáo" trong profile/post menu
-- [ ] Firestore rules: Bảo vệ dữ liệu block/report, hạn chế đọc công khai
+
+**Phase 1 – Thiết kế dữ liệu & rules**
+- [x] Model blocks: `blocks/{blockerUid}/items/{blockedUid}` (createdAt, reason?)
+- [x] Model reports: `reports/{autoId}` (reporterUid, targetType, targetId, reason, createdAt, status)
+- [x] Firestore rules: chỉ chủ sở hữu đọc block của mình, mọi user có thể tạo report nhưng chỉ admin đọc
+
+**Phase 2 – Repository & service layer**
+- [x] `BlockRepository` (create/delete block, check isBlocked)
+- [x] `ReportRepository` (create report, optional mark status)
+- [x] Tích hợp vào luồng follow/chat/feed để kiểm tra block trước khi gửi follow/chat
+
+**Phase 3 – UI & UX**
+- [x] Profile menu: thêm "Chặn" và "Báo cáo" (confirm dialog, trạng thái block)
+- [x] Post menu: thêm "Báo cáo bài viết" (modal chọn lý do)
+- [x] Khi đã block: ẩn post, disable chat/follow button, hiển thị banner “Bạn đã chặn người này”
+
+**Phase 4 – Hậu cần & admin**
+- [ ] Trang quản trị đơn giản (tạm thời: collection viewer) hoặc export Cloud Function (optional)
+- [x] Quy trình gỡ block (unblock) ngay tại profile/feed
+- [x] Thông báo nhẹ khi report gửi thành công (SnackBar / dialog)
 
 **Files dự kiến:**
 - `lib/features/safety/models/block.dart`, `report.dart`

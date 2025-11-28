@@ -222,6 +222,50 @@ service cloud.firestore {
         }
       }
     }
+
+    match /blocks/{blockerUid} {
+      match /items/{blockedUid} {
+        allow read: if isSignedIn() &&
+          (request.auth.uid == blockerUid || request.auth.uid == blockedUid);
+
+        allow create: if isSignedIn()
+          && request.auth.uid == blockerUid
+          && request.resource.data.blockedUid == blockedUid
+          && request.resource.data.blockedUid is string;
+
+        allow update: if isSignedIn()
+          && request.auth.uid == blockerUid;
+
+        allow delete: if isSignedIn() && request.auth.uid == blockerUid;
+      }
+    }
+
+    // Reports collection
+    match /reports/{reportId} {
+      allow create: if isSignedIn()
+        && request.resource.data.reporterUid == request.auth.uid
+        && request.resource.data.keys().hasOnly([
+          'reporterUid',
+          'targetType',
+          'targetId',
+          'targetOwnerUid',
+          'reason',
+          'status',
+          'createdAt',
+        ])
+        && request.resource.data.targetType is string
+        && request.resource.data.targetId is string
+        && request.resource.data.reason is string
+        && request.resource.data.status is string
+        && (
+          request.resource.data.targetOwnerUid == null ||
+          request.resource.data.targetOwnerUid is string
+        )
+        && (
+          request.resource.data.createdAt == request.time ||
+          request.resource.data.createdAt is timestamp
+        );
+      allow read, update, delete: if false;
+    }
   }
 }
-
