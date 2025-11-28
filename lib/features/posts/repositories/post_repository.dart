@@ -36,10 +36,12 @@ class PostRepository {
     String? caption,
   }) async {
     final doc = _posts.doc();
+    final captionText = caption ?? '';
     await doc.set({
       'authorUid': authorUid,
       'media': media,
-      'caption': caption ?? '',
+      'caption': captionText,
+      'captionLower': captionText.toLowerCase(),
       'createdAt': FieldValue.serverTimestamp(),
       'likeCount': 0,
       'commentCount': 0,
@@ -291,6 +293,46 @@ class PostRepository {
     );
     
     await batch.commit();
+  }
+
+  /// Tìm kiếm posts theo caption (sử dụng captionLower)
+  Future<List<Post>> searchPosts({
+    required String query,
+    int limit = 20,
+    DocumentSnapshot<Map<String, dynamic>>? startAfter,
+  }) async {
+    if (query.trim().isEmpty) return [];
+    
+    final normalizedQuery = query.trim().toLowerCase();
+    
+    // Sử dụng prefix matching trên captionLower
+    // Chỉ orderBy captionLower (không thể dùng nhiều orderBy cùng lúc)
+    Query<Map<String, dynamic>> searchQuery = _posts
+        .where('captionLower', isGreaterThanOrEqualTo: normalizedQuery)
+        .where('captionLower', isLessThanOrEqualTo: '$normalizedQuery\uf8ff')
+        .orderBy('captionLower')
+        .limit(limit);
+    
+    if (startAfter != null) {
+      searchQuery = searchQuery.startAfterDocument(startAfter);
+    }
+    
+    final snapshot = await searchQuery.get();
+    
+    // Chuyển đổi sang Post và filter client-side để đảm bảo match chính xác
+    final posts = snapshot.docs
+        .map((doc) => Post.fromDoc(doc))
+        .where((post) => post.caption.toLowerCase().contains(normalizedQuery))
+        .toList();
+    
+    // Sắp xếp lại theo createdAt descending sau khi filter
+    posts.sort((a, b) {
+      final aTime = a.createdAt ?? DateTime(1970);
+      final bTime = b.createdAt ?? DateTime(1970);
+      return bTime.compareTo(aTime);
+    });
+    
+    return posts;
   }
 }
 

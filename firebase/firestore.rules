@@ -148,11 +148,13 @@ service cloud.firestore {
           'authorUid',
           'media',
           'caption',
+          'captionLower',
           'createdAt',
           'likeCount',
           'commentCount'
         ])
-        && request.resource.data.media is list;
+        && request.resource.data.media is list
+        && (request.resource.data.captionLower == null || request.resource.data.captionLower is string);
 
       // Cho phép owner update/delete hoặc chỉ update likeCount/commentCount
       allow update: if isPostOwner() || (

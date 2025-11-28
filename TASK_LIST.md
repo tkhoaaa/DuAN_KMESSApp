@@ -293,24 +293,24 @@
 **Mô tả:** Cho phép người dùng tắt thông báo cho từng hội thoại (vĩnh viễn hoặc tạm thời).
 
 #### Phase 1 – Data & Rules
-- [ ] Thêm trường `notificationsEnabled` (bool) và `mutedUntil` (timestamp, optional) vào participant document.
+- [x] Thêm trường `notificationsEnabled` (bool) và `mutedUntil` (timestamp, optional) vào participant document.
 - [ ] Cập nhật Firestore rules để chính participant có thể cập nhật 2 trường này, admin vẫn được cập nhật cho người khác.
 
 #### Phase 2 – Repository & Services
-- [ ] `ChatRepository.updateParticipantNotificationSettings(conversationId, uid, {notificationsEnabled, mutedUntil})`.
-- [ ] `NotificationService` kiểm tra trạng thái mute trước khi gửi push/in-app notification (bỏ qua nếu mutedUntil > now hoặc notificationsEnabled == false).
+- [x] `ChatRepository.updateParticipantNotificationSettings(conversationId, uid, {notificationsEnabled, mutedUntil})`.
+- [x] `NotificationService` kiểm tra trạng thái mute trước khi gửi push/in-app notification (bỏ qua nếu mutedUntil > now hoặc notificationsEnabled == false).
 
 #### Phase 3 – UI & UX
-- [ ] Thêm action "Thông báo" trong `ChatDetailPage` (ví dụ trong menu 3 chấm) với lựa chọn:
+- [x] Thêm action "Thông báo" trong `ChatDetailPage` (ví dụ trong menu 3 chấm) với lựa chọn:
   - Bật thông báo trở lại.
   - Tắt thông báo vô thời hạn.
   - Tắt thông báo 1 giờ / 8 giờ / 24 giờ.
-- [ ] Hiển thị trạng thái mute trong `ChatDetailPage` (badge hoặc text dưới tên hội thoại) và icon mute trong danh sách `ConversationsPage`.
-- [ ] SnackBar hoặc toast xác nhận sau khi bật/tắt.
+- [x] Hiển thị trạng thái mute trong `ChatDetailPage` (badge hoặc text dưới tên hội thoại) và icon mute trong danh sách `ConversationsPage`.
+- [x] SnackBar hoặc toast xác nhận sau khi bật/tắt.
 
 #### Phase 4 – QA
-- [ ] Test các trường hợp: mute tự động hết hạn, vào lại chat vẫn giữ trạng thái, mute group vs 1-1.
-- [ ] Đảm bảo block/report không ảnh hưởng logic mute.
+- [x] Test các trường hợp: mute tự động hết hạn, vào lại chat vẫn giữ trạng thái, mute group vs 1-1.
+- [x] Đảm bảo block/report không ảnh hưởng logic mute.
 
 **Files dự kiến:**
 - `lib/features/chat/repositories/chat_repository.dart`
@@ -323,10 +323,30 @@
 
 ### 17. Advanced Search (Users & Posts)
 **Mô tả:** Tìm kiếm nâng cao người dùng và bài viết
-- [ ] UI: Màn hình search global với tab "Người dùng" và "Bài viết"
-- [ ] Logic: Tìm user theo displayName/email/phone (client-side + index đơn giản)
-- [ ] Logic: Tìm post theo caption (lowercase field `captionLower`)
-- [ ] UI: List kết quả với avatar, follow button, post preview
+
+#### Phase 1 – Data & Indexing
+- [ ] Bổ sung field phục vụ search cho user: `displayNameLower`, `emailLower` (ghi xuống khi update profile).
+- [ ] Bổ sung field phục vụ search cho post: `captionLower` (ghi xuống khi tạo/cập nhật bài viết).
+- [ ] Thiết kế query đơn giản (chưa cần full-text search): dùng `where` + `orderBy` theo trường lower + `startAt`/`endAt` nếu cần.
+- [ ] (Optional) Tạo index cần thiết cho các truy vấn search phổ biến (user, post).
+
+#### Phase 2 – Repository & Services
+- [ ] Tạo `SearchService` để gom logic tìm kiếm users & posts.
+- [ ] Mở rộng `UserProfileRepository` với hàm search users theo từ khóa (displayName/email/phone đơn giản).
+- [ ] Mở rộng `PostRepository` với hàm search posts theo `captionLower` (có phân trang giới hạn kết quả).
+- [ ] Xử lý chuẩn hoá input search (trim, lowercase, bỏ dấu nếu cần).
+
+#### Phase 3 – UI & UX
+- [ ] Tạo màn hình `SearchPage` với search bar và tab "Người dùng" / "Bài viết".
+- [ ] Tab Người dùng: list kết quả với avatar, tên, email, nút follow/unfollow, tap mở `PublicProfilePage`.
+- [ ] Tab Bài viết: list hoặc grid các post match caption (sử dụng `PostCard`/preview sẵn có).
+- [ ] Loading & empty state rõ ràng (spinner, “Không tìm thấy kết quả”, gợi ý từ khóa).
+- [ ] Debounce nhập từ khóa để tránh spam query (ví dụ 300–500ms).
+
+#### Phase 4 – QA
+- [ ] Test tìm kiếm với nhiều loại input: hoa/thường, có dấu/không dấu (nếu hỗ trợ), chuỗi ngắn/dài.
+- [ ] Đảm bảo quyền riêng tư: không hiển thị user private ngoài phạm vi cho phép, post bị chặn/bị report nặng thì không gợi ý.
+- [ ] Kiểm tra performance với nhiều kết quả (giới hạn page size hợp lý).
 
 **Files dự kiến:**
 - `lib/features/search/pages/search_page.dart`

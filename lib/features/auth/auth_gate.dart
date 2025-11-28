@@ -10,6 +10,7 @@ import '../profile/profile_screen.dart';
 import '../contacts/pages/contacts_page.dart';
 import '../chat/pages/conversations_page.dart';
 import '../posts/pages/post_feed_page.dart';
+import '../search/pages/search_page.dart';
 
 class AuthGate extends StatelessWidget {
   const AuthGate({super.key});
@@ -95,6 +96,15 @@ class _SignedInHomeState extends State<_SignedInHome> {
       appBar: AppBar(
         title: const Text('KMESS'),
         actions: [
+          IconButton(
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const SearchPage()),
+              );
+            },
+            icon: const Icon(Icons.search),
+            tooltip: 'Tìm kiếm',
+          ),
           IconButton(
             onPressed: () {
               Navigator.of(context).push(

@@ -203,6 +203,63 @@ class UserProfileRepository {
       'lastSeen': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
   }
+
+  /// Tìm kiếm users theo từ khóa (displayName, email, phoneNumber)
+  /// Sử dụng prefix matching trên displayNameLower và emailLower
+  Future<List<UserProfile>> searchUsers({
+    required String query,
+    int limit = 20,
+  }) async {
+    if (query.trim().isEmpty) return [];
+    
+    final normalizedQuery = query.trim().toLowerCase();
+    
+    // Tìm theo displayNameLower (prefix match)
+    final displayNameQuery = _collection
+        .where('displayNameLower', isGreaterThanOrEqualTo: normalizedQuery)
+        .where('displayNameLower', isLessThanOrEqualTo: '$normalizedQuery\uf8ff')
+        .limit(limit)
+        .get();
+    
+    // Tìm theo emailLower (prefix match)
+    final emailQuery = _collection
+        .where('emailLower', isGreaterThanOrEqualTo: normalizedQuery)
+        .where('emailLower', isLessThanOrEqualTo: '$normalizedQuery\uf8ff')
+        .limit(limit)
+        .get();
+    
+    // Tìm theo phoneNumber (exact hoặc contains)
+    final phoneQuery = _collection
+        .where('phoneNumber', isGreaterThanOrEqualTo: normalizedQuery)
+        .where('phoneNumber', isLessThanOrEqualTo: '$normalizedQuery\uf8ff')
+        .limit(limit)
+        .get();
+    
+    final results = await Future.wait([displayNameQuery, emailQuery, phoneQuery]);
+    
+    // Gộp kết quả và loại bỏ trùng lặp
+    final allDocs = <String, DocumentSnapshot<Map<String, dynamic>>>{};
+    for (final snapshot in results) {
+      for (final doc in snapshot.docs) {
+        allDocs[doc.id] = doc;
+      }
+    }
+    
+    // Chuyển đổi sang UserProfile và filter thêm client-side nếu cần
+    final profiles = allDocs.values
+        .map((doc) => UserProfile.fromDoc(doc))
+        .where((profile) {
+          // Filter client-side để đảm bảo match chính xác hơn
+          final displayNameMatch = profile.displayNameLower?.contains(normalizedQuery) ?? false;
+          final emailMatch = profile.emailLower?.contains(normalizedQuery) ?? false;
+          final phoneMatch = profile.phoneNumber?.contains(normalizedQuery) ?? false;
+          return displayNameMatch || emailMatch || phoneMatch;
+        })
+        .take(limit)
+        .toList();
+    
+    return profiles;
+  }
 }
 
 final UserProfileRepository userProfileRepository = UserProfileRepository();
