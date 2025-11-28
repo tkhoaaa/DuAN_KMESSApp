@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../auth/auth_repository.dart';
 import '../chat/pages/chat_detail_page.dart';
@@ -102,17 +103,33 @@ class PublicProfilePage extends StatelessWidget {
                 stream: blockedMeStream,
                 builder: (context, blockedMeSnapshot) {
                   final blockedByTarget = blockedMeSnapshot.data ?? false;
+                  final themeColor = profile.themeColor != null
+                      ? _parseColor(profile.themeColor!)
+                      : null;
+
                   return Column(
                     children: [
                       const SizedBox(height: 24),
-                      CircleAvatar(
-                        radius: 48,
-                        backgroundImage: profile.photoUrl != null
-                            ? NetworkImage(profile.photoUrl!)
+                      // Avatar with theme color border
+                      Container(
+                        decoration: themeColor != null
+                            ? BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: themeColor,
+                                  width: 3,
+                                ),
+                              )
                             : null,
-                        child: profile.photoUrl == null
-                            ? const Icon(Icons.person, size: 48)
-                            : null,
+                        child: CircleAvatar(
+                          radius: 48,
+                          backgroundImage: profile.photoUrl != null
+                              ? NetworkImage(profile.photoUrl!)
+                              : null,
+                          child: profile.photoUrl == null
+                              ? const Icon(Icons.person, size: 48)
+                              : null,
+                        ),
                       ),
                       const SizedBox(height: 12),
                       Text(
@@ -150,6 +167,36 @@ class PublicProfilePage extends StatelessWidget {
                           ),
                         ),
                       ],
+                      // Links section
+                      if (profile.links.isNotEmpty) ...[
+                        const SizedBox(height: 16),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 32),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Liên kết',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: profile.links.map((link) {
+                                  return _LinkChip(
+                                    link: link,
+                                    themeColor: themeColor,
+                                  );
+                                }).toList(),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 16),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -174,6 +221,7 @@ class PublicProfilePage extends StatelessWidget {
                           isTargetPrivate: profile.isPrivate,
                           isBlockedByCurrent: blockedByMe,
                           isBlockedByTarget: blockedByTarget,
+                          themeColor: themeColor,
                         ),
                     ],
                   );
@@ -194,6 +242,7 @@ class _FollowActions extends StatefulWidget {
     required this.isTargetPrivate,
     required this.isBlockedByCurrent,
     required this.isBlockedByTarget,
+    this.themeColor,
   });
 
   final String currentUid;
@@ -201,6 +250,7 @@ class _FollowActions extends StatefulWidget {
   final bool isTargetPrivate;
   final bool isBlockedByCurrent;
   final bool isBlockedByTarget;
+  final Color? themeColor;
 
   @override
   State<_FollowActions> createState() => _FollowActionsState();
@@ -273,6 +323,11 @@ class _FollowActionsState extends State<_FollowActions> {
           case FollowStatus.following:
             buttons.add(
               FilledButton(
+                style: widget.themeColor != null
+                    ? FilledButton.styleFrom(
+                        backgroundColor: widget.themeColor,
+                      )
+                    : null,
                 onPressed: () =>
                     _followService.unfollow(widget.targetUid),
                 child: const Text('Bỏ theo dõi'),
@@ -327,6 +382,11 @@ class _FollowActionsState extends State<_FollowActions> {
           case FollowStatus.none:
             buttons.add(
               FilledButton(
+                style: widget.themeColor != null
+                    ? FilledButton.styleFrom(
+                        backgroundColor: widget.themeColor,
+                      )
+                    : null,
                 onPressed: () => _followService.followUser(widget.targetUid),
                 child: const Text('Theo dõi'),
               ),
@@ -541,6 +601,59 @@ class _ProfileMoreMenu extends StatelessWidget {
         );
       }
     }
+  }
+}
+
+Color _parseColor(String hexColor) {
+  try {
+    return Color(int.parse(hexColor.replaceFirst('#', '0xFF')));
+  } catch (e) {
+    return Colors.blue;
+  }
+}
+
+class _LinkChip extends StatelessWidget {
+  const _LinkChip({
+    required this.link,
+    this.themeColor,
+  });
+
+  final ProfileLink link;
+  final Color? themeColor;
+
+  IconData _getIconForUrl(String url) {
+    final lower = url.toLowerCase();
+    if (lower.contains('instagram')) return Icons.camera_alt;
+    if (lower.contains('facebook')) return Icons.facebook;
+    if (lower.contains('twitter') || lower.contains('x.com')) return Icons.alternate_email;
+    if (lower.contains('youtube')) return Icons.play_circle;
+    if (lower.contains('linkedin')) return Icons.business;
+    if (lower.contains('github')) return Icons.code;
+    return Icons.link;
+  }
+
+  Future<void> _launchUrl() async {
+    final uri = Uri.parse(link.url);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ActionChip(
+      avatar: Icon(
+        _getIconForUrl(link.url),
+        size: 18,
+        color: themeColor,
+      ),
+      label: Text(link.label),
+      onPressed: _launchUrl,
+      backgroundColor: themeColor?.withOpacity(0.1),
+      side: themeColor != null
+          ? BorderSide(color: themeColor!)
+          : null,
+    );
   }
 }
 

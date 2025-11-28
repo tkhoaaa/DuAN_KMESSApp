@@ -325,28 +325,28 @@
 **Mô tả:** Tìm kiếm nâng cao người dùng và bài viết
 
 #### Phase 1 – Data & Indexing
-- [ ] Bổ sung field phục vụ search cho user: `displayNameLower`, `emailLower` (ghi xuống khi update profile).
-- [ ] Bổ sung field phục vụ search cho post: `captionLower` (ghi xuống khi tạo/cập nhật bài viết).
-- [ ] Thiết kế query đơn giản (chưa cần full-text search): dùng `where` + `orderBy` theo trường lower + `startAt`/`endAt` nếu cần.
+- [x] Bổ sung field phục vụ search cho user: `displayNameLower`, `emailLower` (ghi xuống khi update profile).
+- [x] Bổ sung field phục vụ search cho post: `captionLower` (ghi xuống khi tạo/cập nhật bài viết).
+- [x] Thiết kế query đơn giản (chưa cần full-text search): dùng `where` + `orderBy` theo trường lower + `startAt`/`endAt` nếu cần.
 - [ ] (Optional) Tạo index cần thiết cho các truy vấn search phổ biến (user, post).
 
 #### Phase 2 – Repository & Services
-- [ ] Tạo `SearchService` để gom logic tìm kiếm users & posts.
-- [ ] Mở rộng `UserProfileRepository` với hàm search users theo từ khóa (displayName/email/phone đơn giản).
-- [ ] Mở rộng `PostRepository` với hàm search posts theo `captionLower` (có phân trang giới hạn kết quả).
-- [ ] Xử lý chuẩn hoá input search (trim, lowercase, bỏ dấu nếu cần).
+- [x] Tạo `SearchService` để gom logic tìm kiếm users & posts.
+- [x] Mở rộng `UserProfileRepository` với hàm search users theo từ khóa (displayName/email/phone đơn giản).
+- [x] Mở rộng `PostRepository` với hàm search posts theo `captionLower` (có phân trang giới hạn kết quả).
+- [x] Xử lý chuẩn hoá input search (trim, lowercase, bỏ dấu nếu cần).
 
 #### Phase 3 – UI & UX
-- [ ] Tạo màn hình `SearchPage` với search bar và tab "Người dùng" / "Bài viết".
-- [ ] Tab Người dùng: list kết quả với avatar, tên, email, nút follow/unfollow, tap mở `PublicProfilePage`.
-- [ ] Tab Bài viết: list hoặc grid các post match caption (sử dụng `PostCard`/preview sẵn có).
-- [ ] Loading & empty state rõ ràng (spinner, “Không tìm thấy kết quả”, gợi ý từ khóa).
-- [ ] Debounce nhập từ khóa để tránh spam query (ví dụ 300–500ms).
+- [x] Tạo màn hình `SearchPage` với search bar và tab "Người dùng" / "Bài viết".
+- [x] Tab Người dùng: list kết quả với avatar, tên, email, nút follow/unfollow, tap mở `PublicProfilePage`.
+- [x] Tab Bài viết: list hoặc grid các post match caption (sử dụng `PostCard`/preview sẵn có).
+- [x] Loading & empty state rõ ràng (spinner, “Không tìm thấy kết quả”, gợi ý từ khóa).
+- [x] Debounce nhập từ khóa để tránh spam query (ví dụ 300–500ms).
 
 #### Phase 4 – QA
-- [ ] Test tìm kiếm với nhiều loại input: hoa/thường, có dấu/không dấu (nếu hỗ trợ), chuỗi ngắn/dài.
-- [ ] Đảm bảo quyền riêng tư: không hiển thị user private ngoài phạm vi cho phép, post bị chặn/bị report nặng thì không gợi ý.
-- [ ] Kiểm tra performance với nhiều kết quả (giới hạn page size hợp lý).
+- [x] Test tìm kiếm với nhiều loại input: hoa/thường, có dấu/không dấu (nếu hỗ trợ), chuỗi ngắn/dài.
+- [x] Đảm bảo quyền riêng tư: không hiển thị user private ngoài phạm vi cho phép, post bị chặn/bị report nặng thì không gợi ý.
+- [x] Kiểm tra performance với nhiều kết quả (giới hạn page size hợp lý).
 
 **Files dự kiến:**
 - `lib/features/search/pages/search_page.dart`
@@ -357,16 +357,49 @@
 ---
 
 ### 18. Profile Customization
-**Mô tả:** Tùy biến profile người dùng
-- [ ] Model: Thêm `themeColor`, `links` (list URL + label) vào `user_profiles`
-- [ ] UI: Chọn màu chủ đạo cho profile (áp dụng cho avatar ring, nút follow,…)
-- [ ] UI: Thêm/hiển thị các link ngoài (website, social)
-- [ ] Logic: Lưu và hiển thị trên PublicProfilePage
+**Mô tả:** Tùy biến profile người dùng với theme color và links ngoài (website, social media)
+
+#### Phase 1 – Data & Rules
+- [ ] Model: Thêm `themeColor` (string, hex color code) và `links` (list<map> với `url` và `label`) vào `UserProfile` class.
+- [ ] Cập nhật `toMap()` và `fromDoc()` để serialize/deserialize các field mới.
+- [ ] Cập nhật Firestore rules để cho phép owner update `themeColor` và `links` trong `user_profiles`.
+- [ ] (Optional) Validation: `themeColor` phải là hex color hợp lệ (ví dụ: `#FF5733`), `links` mỗi item phải có `url` (valid URL) và `label` (string).
+
+#### Phase 2 – Repository & Service
+- [ ] Mở rộng `UserProfileRepository.updateProfile()` để nhận tham số `themeColor` và `links`.
+- [ ] Thêm method `updateThemeColor(uid, themeColor)` và `updateLinks(uid, links)` nếu cần (hoặc gộp vào `updateProfile`).
+- [ ] Đảm bảo backward compatibility: các profile cũ không có `themeColor`/`links` vẫn hoạt động bình thường (default values).
+
+#### Phase 3 – UI: Profile Screen (Chỉnh sửa)
+- [ ] Thêm section "Tùy biến" trong `ProfileScreen` với:
+  - Color picker hoặc palette để chọn `themeColor` (hiển thị preview màu).
+  - Form để thêm/sửa/xóa links (tối đa 5 links, mỗi link có label và URL).
+  - Validation URL format trước khi lưu.
+- [ ] Hiển thị preview theme color trên avatar ring hoặc accent color trong UI.
+- [ ] SnackBar xác nhận sau khi lưu theme/links.
+
+#### Phase 4 – UI: Public Profile Page (Hiển thị)
+- [ ] Áp dụng `themeColor` vào UI elements:
+  - Avatar ring/border (nếu có).
+  - Follow button background/accent.
+  - AppBar hoặc header accent (optional).
+- [ ] Hiển thị section "Links" dưới bio với:
+  - List các links dạng button/card (icon + label).
+  - Tap để mở URL trong browser (sử dụng `url_launcher` hoặc `launchUrl`).
+  - Icon phù hợp theo loại link (website, Instagram, Facebook, Twitter, etc.) nếu có thể detect.
+- [ ] Fallback: Nếu không có `themeColor`, dùng màu mặc định của app.
+
+#### Phase 5 – QA & Polish
+- [ ] Test các trường hợp: profile cũ không có theme/links, profile mới có đầy đủ, update từng phần.
+- [ ] Đảm bảo validation URL hoạt động đúng (http/https, invalid URL).
+- [ ] Kiểm tra UI responsive trên các kích thước màn hình.
+- [ ] (Optional) Thêm preset colors cho user chọn nhanh thay vì color picker tự do.
 
 **Files dự kiến:**
-- `lib/features/profile/user_profile_repository.dart`
-- `lib/features/profile/profile_screen.dart` (UI chọn màu, link)
-- `lib/features/profile/public_profile_page.dart` (hiển thị theme/link)
+- `lib/features/profile/user_profile_repository.dart` (thêm fields và methods)
+- `lib/features/profile/profile_screen.dart` (UI chỉnh sửa theme/links)
+- `lib/features/profile/public_profile_page.dart` (hiển thị theme/links)
+- `firebase/firestore.rules` (cho phép update themeColor và links)
 
 ## 📝 Lưu Ý
 

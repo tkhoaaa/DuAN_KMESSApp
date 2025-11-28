@@ -1,5 +1,29 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+class ProfileLink {
+  ProfileLink({
+    required this.url,
+    required this.label,
+  });
+
+  final String url;
+  final String label;
+
+  Map<String, dynamic> toMap() {
+    return {
+      'url': url,
+      'label': label,
+    };
+  }
+
+  factory ProfileLink.fromMap(Map<String, dynamic> map) {
+    return ProfileLink(
+      url: map['url'] as String? ?? '',
+      label: map['label'] as String? ?? '',
+    );
+  }
+}
+
 class UserProfile {
   UserProfile({
     required this.uid,
@@ -17,6 +41,8 @@ class UserProfile {
     this.postsCount = 0,
     this.updatedAt,
     this.lastSeen,
+    this.themeColor,
+    this.links = const [],
   });
 
   final String uid;
@@ -34,6 +60,8 @@ class UserProfile {
   final int postsCount;
   final DateTime? updatedAt;
   final DateTime? lastSeen;
+  final String? themeColor; // Hex color code (e.g., "#FF5733")
+  final List<ProfileLink> links; // List of external links
 
   Map<String, dynamic> toMap() {
     return {
@@ -51,11 +79,19 @@ class UserProfile {
       'postsCount': postsCount,
       'updatedAt': updatedAt,
       'lastSeen': lastSeen,
+      'themeColor': themeColor,
+      'links': links.map((link) => link.toMap()).toList(),
     };
   }
 
   factory UserProfile.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data() ?? {};
+    final linksData = data['links'] as List<dynamic>? ?? [];
+    final links = linksData
+        .map((item) => ProfileLink.fromMap(
+              Map<String, dynamic>.from(item as Map),
+            ))
+        .toList();
     return UserProfile(
       uid: doc.id,
       displayName: data['displayName'] as String?,
@@ -72,6 +108,8 @@ class UserProfile {
       postsCount: (data['postsCount'] as num?)?.toInt() ?? 0,
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
       lastSeen: (data['lastSeen'] as Timestamp?)?.toDate(),
+      themeColor: data['themeColor'] as String?,
+      links: links,
     );
   }
 }
@@ -173,6 +211,8 @@ class UserProfileRepository {
     bool removePhoto = false,
     String? bio,
     bool? isPrivate,
+    String? themeColor,
+    List<ProfileLink>? links,
   }) async {
     final data = <String, dynamic>{
       'updatedAt': FieldValue.serverTimestamp(),
@@ -192,6 +232,14 @@ class UserProfileRepository {
     }
     if (isPrivate != null) {
       data['isPrivate'] = isPrivate;
+    }
+    if (themeColor != null) {
+      data['themeColor'] = themeColor;
+    } else if (themeColor == null && links != null) {
+      // Nếu chỉ update links mà không update themeColor, không xóa themeColor
+    }
+    if (links != null) {
+      data['links'] = links.map((link) => link.toMap()).toList();
     }
 
     await _collection.doc(uid).set(data, SetOptions(merge: true));

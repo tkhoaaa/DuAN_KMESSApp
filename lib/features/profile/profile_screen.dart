@@ -27,6 +27,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool isUploading = false;
   bool _loadedInitial = false;
   bool _isPrivate = false;
+  String? _themeColor;
+  List<ProfileLink> _links = [];
   late final FollowService _followService;
 
   @override
@@ -57,6 +59,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
         removePhoto: photoUrlController.text.trim().isEmpty,
         bio: bioController.text.trim(),
         isPrivate: _isPrivate,
+        themeColor: _themeColor,
+        links: _links,
       );
       _loadedInitial = false;
       if (!mounted) return;
@@ -220,6 +224,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             photoUrlController.text = profile.photoUrl ?? '';
             bioController.text = profile.bio ?? '';
             _isPrivate = profile.isPrivate;
+            _themeColor = profile.themeColor;
+            _links = List<ProfileLink>.from(profile.links);
             _loadedInitial = true;
           }
 
@@ -318,6 +324,83 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   subtitle: const Text(
                       'Yêu cầu theo dõi cần được bạn chấp nhận.'),
                 ),
+                const SizedBox(height: 24),
+                // Tùy biến section
+                const Divider(),
+                const SizedBox(height: 8),
+                const Text(
+                  'Tùy biến',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                // Theme Color
+                ListTile(
+                  title: const Text('Màu chủ đạo'),
+                  subtitle: Text(_themeColor ?? 'Chưa chọn màu'),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (_themeColor != null)
+                        Container(
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            color: _parseColor(_themeColor!),
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.grey),
+                          ),
+                        ),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        icon: const Icon(Icons.color_lens),
+                        onPressed: () => _showColorPicker(context),
+                      ),
+                      if (_themeColor != null)
+                        IconButton(
+                          icon: const Icon(Icons.clear),
+                          onPressed: () {
+                            setState(() {
+                              _themeColor = null;
+                            });
+                          },
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                // Links
+                const Text(
+                  'Liên kết ngoài',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 8),
+                ..._links.asMap().entries.map((entry) {
+                  final index = entry.key;
+                  final link = entry.value;
+                  return Card(
+                    child: ListTile(
+                      title: Text(link.label),
+                      subtitle: Text(link.url),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.delete),
+                        onPressed: () {
+                          setState(() {
+                            _links.removeAt(index);
+                          });
+                        },
+                      ),
+                    ),
+                  );
+                }),
+                if (_links.length < 5)
+                  OutlinedButton.icon(
+                    onPressed: () => _showAddLinkDialog(context),
+                    icon: const Icon(Icons.add),
+                    label: const Text('Thêm liên kết'),
+                  ),
                 const SizedBox(height: 24),
                 FilledButton(
                   onPressed: isBusy ? null : () => _saveProfile(user.uid),
@@ -420,6 +503,198 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           );
         },
+      ),
+    );
+  }
+
+  Color _parseColor(String hexColor) {
+    try {
+      return Color(int.parse(hexColor.replaceFirst('#', '0xFF')));
+    } catch (e) {
+      return Colors.blue;
+    }
+  }
+
+  void _showColorPicker(BuildContext context) {
+    final presetColors = [
+      '#FF5733', '#33FF57', '#3357FF', '#FF33F5', '#F5FF33',
+      '#33FFF5', '#FF8C33', '#8C33FF', '#33FF8C', '#FF3333',
+      '#33FF33', '#3333FF', '#FFFF33', '#FF33FF', '#33FFFF',
+    ];
+
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Chọn màu chủ đạo',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                // Preset colors
+                ...presetColors.map((color) {
+                  return GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _themeColor = color;
+                      });
+                      Navigator.pop(context);
+                    },
+                    child: Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: _parseColor(color),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.grey.shade300),
+                      ),
+                    ),
+                  );
+                }),
+                // Custom color picker (simple text input)
+                GestureDetector(
+                  onTap: () => _showCustomColorDialog(context),
+                  child: Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade200,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.grey.shade300),
+                    ),
+                    child: const Icon(Icons.tune),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            TextButton(
+              onPressed: () {
+                setState(() {
+                  _themeColor = null;
+                });
+                Navigator.pop(context);
+              },
+              child: const Text('Xóa màu'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showCustomColorDialog(BuildContext context) {
+    final controller = TextEditingController(text: _themeColor ?? '#');
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Màu tùy chỉnh'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            labelText: 'Mã màu hex (ví dụ: #FF5733)',
+            hintText: '#FF5733',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Hủy'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final color = controller.text.trim();
+              if (color.isNotEmpty && color.startsWith('#')) {
+                try {
+                  _parseColor(color); // Validate
+                  setState(() {
+                    _themeColor = color;
+                  });
+                  Navigator.pop(context);
+                  Navigator.pop(context); // Close color picker too
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Mã màu không hợp lệ')),
+                  );
+                }
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Mã màu phải bắt đầu bằng #')),
+                );
+              }
+            },
+            child: const Text('Lưu'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAddLinkDialog(BuildContext context) {
+    final labelController = TextEditingController();
+    final urlController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Thêm liên kết'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: labelController,
+              decoration: const InputDecoration(
+                labelText: 'Nhãn (ví dụ: Website, Instagram)',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: urlController,
+              decoration: const InputDecoration(
+                labelText: 'URL',
+                hintText: 'https://example.com',
+              ),
+              keyboardType: TextInputType.url,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Hủy'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final label = labelController.text.trim();
+              final url = urlController.text.trim();
+              if (label.isEmpty || url.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Vui lòng điền đầy đủ thông tin')),
+                );
+                return;
+              }
+              if (!url.startsWith('http://') && !url.startsWith('https://')) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('URL phải bắt đầu bằng http:// hoặc https://')),
+                );
+                return;
+              }
+              setState(() {
+                _links.add(ProfileLink(url: url, label: label));
+              });
+              Navigator.pop(context);
+            },
+            child: const Text('Thêm'),
+          ),
+        ],
       ),
     );
   }
