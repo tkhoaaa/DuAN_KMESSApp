@@ -54,19 +54,31 @@ class ChatRepository {
   }) async {
     final participants = [currentUid, otherUid]..sort();
 
-    final existing = await _conversationCollection
-        .where('type', isEqualTo: 'direct')
-        .where('participantHash', isEqualTo: participants.join('_'))
-        .limit(1)
+    final accessibleConversations = await _conversationCollection
+        .where('participantIds', arrayContains: currentUid)
         .get();
 
-    if (existing.docs.isNotEmpty) {
-      final conversationId = existing.docs.first.id;
+    QueryDocumentSnapshot<Map<String, dynamic>>? existing;
+    for (final doc in accessibleConversations.docs) {
+      final data = doc.data();
+      final ids = (data['participantIds'] as List<dynamic>? ?? [])
+          .map((e) => e.toString())
+          .toList();
+      final type = data['type'] as String? ?? 'direct';
+      final isTwoMembers = ids.length == 2;
+      final matches = type == 'direct' && isTwoMembers && ids.contains(otherUid);
+      if (matches) {
+        existing = doc;
+        break;
+      }
+    }
+
+    if (existing != null) {
       await ensureParticipantEntry(
-        conversationId: conversationId,
+        conversationId: existing.id,
         uid: currentUid,
       );
-      return conversationId;
+      return existing.id;
     }
 
     final doc = await _conversationCollection.add({
@@ -74,21 +86,18 @@ class ChatRepository {
       'participantIds': participants,
       'participantHash': participants.join('_'),
       'createdBy': currentUid,
+      'admins': [],  // ✅ THÊM FIELD NÀY
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
       'lastMessage': null,
     });
 
-    final batch = _firestore.batch();
-    for (final uid in participants) {
-      batch.set(_participantsRef(doc.id).doc(uid), {
-        'role': 'member',
-        'joinedAt': FieldValue.serverTimestamp(),
-        'lastReadAt': FieldValue.serverTimestamp(),
-        'notificationsEnabled': true,
-      });
-    }
-    await batch.commit();
+    await _participantsRef(doc.id).doc(currentUid).set({
+      'role': 'member',
+      'joinedAt': FieldValue.serverTimestamp(),
+      'lastReadAt': FieldValue.serverTimestamp(),
+      'notificationsEnabled': true,
+    }, SetOptions(merge: true));
 
     return doc.id;
   }

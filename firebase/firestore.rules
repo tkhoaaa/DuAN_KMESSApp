@@ -103,6 +103,9 @@ service cloud.firestore {
             ||
             // Admin tạo bản ghi cho thành viên khác
             (request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.admins)
+            ||
+            // Chủ conversation (createdBy) cũng được phép tạo bản ghi participant
+            (request.auth.uid == get(/databases/$(database)/documents/conversations/$(conversationId)).data.createdBy)
           );
         allow update: if isSignedIn()
           && (
