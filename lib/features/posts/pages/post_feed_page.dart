@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../auth/auth_repository.dart';
 import '../../profile/public_profile_page.dart';
+import '../../profile/user_profile_repository.dart';
 import '../../saved_posts/services/saved_posts_service.dart';
 import '../../safety/services/block_service.dart';
 import '../../safety/services/report_service.dart';
@@ -202,6 +203,7 @@ class _PostFeedItemState extends State<PostFeedItem> {
   final BlockService _blockService = blockService;
   final ReportService _reportService = reportService;
   final SavedPostsService _savedPostsService = savedPostsService;
+  final UserProfileRepository _profileRepository = userProfileRepository;
 
   @override
   void dispose() {
@@ -575,6 +577,32 @@ class _PostFeedItemState extends State<PostFeedItem> {
     }
   }
 
+  Future<void> _handleTogglePin(Post post, bool isPinned) async {
+    final currentUid = authRepository.currentUser()?.uid;
+    if (currentUid == null) return;
+
+    try {
+      if (isPinned) {
+        await _profileRepository.removePinnedPost(currentUid, post.id);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Đã gỡ ghim bài viết')),
+        );
+      } else {
+        await _profileRepository.addPinnedPost(currentUid, post.id);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Đã ghim bài viết')),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Lỗi: $e')),
+      );
+    }
+  }
+
   Widget? _buildTrailingMenu({
     required BuildContext context,
     required Post post,
@@ -584,67 +612,90 @@ class _PostFeedItemState extends State<PostFeedItem> {
     final currentUid = authRepository.currentUser()?.uid;
     if (currentUid == null) return null;
     if (isOwner) {
-      return PopupMenuButton<String>(
-        icon: const Icon(Icons.more_vert),
-        onSelected: (value) async {
-          if (value == 'delete') {
-            final confirmed = await showDialog<bool>(
-              context: context,
-              builder: (context) => AlertDialog(
-                title: const Text('Xóa bài đăng'),
-                content: const Text(
-                  'Bạn có chắc chắn muốn xóa bài đăng này?',
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context, false),
-                    child: const Text('Hủy'),
+      return StreamBuilder<UserProfile?>(
+        stream: _profileRepository.watchProfile(currentUid),
+        builder: (context, snapshot) {
+          final profile = snapshot.data;
+          final isPinned = profile?.pinnedPostIds.contains(post.id) ?? false;
+          
+          return PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert),
+            onSelected: (value) async {
+              if (value == 'delete') {
+                final confirmed = await showDialog<bool>(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: const Text('Xóa bài đăng'),
+                    content: const Text(
+                      'Bạn có chắc chắn muốn xóa bài đăng này?',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: const Text('Hủy'),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.red,
+                        ),
+                        child: const Text('Xóa'),
+                      ),
+                    ],
                   ),
-                  TextButton(
-                    onPressed: () => Navigator.pop(context, true),
-                    style: TextButton.styleFrom(
-                      foregroundColor: Colors.red,
-                    ),
-                    child: const Text('Xóa'),
-                  ),
-                ],
-              ),
-            );
-            if (confirmed == true && mounted) {
-              try {
-                await widget.service.deletePost(post.id);
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Đã xóa bài đăng'),
-                    ),
-                  );
-                  widget.onPostDeleted?.call();
+                );
+                if (confirmed == true && mounted) {
+                  try {
+                    await widget.service.deletePost(post.id);
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Đã xóa bài đăng'),
+                        ),
+                      );
+                      widget.onPostDeleted?.call();
+                    }
+                  } catch (e) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Lỗi xóa bài đăng: $e'),
+                        ),
+                      );
+                    }
+                  }
                 }
-              } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Lỗi xóa bài đăng: $e'),
-                    ),
-                  );
-                }
+              } else if (value == 'pin' || value == 'unpin') {
+                await _handleTogglePin(post, isPinned);
               }
-            }
-          }
+            },
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                value: isPinned ? 'unpin' : 'pin',
+                child: Row(
+                  children: [
+                    Icon(
+                      isPinned ? Icons.push_pin : Icons.push_pin_outlined,
+                      color: isPinned ? Colors.orange : Colors.grey,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(isPinned ? 'Gỡ ghim' : 'Ghim bài viết'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'delete',
+                child: Row(
+                  children: [
+                    Icon(Icons.delete, color: Colors.red),
+                    SizedBox(width: 8),
+                    Text('Xóa bài đăng'),
+                  ],
+                ),
+              ),
+            ],
+          );
         },
-        itemBuilder: (context) => const [
-          PopupMenuItem(
-            value: 'delete',
-            child: Row(
-              children: [
-                Icon(Icons.delete, color: Colors.red),
-                SizedBox(width: 8),
-                Text('Xóa bài đăng'),
-              ],
-            ),
-          ),
-        ],
       );
     }
 

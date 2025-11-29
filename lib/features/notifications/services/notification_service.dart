@@ -7,7 +7,29 @@ class NotificationService {
 
   final NotificationRepository _repository;
 
-  /// Tạo notification khi có like
+  /// Generate group key cho notification
+  /// Format: {type}_{postId?}_{toUid}
+  String _generateGroupKey({
+    required NotificationType type,
+    required String toUid,
+    String? postId,
+  }) {
+    switch (type) {
+      case NotificationType.like:
+        if (postId == null) {
+          throw ArgumentError('postId is required for like notifications');
+        }
+        return 'like_${postId}_$toUid';
+      case NotificationType.follow:
+        return 'follow_$toUid';
+      case NotificationType.comment:
+      case NotificationType.message:
+        // Comments và messages không group
+        throw ArgumentError('Comments and messages should not be grouped');
+    }
+  }
+
+  /// Tạo notification khi có like (với grouping)
   Future<void> createLikeNotification({
     required String postId,
     required String likerUid,
@@ -16,17 +38,42 @@ class NotificationService {
     // Không tạo notification nếu người like là chính tác giả
     if (likerUid == postAuthorUid) return;
 
-    final notification = Notification(
-      id: '', // Sẽ được tạo bởi Firestore
+    final groupKey = _generateGroupKey(
       type: NotificationType.like,
-      fromUid: likerUid,
       toUid: postAuthorUid,
       postId: postId,
-      read: false,
-      createdAt: DateTime.now(),
     );
 
-    await _repository.createNotification(notification);
+    // Tìm notification đã tồn tại trong 1 giờ gần đây
+    final existingNotification = await _repository.findGroupedNotification(
+      groupKey: groupKey,
+      toUid: postAuthorUid,
+      timeWindow: const Duration(hours: 1),
+    );
+
+    if (existingNotification != null) {
+      // Update notification đã tồn tại
+      await _repository.updateGroupedNotification(
+        notificationId: existingNotification.id,
+        fromUid: likerUid,
+      );
+    } else {
+      // Tạo notification mới với groupKey
+      final notification = Notification(
+        id: '', // Sẽ được tạo bởi Firestore
+        type: NotificationType.like,
+        fromUid: likerUid,
+        toUid: postAuthorUid,
+        postId: postId,
+        read: false,
+        createdAt: DateTime.now(),
+        groupKey: groupKey,
+        count: 1,
+        fromUids: [likerUid],
+      );
+
+      await _repository.createNotification(notification);
+    }
   }
 
   /// Tạo notification khi có comment
@@ -55,7 +102,7 @@ class NotificationService {
     await _repository.createNotification(notification);
   }
 
-  /// Tạo notification khi có follow
+  /// Tạo notification khi có follow (với grouping)
   Future<void> createFollowNotification({
     required String followerUid,
     required String followedUid,
@@ -63,16 +110,40 @@ class NotificationService {
     // Không tạo notification nếu follow chính mình
     if (followerUid == followedUid) return;
 
-    final notification = Notification(
-      id: '',
+    final groupKey = _generateGroupKey(
       type: NotificationType.follow,
-      fromUid: followerUid,
       toUid: followedUid,
-      read: false,
-      createdAt: DateTime.now(),
     );
 
-    await _repository.createNotification(notification);
+    // Tìm notification đã tồn tại trong 1 giờ gần đây
+    final existingNotification = await _repository.findGroupedNotification(
+      groupKey: groupKey,
+      toUid: followedUid,
+      timeWindow: const Duration(hours: 1),
+    );
+
+    if (existingNotification != null) {
+      // Update notification đã tồn tại
+      await _repository.updateGroupedNotification(
+        notificationId: existingNotification.id,
+        fromUid: followerUid,
+      );
+    } else {
+      // Tạo notification mới với groupKey
+      final notification = Notification(
+        id: '',
+        type: NotificationType.follow,
+        fromUid: followerUid,
+        toUid: followedUid,
+        read: false,
+        createdAt: DateTime.now(),
+        groupKey: groupKey,
+        count: 1,
+        fromUids: [followerUid],
+      );
+
+      await _repository.createNotification(notification);
+    }
   }
 
   /// Tạo notification khi có message

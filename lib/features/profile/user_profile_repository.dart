@@ -43,6 +43,7 @@ class UserProfile {
     this.lastSeen,
     this.themeColor,
     this.links = const [],
+    this.pinnedPostIds = const [],
   });
 
   final String uid;
@@ -62,6 +63,7 @@ class UserProfile {
   final DateTime? lastSeen;
   final String? themeColor; // Hex color code (e.g., "#FF5733")
   final List<ProfileLink> links; // List of external links
+  final List<String> pinnedPostIds; // List of pinned post IDs (max 3)
 
   Map<String, dynamic> toMap() {
     return {
@@ -81,6 +83,7 @@ class UserProfile {
       'lastSeen': lastSeen,
       'themeColor': themeColor,
       'links': links.map((link) => link.toMap()).toList(),
+      'pinnedPostIds': pinnedPostIds,
     };
   }
 
@@ -91,6 +94,11 @@ class UserProfile {
         .map((item) => ProfileLink.fromMap(
               Map<String, dynamic>.from(item as Map),
             ))
+        .toList();
+    final pinnedPostIdsData = data['pinnedPostIds'] as List<dynamic>? ?? [];
+    final pinnedPostIds = pinnedPostIdsData
+        .map((item) => item.toString())
+        .where((item) => item.isNotEmpty)
         .toList();
     return UserProfile(
       uid: doc.id,
@@ -110,6 +118,7 @@ class UserProfile {
       lastSeen: (data['lastSeen'] as Timestamp?)?.toDate(),
       themeColor: data['themeColor'] as String?,
       links: links,
+      pinnedPostIds: pinnedPostIds,
     );
   }
 }
@@ -250,6 +259,92 @@ class UserProfileRepository {
       'isOnline': isOnline,
       'lastSeen': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
+  }
+
+  /// Cập nhật danh sách pinned posts (tối đa 3)
+  /// Validate: không vượt quá 3, loại bỏ duplicate
+  Future<void> updatePinnedPosts(
+    String uid,
+    List<String> postIds,
+  ) async {
+    // Validate: tối đa 3 posts
+    if (postIds.length > 3) {
+      throw Exception('Không thể ghim quá 3 bài viết');
+    }
+    
+    // Loại bỏ duplicate
+    final uniquePostIds = postIds.toSet().toList();
+    if (uniquePostIds.length != postIds.length) {
+      throw Exception('Danh sách bài viết không được trùng lặp');
+    }
+    
+    await _collection.doc(uid).set({
+      'pinnedPostIds': uniquePostIds,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
+  /// Thêm một post vào danh sách pinned (nếu chưa đủ 3)
+  Future<void> addPinnedPost(String uid, String postId) async {
+    final profile = await fetchProfile(uid);
+    if (profile == null) {
+      throw Exception('Không tìm thấy profile');
+    }
+    
+    final currentPinned = List<String>.from(profile.pinnedPostIds);
+    
+    // Kiểm tra đã ghim chưa
+    if (currentPinned.contains(postId)) {
+      throw Exception('Bài viết đã được ghim');
+    }
+    
+    // Kiểm tra đã đủ 3 chưa
+    if (currentPinned.length >= 3) {
+      throw Exception('Đã đạt giới hạn 3 bài viết ghim');
+    }
+    
+    currentPinned.add(postId);
+    await updatePinnedPosts(uid, currentPinned);
+  }
+
+  /// Xóa một post khỏi danh sách pinned
+  Future<void> removePinnedPost(String uid, String postId) async {
+    final profile = await fetchProfile(uid);
+    if (profile == null) {
+      throw Exception('Không tìm thấy profile');
+    }
+    
+    final currentPinned = List<String>.from(profile.pinnedPostIds);
+    currentPinned.remove(postId);
+    
+    await updatePinnedPosts(uid, currentPinned);
+  }
+
+  /// Sắp xếp lại thứ tự pinned posts
+  Future<void> reorderPinnedPosts(
+    String uid,
+    List<String> newOrder,
+  ) async {
+    final profile = await fetchProfile(uid);
+    if (profile == null) {
+      throw Exception('Không tìm thấy profile');
+    }
+    
+    final currentPinned = List<String>.from(profile.pinnedPostIds);
+    
+    // Validate: newOrder phải chứa đúng các postId hiện tại
+    if (newOrder.length != currentPinned.length) {
+      throw Exception('Số lượng bài viết không khớp');
+    }
+    
+    final currentSet = currentPinned.toSet();
+    final newSet = newOrder.toSet();
+    if (currentSet.length != newSet.length || 
+        !currentSet.containsAll(newSet)) {
+      throw Exception('Danh sách bài viết không khớp');
+    }
+    
+    await updatePinnedPosts(uid, newOrder);
   }
 
   /// Tìm kiếm users theo từ khóa (displayName, email, phoneNumber)

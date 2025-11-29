@@ -10,6 +10,7 @@ import '../auth/auth_repository.dart';
 import '../follow/services/follow_service.dart';
 import '../../services/cloudinary_service.dart';
 import '../saved_posts/pages/saved_posts_page.dart';
+import 'pages/manage_pinned_posts_page.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -202,6 +203,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
       appBar: AppBar(
         title: const Text('Hồ sơ của bạn'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.push_pin),
+            tooltip: 'Quản lý bài viết ghim',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const ManagePinnedPostsPage(),
+                ),
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.bookmark),
             tooltip: 'Bài viết đã lưu',

@@ -19,6 +19,9 @@ class Notification {
     required this.read,
     required this.createdAt,
     this.text,
+    this.groupKey,
+    this.count = 1,
+    this.fromUids,
   });
 
   final String id;
@@ -31,6 +34,9 @@ class Notification {
   final bool read;
   final DateTime? createdAt;
   final String? text; // Text của comment hoặc message
+  final String? groupKey; // Key để group notifications (format: {type}_{postId?}_{toUid})
+  final int count; // Số lượng notifications được group (default: 1)
+  final List<String>? fromUids; // Danh sách UIDs của những người đã thực hiện action
 
   factory Notification.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data() ?? {};
@@ -53,6 +59,11 @@ class Notification {
         type = NotificationType.like;
     }
 
+    final fromUidsData = data['fromUids'] as List<dynamic>?;
+    final fromUids = fromUidsData != null
+        ? fromUidsData.map((item) => item.toString()).toList()
+        : null;
+
     return Notification(
       id: doc.id,
       type: type,
@@ -64,6 +75,9 @@ class Notification {
       read: data['read'] as bool? ?? false,
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
       text: data['text'] as String?,
+      groupKey: data['groupKey'] as String?,
+      count: (data['count'] as num?)?.toInt() ?? 1,
+      fromUids: fromUids,
     );
   }
 
@@ -94,6 +108,9 @@ class Notification {
       'read': read,
       'createdAt': createdAt != null ? Timestamp.fromDate(createdAt!) : FieldValue.serverTimestamp(),
       if (text != null) 'text': text,
+      if (groupKey != null) 'groupKey': groupKey,
+      'count': count,
+      if (fromUids != null && fromUids!.isNotEmpty) 'fromUids': fromUids,
     };
   }
 }

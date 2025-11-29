@@ -403,22 +403,22 @@
 
 ---
 
-### 19. Hashtag & Topic System
+### 19. Hashtag & Topic System ✅
 **Mô tả:** Cho phép gắn hashtag vào bài viết và duyệt nội dung theo chủ đề.
 
 #### Phase 1 – Data & Rules
-- [ ] Tạo utility function `extractHashtags(String caption)` sử dụng regex để tìm tất cả hashtag (pattern: `#[\w]+`).
-- [ ] Bổ sung field `hashtags` (list<string>, normalized lowercase) vào model `Post` và document `posts`.
-- [ ] Cập nhật `toMap()` và `fromDoc()` trong model `Post` để serialize/deserialize field `hashtags`.
+- [x] Tạo utility function `extractHashtags(String caption)` sử dụng regex để tìm tất cả hashtag (pattern: `#[\w]+`).
+- [x] Bổ sung field `hashtags` (list<string>, normalized lowercase) vào model `Post` và document `posts`.
+- [x] Cập nhật `toMap()` và `fromDoc()` trong model `Post` để serialize/deserialize field `hashtags`.
 - [ ] (Optional) Tạo collection `hashtags/{tag}` lưu metadata:
   - `totalPosts` (int): số bài viết sử dụng hashtag này
   - `lastUpdated` (timestamp): thời gian cập nhật gần nhất
   - `createdAt` (timestamp): thời gian hashtag được tạo lần đầu
-- [ ] Cập nhật Firestore rules để cho phép read/write `hashtags` field trong posts (đã có sẵn trong rule posts).
+- [x] Cập nhật Firestore rules để cho phép read/write `hashtags` field trong posts (đã có sẵn trong rule posts).
 - [ ] (Optional) Tạo composite index cho query `posts` theo `hashtags` array-contains và `createdAt` DESC.
 
 #### Phase 2 – Repository & Service
-- [ ] Mở rộng `PostRepository`:
+- [x] Mở rộng `PostRepository`:
   - Thêm method `extractHashtagsFromCaption(String caption)` → `List<String>` (normalize lowercase, loại bỏ trùng lặp).
   - Cập nhật `createPost()` để tự động trích xuất và lưu `hashtags` khi tạo bài viết.
   - Thêm method `watchPostsByHashtag(String tag, {int limit = 20})` → `Stream<List<Post>>` (query `where('hashtags', arrayContains: tag)`).
@@ -429,16 +429,16 @@
   - Cache trending hashtags để tối ưu performance.
 
 #### Phase 3 – UI: Hashtag Display & Interaction
-- [ ] Tạo widget `PostCaptionWithHashtags`:
+- [x] Tạo widget `PostCaptionWithHashtags`:
   - Parse caption và highlight hashtag (màu xanh, font weight bold).
   - Mỗi hashtag là `TextSpan` tap-able, khi tap → navigate đến `HashtagPage`.
   - Xử lý trường hợp caption có nhiều hashtag, hashtag ở giữa câu.
-- [ ] Cập nhật `PostFeedPage` và `PostPermalinkPage`:
+- [x] Cập nhật `PostFeedPage` và `PostPermalinkPage`:
   - Thay thế `Text` caption bằng `PostCaptionWithHashtags`.
   - Đảm bảo hiển thị đúng format khi có hashtag.
 
 #### Phase 4 – UI: Hashtag Page & Search
-- [ ] Tạo `HashtagPage`:
+- [x] Tạo `HashtagPage`:
   - AppBar hiển thị hashtag (ví dụ: "#travel").
   - TabBar với 2 tabs: "Mới nhất" (sort `createdAt DESC`) và "Nổi bật" (sort theo `likeCount + commentCount DESC`).
   - List posts sử dụng `PostCard` widget sẵn có.
@@ -450,106 +450,423 @@
   - Tap hashtag → navigate đến `HashtagPage`.
 
 #### Phase 5 – UI: Hashtag Autocomplete
-- [ ] Trong màn hình tạo bài viết (`CreatePostPage`):
+- [x] Trong màn hình tạo bài viết (`CreatePostPage`):
   - Khi user nhập caption, detect khi gõ `#` → hiển thị dropdown gợi ý hashtag.
   - Gợi ý dựa trên trending hashtags hoặc hashtags phổ biến (query `hashtags` collection).
   - User có thể chọn từ dropdown hoặc tiếp tục gõ tự do.
   - Debounce input để tránh query quá nhiều.
 
 #### Phase 6 – QA & Polish
-- [ ] Test các trường hợp:
+- [x] Test các trường hợp:
   - Caption không có hashtag → `hashtags` = `[]`.
   - Caption có nhiều hashtag → parse đúng tất cả.
   - Hashtag trùng lặp → normalize và loại bỏ duplicate.
   - Hashtag có ký tự đặc biệt → sanitize (chỉ cho phép chữ, số, underscore).
   - Hashtag dài quá → giới hạn độ dài (ví dụ: tối đa 50 ký tự).
-- [ ] Đảm bảo XSS/sanitization:
+- [x] Đảm bảo XSS/sanitization:
   - Không cho hashtag chứa HTML tags hoặc script.
   - Validate format hashtag trước khi lưu.
-- [ ] Performance:
+- [x] Performance:
   - Giới hạn số lượng hashtag mỗi post (ví dụ: tối đa 10 hashtags).
   - Cache trending hashtags để giảm query Firestore.
-- [ ] UX improvements:
+- [x] UX improvements:
   - Hiển thị số lượng bài viết cho mỗi hashtag trong `HashtagPage`.
   - (Optional) Hiển thị hashtag suggestions dựa trên caption đang gõ (AI/ML nếu có).
 
-**Files dự kiến:**
+**Files đã tạo/sửa:**
 - `lib/features/posts/models/post.dart` (thêm field `hashtags`)
 - `lib/features/posts/repositories/post_repository.dart` (parse & lưu hashtags, query theo hashtag)
-- `lib/features/posts/services/hashtag_service.dart` (optional - metadata management)
 - `lib/features/posts/pages/hashtag_page.dart` (màn hình hiển thị posts theo hashtag)
 - `lib/features/posts/widgets/post_caption_with_hashtags.dart` (widget hiển thị caption với hashtag tap-able)
+- `lib/features/posts/widgets/hashtag_autocomplete_field.dart` (autocomplete widget)
 - `lib/features/posts/pages/create_post_page.dart` (thêm autocomplete hashtag)
-- `lib/features/search/pages/search_page.dart` (tích hợp tìm kiếm hashtag)
 - `lib/features/posts/pages/post_feed_page.dart` (sử dụng `PostCaptionWithHashtags`)
 - `lib/features/posts/pages/post_permalink_page.dart` (sử dụng `PostCaptionWithHashtags`)
-- `firebase/firestore.rules` (nếu cần validate thêm cho field `hashtags`)
+- `firebase/firestore.rules` (validate field `hashtags`)
 
 ---
 
 ### 20. Pinned Posts & Profile Highlights
 **Mô tả:** Cho phép người dùng ghim bài viết lên đầu profile và lưu stories thành highlights.
 
+**Lưu ý:** Task này chia làm 2 phần chính:
+- **Pinned Posts** (ưu tiên): Cho phép ghim tối đa 3 bài viết lên đầu profile
+- **Profile Highlights** (tùy chọn, phụ thuộc vào Stories feature): Lưu stories thành highlights (sẽ implement sau khi có Stories)
+
+---
+
+## Phần A: Pinned Posts ✅
+
 #### Phase 1 – Data & Rules
-- [ ] Thêm field `pinnedPostIds` (list<string>, tối đa 3) vào `user_profiles`.
-- [ ] Thêm collection `story_highlights/{uid}/albums/{albumId}` (name, coverStoryId, createdAt).
-- [ ] Firestore rules: chỉ owner được update `pinnedPostIds` và albums highlights của mình.
+- [x] Thêm field `pinnedPostIds` (list<string>, tối đa 3) vào model `UserProfile` và document `user_profiles`.
+- [x] Cập nhật `toMap()` và `fromDoc()` trong `UserProfile` để serialize/deserialize field `pinnedPostIds`.
+- [x] Cập nhật Firestore rules để chỉ owner được update `pinnedPostIds` trong `user_profiles`.
+- [x] Validation: Đảm bảo `pinnedPostIds` không vượt quá 3 items, không có duplicate.
 
 #### Phase 2 – Repository & Service
-- [ ] Mở rộng `UserProfileRepository` với hàm update pinned posts.
-- [ ] Tạo `StoryHighlightRepository` để quản lý albums: tạo/sửa/xóa album, gắn story vào album.
+- [x] Mở rộng `UserProfileRepository`:
+  - Thêm method `updatePinnedPosts(String uid, List<String> postIds)` → `Future<void>` (validate tối đa 3, update field `pinnedPostIds`).
+  - Thêm method `addPinnedPost(String uid, String postId)` → `Future<void>` (thêm vào list nếu chưa đủ 3).
+  - Thêm method `removePinnedPost(String uid, String postId)` → `Future<void>` (xóa khỏi list).
+  - Thêm method `reorderPinnedPosts(String uid, List<String> newOrder)` → `Future<void>` (sắp xếp lại thứ tự).
+- [x] Tích hợp vào `PostRepository.deletePost()`:
+  - Khi xóa post, tự động gỡ khỏi `pinnedPostIds` của tất cả user profiles (query `where('pinnedPostIds', arrayContains: postId)`).
+- [x] Thêm method `fetchPostsByAuthor` vào `PostRepository` để query posts theo authorUid.
 
-#### Phase 3 – UI & UX
-- [ ] Trên `ProfileScreen`: UI chọn bài viết để ghim (tối đa 3), hiển thị preview.
-- [ ] Trên `PublicProfilePage`: hiển thị pinned posts phía trên grid bài viết.
-- [ ] Trên phần stories: UI tạo highlight album từ stories đã hết hạn (chọn tên, cover).
-- [ ] Trên profile: hiển thị hàng “Highlights” (avatar nhỏ từng album, tap mở story viewer).
+#### Phase 3 – UI: Profile Screen (Quản lý Pinned Posts)
+- [x] Trên `ProfileScreen` (màn hình profile của chính mình):
+  - Thêm nút "Quản lý bài viết ghim" trong AppBar.
+  - Tạo màn hình `ManagePinnedPostsPage`:
+    - Hiển thị danh sách bài viết đã ghim hiện tại (tối đa 3).
+    - Nút "Thêm bài viết" → mở bottom sheet chọn từ danh sách posts của user.
+    - Nút "Gỡ ghim" cho mỗi bài viết đã ghim.
+    - Drag & drop để sắp xếp lại thứ tự (ReorderableListView).
+    - Hiển thị preview thumbnail của mỗi post.
+    - Validation: Hiển thị warning khi đã đủ 3 bài, disable nút "Thêm".
 
-#### Phase 4 – QA
-- [ ] Đảm bảo khi xóa post thì tự động gỡ khỏi `pinnedPostIds`.
-- [ ] Test giới hạn 3 bài ghim, hành vi khi thêm/bớt/đổi thứ tự.
+#### Phase 4 – UI: Public Profile Page (Hiển thị Pinned Posts)
+- [x] Cập nhật `PublicProfilePage`:
+  - Thêm section hiển thị posts của user:
+    - Query posts theo `authorUid`, sắp xếp `createdAt DESC`.
+    - Hiển thị dạng grid 3 cột.
+    - Tap vào post → navigate đến `PostPermalinkPage`.
+  - Thêm section "Bài viết đã ghim" phía trên grid posts:
+    - Chỉ hiển thị nếu `pinnedPostIds` không rỗng.
+    - Hiển thị horizontal scrollable list.
+    - Mỗi item hiển thị thumbnail của post (media đầu tiên).
+    - Icon "Ghim" trên mỗi pinned post để phân biệt.
+    - Tap vào pinned post → navigate đến `PostPermalinkPage`.
 
-**Files dự kiến:**
-- `lib/features/profile/user_profile_repository.dart`
-- `lib/features/profile/profile_screen.dart`
-- `lib/features/profile/public_profile_page.dart`
+#### Phase 5 – UI: Post Feed Integration
+- [x] Trong `PostFeedPage`:
+  - Thêm nút "Ghim/Gỡ ghim" trong menu của post (chỉ hiện cho chủ bài viết).
+  - Khi tap "Ghim":
+    - Kiểm tra đã đủ 3 bài chưa → hiển thị error nếu đủ.
+    - Nếu chưa đủ → thêm vào `pinnedPostIds`, hiển thị SnackBar xác nhận.
+    - Nếu đã ghim rồi → hiển thị option "Gỡ ghim".
+  - Hiển thị trạng thái pinned/unpinned realtime trong menu.
+
+#### Phase 6 – QA & Polish
+- [x] Test các trường hợp:
+  - Pin 0, 1, 2, 3 bài viết → hiển thị đúng trên profile.
+  - Thử pin bài viết thứ 4 → hiển thị error, không cho phép.
+  - Xóa post đã ghim → tự động gỡ khỏi `pinnedPostIds`.
+  - Sắp xếp lại thứ tự pinned posts → hiển thị đúng thứ tự trên profile.
+  - Pin/unpin từ nhiều nơi (profile screen, post menu) → đồng bộ realtime.
+- [x] Performance:
+  - Query pinned posts hiệu quả (fetch posts theo list `pinnedPostIds`).
+  - Thêm Firestore index cho `posts` collection (authorUid + createdAt).
+- [x] UX improvements:
+  - Loading state khi đang pin/unpin.
+  - SnackBar feedback sau mỗi action.
+
+---
+
+## Phần B: Profile Highlights (Tùy chọn - Phụ thuộc Stories)
+
+**Lưu ý:** Phần này chỉ implement sau khi có Stories feature (Task 11). Tạm thời để trống.
+
+#### Phase 1 – Data & Rules (Stories Highlights)
+- [ ] Thêm collection `story_highlights/{uid}/albums/{albumId}` với structure:
+  - `name` (string): Tên highlight album
+  - `coverStoryId` (string): ID của story dùng làm cover
+  - `storyIds` (list<string>): Danh sách story IDs trong album
+  - `createdAt` (timestamp): Thời gian tạo album
+  - `updatedAt` (timestamp): Thời gian cập nhật gần nhất
+- [ ] Firestore rules: chỉ owner được đọc/ghi albums highlights của mình.
+
+#### Phase 2 – Repository & Service (Stories Highlights)
+- [ ] Tạo `StoryHighlightRepository`:
+  - `createHighlightAlbum(String uid, String name, String coverStoryId, List<String> storyIds)` → `Future<String>` (albumId).
+  - `updateHighlightAlbum(String uid, String albumId, {String? name, String? coverStoryId, List<String>? storyIds})` → `Future<void>`.
+  - `deleteHighlightAlbum(String uid, String albumId)` → `Future<void>`.
+  - `watchHighlightAlbums(String uid)` → `Stream<List<HighlightAlbum>>`.
+  - `addStoryToAlbum(String uid, String albumId, String storyId)` → `Future<void>`.
+  - `removeStoryFromAlbum(String uid, String albumId, String storyId)` → `Future<void>`.
+
+#### Phase 3 – UI (Stories Highlights)
+- [ ] Tạo widget `StoryHighlightRow`:
+  - Hiển thị horizontal scrollable list các highlight albums.
+  - Mỗi album hiển thị avatar nhỏ (cover story), tên album bên dưới.
+  - Tap vào album → mở story viewer với stories trong album.
+- [ ] Tích hợp vào `PublicProfilePage`:
+  - Hiển thị `StoryHighlightRow` phía trên pinned posts (nếu có highlights).
+- [ ] Tạo màn hình quản lý highlights (từ stories đã hết hạn):
+  - Chọn stories để tạo album mới.
+  - Chọn tên album, cover story.
+  - Quản lý albums: sửa tên, xóa album, thêm/bớt stories.
+
+---
+
+**Files dự kiến (Pinned Posts):**
+- `lib/features/profile/user_profile_repository.dart` (thêm methods update pinned posts)
+- `lib/features/profile/models/user_profile.dart` (thêm field `pinnedPostIds`)
+- `lib/features/profile/pages/manage_pinned_posts_page.dart` (màn hình quản lý pinned posts)
+- `lib/features/profile/pages/profile_screen.dart` (thêm nút quản lý pinned posts)
+- `lib/features/profile/pages/public_profile_page.dart` (hiển thị pinned posts + posts grid)
+- `lib/features/posts/repositories/post_repository.dart` (tự động gỡ pinned khi xóa post)
+- `lib/features/posts/pages/post_feed_page.dart` (nút ghim trong post menu)
+- `lib/features/posts/widgets/pinned_post_card.dart` (widget hiển thị pinned post, optional)
+- `firebase/firestore.rules` (rules cho `pinnedPostIds`)
+
+**Files dự kiến (Profile Highlights - sau này):**
+- `lib/features/stories/models/story_highlight.dart`
 - `lib/features/stories/repositories/story_highlight_repository.dart`
 - `lib/features/stories/widgets/story_highlight_row.dart`
-- `firebase/firestore.rules`
+- `lib/features/stories/pages/manage_highlights_page.dart`
+- `firebase/firestore.rules` (rules cho `story_highlights`)
 
 ---
 
 ### 21. Advanced Notifications & Digest
-**Mô tả:** Nâng cấp hệ thống thông báo, gom nhóm và tạo báo cáo tổng hợp ngày/tuần.
+**Mô tả:** Nâng cấp hệ thống thông báo với tính năng gom nhóm notifications và tạo báo cáo tổng hợp ngày/tuần.
+
+**Lưu ý:** Task này chia làm 2 phần chính:
+- **Notification Grouping** (ưu tiên): Gom nhóm notifications cùng loại để giảm spam (ví dụ: "5 người đã thích bài viết X")
+- **Notification Digest** (tùy chọn): Tổng hợp thống kê tương tác theo ngày/tuần
+
+---
+
+## Phần A: Notification Grouping
 
 #### Phase 1 – Data & Rules
-- [ ] Bổ sung field `groupKey` và `count` vào notification (để group “N người đã thích bài viết…”).
-- [ ] Bổ sung collection `notification_digests/{uid}/items/{digestId}` lưu tổng hợp hằng ngày/tuần.
+- [ ] Bổ sung fields vào model `Notification`:
+  - `groupKey` (string, optional): Key để group notifications (format: `{type}_{postId}_{toUid}` hoặc `{type}_{toUid}`)
+  - `count` (int, default: 1): Số lượng notifications được group
+  - `fromUids` (list<string>, optional): Danh sách UIDs của những người đã thực hiện action (thay vì chỉ `fromUid`)
+- [ ] Cập nhật `toMap()` và `fromDoc()` trong `Notification` để serialize/deserialize các fields mới.
+- [ ] Cập nhật Firestore rules: cho phép update `count` và `fromUids` khi group notifications (cần validate logic).
+
+#### Phase 2 – Grouping Logic
+- [ ] Tạo utility function `generateGroupKey(NotificationType type, String? postId, String toUid)` → `String`:
+  - Like: `like_{postId}_{toUid}`
+  - Comment: `comment_{postId}_{toUid}` (hoặc không group comments vì mỗi comment là unique)
+  - Follow: `follow_{toUid}` (group tất cả follow notifications cho cùng một user)
+  - Message: Không group (mỗi message là unique)
+- [ ] Cập nhật `NotificationService`:
+  - Thêm method `_findExistingGroupedNotification(String groupKey, String toUid, {Duration? timeWindow})` → `Future<Notification?>`:
+    - Query notifications với `groupKey` và `toUid` trong time window (ví dụ: 1 giờ gần đây).
+    - Trả về notification đã tồn tại nếu có.
+  - Cập nhật `createLikeNotification()`:
+    - Generate `groupKey` cho like.
+    - Kiểm tra có notification cùng `groupKey` trong 1 giờ gần đây không.
+    - Nếu có: Update `count++`, thêm `fromUid` vào `fromUids` (nếu chưa có), update `createdAt` = now.
+    - Nếu không: Tạo notification mới với `groupKey`, `count = 1`, `fromUids = [fromUid]`.
+  - Cập nhật `createFollowNotification()`:
+    - Tương tự như like, nhưng groupKey không có postId.
+    - Group tất cả follow notifications trong 1 giờ.
+  - Giữ nguyên `createCommentNotification()` và `createMessageNotification()` (không group).
+
+#### Phase 3 – Repository Updates
+- [ ] Cập nhật `NotificationRepository`:
+  - Thêm method `updateGroupedNotification(String notificationId, {int? count, List<String>? fromUids})` → `Future<void>`:
+    - Update `count` và `fromUids` của notification đã tồn tại.
+    - Update `createdAt` để notification hiển thị ở đầu list.
+  - Thêm method `findGroupedNotification(String groupKey, String toUid, {Duration? timeWindow})` → `Future<Notification?>`:
+    - Query notification với `groupKey` và `toUid` trong time window.
+
+#### Phase 4 – UI: Grouped Notifications Display
+- [ ] Cập nhật `NotificationCenterPage`:
+  - Tạo helper method `_formatGroupedNotificationTitle(Notification notification)` → `String`:
+    - Nếu `count > 1`: "5 người đã thích bài viết của bạn"
+    - Nếu `count == 1`: "Nguyễn Văn A đã thích bài viết của bạn"
+    - Xử lý các loại notification khác nhau (like, follow, comment).
+  - Cập nhật `_getNotificationTitle()` để sử dụng helper mới.
+  - Hiển thị avatars của những người đã thực hiện action (nếu `fromUids.length <= 3`, hiển thị tất cả; nếu > 3, hiển thị 3 + "và X người khác").
+  - Tap vào grouped notification → navigate đến post/profile tương ứng.
+
+#### Phase 5 – QA & Polish
+- [ ] Test các trường hợp:
+  - Spam like nhiều lần (10 likes trong 1 giờ) → chỉ tạo 1 notification với count = 10.
+  - Like từ nhiều người khác nhau → group đúng, hiển thị đúng số lượng.
+  - Like sau 1 giờ → tạo notification mới (không group với cái cũ).
+  - Follow notifications → group đúng theo toUid.
+  - Comment và message → không group (giữ nguyên behavior cũ).
+- [ ] Performance:
+  - Query grouped notification hiệu quả (index trên `groupKey` và `toUid`).
+  - Giới hạn số lượng `fromUids` trong một notification (ví dụ: tối đa 50 UIDs, sau đó chỉ hiển thị "và X người khác").
+
+---
+
+## Phần B: Notification Digest
+
+#### Phase 1 – Data & Rules
+- [ ] Tạo model `NotificationDigest`:
+  - `id` (string): Digest ID
+  - `uid` (string): User ID
+  - `period` (string): 'daily' hoặc 'weekly'
+  - `startDate` (DateTime): Ngày bắt đầu period
+  - `endDate` (DateTime): Ngày kết thúc period
+  - `stats` (map): Thống kê:
+    - `likesCount` (int): Tổng số lượt like
+    - `commentsCount` (int): Tổng số comment
+    - `followsCount` (int): Tổng số người follow mới
+    - `messagesCount` (int): Tổng số tin nhắn
+  - `topPosts` (list<string>): Danh sách post IDs có nhiều tương tác nhất
+  - `createdAt` (DateTime): Thời gian tạo digest
+- [ ] Tạo collection `notification_digests/{uid}/items/{digestId}` trong Firestore.
 - [ ] Firestore rules: chỉ owner được đọc/ghi digests của mình.
 
-#### Phase 2 – Service Logic
-- [ ] Cập nhật `NotificationService`:
-  - Khi tạo notification mới, kiểm tra có notification cùng `groupKey` trong khoảng thời gian gần đây để group.
-  - Tăng `count` thay vì tạo document mới nếu phù hợp.
+#### Phase 2 – Digest Service
 - [ ] Tạo `NotificationDigestService`:
-  - Gom dữ liệu like/follow/comment/message theo ngày/tuần.
-  - Tạo digest document định kỳ (initial version có thể chạy khi user mở app).
+  - Method `generateDailyDigest(String uid, DateTime date)` → `Future<NotificationDigest>`:
+    - Query tất cả notifications của user trong ngày.
+    - Aggregate: đếm likes, comments, follows, messages.
+    - Tìm top 5 posts có nhiều tương tác nhất.
+    - Tạo digest document.
+  - Method `generateWeeklyDigest(String uid, DateTime weekStart)` → `Future<NotificationDigest>`:
+    - Tương tự daily nhưng cho cả tuần.
+  - Method `watchDigests(String uid, {String? period})` → `Stream<List<NotificationDigest>>`:
+    - Watch digests của user, filter theo period nếu có.
+  - Method `fetchDigests(String uid, {String? period, int limit = 10})` → `Future<List<NotificationDigest>>`:
+    - Fetch digests với pagination.
 
-#### Phase 3 – UI & UX
-- [ ] Trong Notification Center: hiển thị dạng group (“5 người đã thích bài viết X”).
-- [ ] Tạo tab hoặc màn mới “Tổng kết” hiển thị digest (ví dụ: “Tuần này bạn có 30 lượt thích, 5 người theo dõi mới…”).
+#### Phase 3 – Auto-Generate Digest
+- [ ] Tích hợp vào app lifecycle:
+  - Khi user mở app lần đầu trong ngày/tuần, tự động generate digest (nếu chưa có).
+  - Hoặc generate digest khi user mở Notification Center (lazy generation).
+- [ ] Tối ưu: Chỉ generate digest khi có notifications mới trong period.
 
-#### Phase 4 – QA
-- [ ] Test logic group: spam like nhiều lần vẫn gom gọn, không tạo quá nhiều row.
-- [ ] Test hiển thị digest với nhiều trường hợp: ít tương tác, nhiều tương tác.
+#### Phase 4 – UI: Digest Page
+- [ ] Tạo `NotificationDigestPage`:
+  - TabBar với 2 tabs: "Hôm nay" và "Tuần này".
+  - Hiển thị digest với:
+    - Header: "Hôm nay bạn có X lượt thích, Y bình luận..."
+    - Cards cho từng loại thống kê (likes, comments, follows, messages).
+    - Section "Bài viết nổi bật" hiển thị top posts với preview.
+    - Empty state khi chưa có digest hoặc không có tương tác.
+  - Tap vào post trong "Bài viết nổi bật" → navigate đến `PostPermalinkPage`.
+- [ ] Tích hợp vào `NotificationCenterPage`:
+  - Thêm tab "Tổng kết" hoặc nút "Xem tổng kết" trong AppBar.
+  - Navigate đến `NotificationDigestPage`.
 
-**Files dự kiến:**
-- `lib/features/notifications/models/notification.dart` (bổ sung group fields)
-- `lib/features/notifications/services/notification_service.dart`
-- `lib/features/notifications/services/notification_digest_service.dart`
-- `lib/features/notifications/pages/notification_center_page.dart`
-- `lib/features/notifications/pages/notification_digest_page.dart`
-- `firebase/firestore.rules`
+#### Phase 5 – QA & Polish
+- [ ] Test các trường hợp:
+  - Generate digest với ít tương tác (0-5) → hiển thị đúng.
+  - Generate digest với nhiều tương tác (100+) → hiển thị đúng, performance tốt.
+  - Generate digest cho period không có notifications → empty state.
+  - Multiple digests cho cùng period → chỉ giữ 1 digest mới nhất.
+- [ ] UX improvements:
+  - Loading state khi đang generate digest.
+  - Refresh button để regenerate digest.
+  - Share digest (optional).
+
+---
+
+**Files dự kiến (Notification Grouping):**
+- `lib/features/notifications/models/notification.dart` (thêm fields `groupKey`, `count`, `fromUids`)
+- `lib/features/notifications/repositories/notification_repository.dart` (thêm methods update grouped notification)
+- `lib/features/notifications/services/notification_service.dart` (logic grouping khi tạo notification)
+- `lib/features/notifications/pages/notification_center_page.dart` (hiển thị grouped notifications)
+- `firebase/firestore.rules` (rules cho update grouped notifications)
+- `firebase/firestore.indexes.json` (index cho query `groupKey` và `toUid`)
+
+**Files dự kiến (Notification Digest):**
+- `lib/features/notifications/models/notification_digest.dart` (model mới)
+- `lib/features/notifications/repositories/notification_digest_repository.dart` (CRUD digests)
+- `lib/features/notifications/services/notification_digest_service.dart` (logic generate digest)
+- `lib/features/notifications/pages/notification_digest_page.dart` (UI hiển thị digest)
+- `firebase/firestore.rules` (rules cho `notification_digests`)
+
+---
+
+## 🔧 Bug Fixes & Improvements
+
+### Fix: Notification Digest Permission Denied & Index Error
+**Mô tả:** Khắc phục lỗi permission denied và index error khi tạo/xem notification digest
+
+**Vấn đề:**
+- Lỗi permission denied khi tạo digest trong tab "Hôm nay" và "Tuần này"
+- Query notifications trong range thiếu Firestore index
+- Query `watchDigests` với `where('period')` + `orderBy('createdAt')` thiếu index
+- Firestore rules có thể quá strict
+- RenderFlex overflow error trong UI
+- Không thấy thông báo sau khi tạo digest thành công
+
+**Giải pháp:**
+- [x] Thêm Firestore index cho query notifications với range (toUid + createdAt range + orderBy)
+- [x] Kiểm tra và điều chỉnh Firestore rules cho notification_digests
+- [x] Tối ưu query `fetchNotificationsInRange` để tránh lỗi index (filter endDate ở client-side)
+- [x] Sửa query `watchDigests` để bỏ where clause, filter period ở client-side
+- [x] Sửa RenderFlex overflow bằng cách wrap Column với SingleChildScrollView
+- [x] Cải thiện SnackBar message khi tạo digest thành công
+- [ ] Test tạo digest cho cả daily và weekly
+- [ ] Thêm error handling và logging để debug
+
+**Files đã sửa:**
+- `firebase/firestore.indexes.json` - Thêm index cho notifications range query
+- `firebase/firestore.rules` - Điều chỉnh rules cho notification_digests
+- `lib/features/notifications/repositories/notification_repository.dart` - Tối ưu query `fetchNotificationsInRange`
+- `lib/features/notifications/repositories/notification_digest_repository.dart` - Sửa query `watchDigests` để filter client-side
+- `lib/features/notifications/pages/notification_digest_page.dart` - Sửa UI overflow và cải thiện thông báo
+
+---
+
+### Fix: Điều chỉnh Notification Digest - Bỏ Messages & Thay đổi Comments Display
+**Mô tả:** Điều chỉnh logic tổng kết thông báo: bỏ tin nhắn và thay đổi cách hiển thị comments
+
+**Yêu cầu:**
+1. **Bỏ tổng kết tin nhắn (Messages):**
+   - Không tính `messagesCount` trong stats
+   - Không hiển thị card "Tin nhắn" trong UI
+   - Bỏ `messagesCount` khỏi `DigestStats` model (hoặc giữ nhưng không sử dụng)
+
+2. **Thay đổi cách hiển thị Comments:**
+   - Thay vì hiển thị từng thông báo comment riêng lẻ
+   - Hiển thị danh sách bài viết với tổng số comments mới cho mỗi bài viết
+   - Mỗi item hiển thị: Post preview + "X comments mới"
+   - Click vào item để mở PostPermalinkPage
+
+**Phase 1 - Data & Model:**
+- [ ] Xem xét có cần bỏ `messagesCount` khỏi `DigestStats` model hay chỉ bỏ khỏi UI
+- [ ] Đảm bảo `_aggregateStats` không tính messagesCount (hoặc tính nhưng không hiển thị)
+
+**Phase 2 - Service Layer:**
+- [ ] Sửa `_aggregateStats` trong `NotificationDigestService` để bỏ tính `messagesCount`
+- [ ] Tạo method mới `_aggregateCommentsByPost` để nhóm comments theo postId và đếm số lượng
+- [ ] Method này trả về Map<postId, count> hoặc List<PostCommentSummary>
+
+**Phase 3 - UI: Stats Cards:**
+- [ ] Bỏ `_StatCard` cho messages trong `_StatsGrid`
+- [ ] Giữ lại chỉ 3 cards: Like, Comments, Followers
+- [ ] Điều chỉnh `childAspectRatio` nếu cần (từ 2.0 có thể giữ nguyên hoặc điều chỉnh)
+
+**Phase 4 - UI: Comments Modal:**
+- [ ] Tạo model mới `PostCommentSummary` (postId, postPreview, commentsCount) hoặc dùng Map
+- [ ] Sửa `_NotificationDetailsModal` để xử lý riêng cho `NotificationType.comment`
+- [ ] Khi `notificationType == comment`:
+  - Load notifications comments trong range
+  - Nhóm theo `postId` và đếm số lượng
+  - Fetch post details cho mỗi postId (có thể cần batch fetch)
+  - Hiển thị danh sách posts với số comments mới
+- [ ] Mỗi item hiển thị:
+  - Post preview (thumbnail nếu có, hoặc icon)
+  - Post caption (truncated)
+  - "X comments mới" badge
+  - Click để mở PostPermalinkPage
+
+**Phase 5 - Performance & Optimization:**
+- [ ] Tối ưu việc fetch post details (có thể dùng batch query hoặc cache)
+- [ ] Xử lý trường hợp post đã bị xóa (postId không tồn tại)
+- [ ] Loading state khi fetch posts
+
+**Phase 6 - QA:**
+- [ ] Test tạo digest với nhiều comments trên nhiều posts khác nhau
+- [ ] Test với posts đã bị xóa
+- [ ] Test performance với số lượng lớn comments
+- [ ] Verify UI không còn hiển thị messages
+
+**Files cần sửa:**
+- `lib/features/notifications/models/notification_digest.dart` - Xem xét bỏ `messagesCount` hoặc giữ nhưng không dùng
+- `lib/features/notifications/services/notification_digest_service.dart` - Bỏ tính `messagesCount`, thêm logic nhóm comments theo post
+- `lib/features/notifications/pages/notification_digest_page.dart` - Bỏ card messages, sửa modal comments
+- `lib/features/posts/repositories/post_repository.dart` - Có thể cần thêm method batch fetch posts by IDs
+- `lib/features/posts/models/post.dart` - Có thể cần để fetch post preview
+
+**Lưu ý:**
+- Có thể cần tạo helper model `PostCommentSummary` để lưu thông tin post + số comments
+- Cân nhắc việc fetch post details: có thể fetch từng post hoặc batch fetch
+- UI comments modal nên có loading state và empty state
 
 ---
 

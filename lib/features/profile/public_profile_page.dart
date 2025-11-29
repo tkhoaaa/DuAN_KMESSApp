@@ -8,9 +8,13 @@ import '../follow/models/follow_state.dart';
 import '../follow/services/follow_service.dart';
 import '../safety/services/block_service.dart';
 import '../safety/services/report_service.dart';
+import '../posts/repositories/post_repository.dart';
+import '../posts/models/post.dart';
+import '../posts/models/post_media.dart';
+import '../posts/pages/post_permalink_page.dart';
 import 'user_profile_repository.dart';
 
-class PublicProfilePage extends StatelessWidget {
+class PublicProfilePage extends StatefulWidget {
   const PublicProfilePage({
     required this.uid,
     super.key,
@@ -19,21 +23,99 @@ class PublicProfilePage extends StatelessWidget {
   final String uid;
 
   @override
+  State<PublicProfilePage> createState() => _PublicProfilePageState();
+}
+
+class _PublicProfilePageState extends State<PublicProfilePage> {
+  final PostRepository _postRepository = PostRepository();
+  List<Post> _pinnedPosts = [];
+  List<Post> _allPosts = [];
+  bool _isLoadingPosts = false;
+  bool _isLoadingPinned = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPinnedPosts();
+    _loadAllPosts();
+  }
+
+  Future<void> _loadPinnedPosts() async {
+    setState(() {
+      _isLoadingPinned = true;
+    });
+
+    try {
+      final profile = await userProfileRepository.fetchProfile(widget.uid);
+      if (profile == null || profile.pinnedPostIds.isEmpty) {
+        setState(() {
+          _pinnedPosts = [];
+          _isLoadingPinned = false;
+        });
+        return;
+      }
+
+      final posts = <Post>[];
+      for (final postId in profile.pinnedPostIds) {
+        try {
+          final post = await _postRepository.watchPost(postId).first;
+          posts.add(post);
+        } catch (e) {
+          continue;
+        }
+      }
+
+      setState(() {
+        _pinnedPosts = posts;
+        _isLoadingPinned = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoadingPinned = false;
+      });
+    }
+  }
+
+  Future<void> _loadAllPosts() async {
+    setState(() {
+      _isLoadingPosts = true;
+    });
+
+    try {
+      final pageResult = await _postRepository.fetchPostsByAuthor(
+        authorUid: widget.uid,
+        limit: 50,
+      );
+
+      final posts = pageResult.docs.map((doc) => Post.fromDoc(doc)).toList();
+
+      setState(() {
+        _allPosts = posts;
+        _isLoadingPosts = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoadingPosts = false;
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final currentUid = authRepository.currentUser()?.uid;
     return Scaffold(
       appBar: AppBar(
         title: const Text('Trang cá nhân'),
-        actions: currentUid != null && currentUid != uid
+        actions: currentUid != null && currentUid != widget.uid
             ? [
                 _ProfileMoreMenu(
-                  targetUid: uid,
+                  targetUid: widget.uid,
                 ),
               ]
             : null,
       ),
       body: StreamBuilder<UserProfile?>(
-        stream: userProfileRepository.watchProfile(uid),
+        stream: userProfileRepository.watchProfile(widget.uid),
         builder: (context, snapshot) {
           final profile = snapshot.data;
           if (snapshot.connectionState == ConnectionState.waiting) {
@@ -69,7 +151,7 @@ class PublicProfilePage extends StatelessWidget {
 
           final userUid = currentUid;
           final canCheckBlocking =
-              userUid != null && userUid.isNotEmpty && userUid != uid;
+              userUid != null && userUid.isNotEmpty && userUid != widget.uid;
           Stream<bool> createBlockedByMeStream() {
             final resolvedUid = userUid;
             if (!canCheckBlocking || resolvedUid == null) {
@@ -77,7 +159,7 @@ class PublicProfilePage extends StatelessWidget {
             }
             return blockService.watchIsBlocked(
               blockerUid: resolvedUid,
-              blockedUid: uid,
+              blockedUid: widget.uid,
             );
           }
 
@@ -87,7 +169,7 @@ class PublicProfilePage extends StatelessWidget {
               return Stream<bool>.value(false);
             }
             return blockService.watchIsBlocked(
-              blockerUid: uid,
+              blockerUid: widget.uid,
               blockedUid: resolvedUid,
             );
           }
@@ -217,11 +299,117 @@ class PublicProfilePage extends StatelessWidget {
                       else
                         _FollowActions(
                           currentUid: currentUid,
-                          targetUid: uid,
+                          targetUid: widget.uid,
                           isTargetPrivate: profile.isPrivate,
                           isBlockedByCurrent: blockedByMe,
                           isBlockedByTarget: blockedByTarget,
                           themeColor: themeColor,
+                        ),
+                      const SizedBox(height: 24),
+                      // Pinned Posts Section
+                      if (_pinnedPosts.isNotEmpty) ...[
+                        const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 16),
+                          child: Row(
+                            children: [
+                              Icon(Icons.push_pin, size: 20, color: Colors.orange),
+                              SizedBox(width: 8),
+                              Text(
+                                'Bài viết đã ghim',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          height: 120,
+                          child: ListView.builder(
+                            scrollDirection: Axis.horizontal,
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            itemCount: _pinnedPosts.length,
+                            itemBuilder: (context, index) {
+                              final post = _pinnedPosts[index];
+                              return _PinnedPostItem(
+                                post: post,
+                                onTap: () {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => PostPermalinkPage(
+                                        postId: post.id,
+                                      ),
+                                    ),
+                                  );
+                                },
+                              );
+                            },
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+                      // Posts Grid Section
+                      const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 16),
+                        child: Row(
+                          children: [
+                            Icon(Icons.grid_on, size: 20),
+                            SizedBox(width: 8),
+                            Text(
+                              'Bài viết',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      if (_isLoadingPosts)
+                        const Padding(
+                          padding: EdgeInsets.all(32),
+                          child: Center(child: CircularProgressIndicator()),
+                        )
+                      else if (_allPosts.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.all(32),
+                          child: Center(
+                            child: Text(
+                              'Chưa có bài viết nào',
+                              style: TextStyle(color: Colors.grey),
+                            ),
+                          ),
+                        )
+                      else
+                        GridView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          padding: const EdgeInsets.all(8),
+                          gridDelegate:
+                              const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 3,
+                            crossAxisSpacing: 4,
+                            mainAxisSpacing: 4,
+                          ),
+                          itemCount: _allPosts.length,
+                          itemBuilder: (context, index) {
+                            final post = _allPosts[index];
+                            return _PostGridItem(
+                              post: post,
+                              onTap: () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => PostPermalinkPage(
+                                      postId: post.id,
+                                    ),
+                                  ),
+                                );
+                              },
+                            );
+                          },
                         ),
                     ],
                   );
@@ -677,6 +865,131 @@ class _BlockedInfoBanner extends StatelessWidget {
         style: TextStyle(
           color: Theme.of(context).colorScheme.onErrorContainer,
         ),
+      ),
+    );
+  }
+}
+
+class _PinnedPostItem extends StatelessWidget {
+  const _PinnedPostItem({
+    required this.post,
+    required this.onTap,
+  });
+
+  final Post post;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final firstMedia = post.media.isNotEmpty ? post.media.first : null;
+    final isImage = firstMedia?.type == PostMediaType.image;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 120,
+        margin: const EdgeInsets.symmetric(horizontal: 4),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.orange, width: 2),
+        ),
+        child: Stack(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: firstMedia != null
+                  ? (isImage
+                      ? Image.network(
+                          firstMedia.url,
+                          width: 120,
+                          height: 120,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => Container(
+                            width: 120,
+                            height: 120,
+                            color: Colors.grey[300],
+                            child: const Icon(Icons.broken_image),
+                          ),
+                        )
+                      : Container(
+                          width: 120,
+                          height: 120,
+                          color: Colors.grey[300],
+                          child: const Icon(Icons.videocam, size: 32),
+                        ))
+                  : Container(
+                      width: 120,
+                      height: 120,
+                      color: Colors.grey[300],
+                      child: const Icon(Icons.image, size: 32),
+                    ),
+            ),
+            const Positioned(
+              top: 4,
+              right: 4,
+              child: Icon(
+                Icons.push_pin,
+                size: 16,
+                color: Colors.orange,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PostGridItem extends StatelessWidget {
+  const _PostGridItem({
+    required this.post,
+    required this.onTap,
+  });
+
+  final Post post;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    if (post.media.isEmpty) {
+      return GestureDetector(
+        onTap: onTap,
+        child: Container(
+          color: Colors.grey[300],
+          child: const Icon(Icons.image, size: 48),
+        ),
+      );
+    }
+
+    final firstMedia = post.media.first;
+    final isVideo = firstMedia.type == PostMediaType.video;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Image.network(
+            firstMedia.thumbnailUrl ?? firstMedia.url,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) {
+              return Container(
+                color: Colors.grey[300],
+                child: const Icon(Icons.broken_image),
+              );
+            },
+          ),
+          if (isVideo)
+            const Positioned(
+              bottom: 4,
+              right: 4,
+              child: Icon(
+                Icons.play_circle_filled,
+                color: Colors.white,
+                size: 24,
+              ),
+            ),
+        ],
       ),
     );
   }

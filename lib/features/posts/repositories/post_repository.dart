@@ -305,7 +305,7 @@ class PostRepository {
     
     // Xóa post document
     batch.delete(postRef);
-    
+
     // Giảm postsCount
     batch.set(
       _firestore.collection('user_profiles').doc(authorUid),
@@ -315,8 +315,55 @@ class PostRepository {
       },
       SetOptions(merge: true),
     );
-    
+
     await batch.commit();
+
+    // Tự động gỡ post khỏi pinnedPostIds của tất cả users
+    // Query tất cả user_profiles có pinnedPostIds chứa postId này
+    final profilesWithPinned = await _firestore
+        .collection('user_profiles')
+        .where('pinnedPostIds', arrayContains: postId)
+        .get();
+
+    // Update từng profile để xóa postId khỏi pinnedPostIds
+    if (profilesWithPinned.docs.isNotEmpty) {
+      final updateBatch = _firestore.batch();
+      for (final profileDoc in profilesWithPinned.docs) {
+        final profileData = profileDoc.data();
+        final pinnedPostIds = List<String>.from(
+          profileData['pinnedPostIds'] as List<dynamic>? ?? [],
+        );
+        pinnedPostIds.remove(postId);
+        
+        updateBatch.update(profileDoc.reference, {
+          'pinnedPostIds': pinnedPostIds,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      }
+      await updateBatch.commit();
+    }
+  }
+
+  /// Fetch posts theo authorUid (pagination)
+  Future<PostPageResult> fetchPostsByAuthor({
+    required String authorUid,
+    DocumentSnapshot<Map<String, dynamic>>? startAfter,
+    int limit = 20,
+  }) async {
+    Query<Map<String, dynamic>> query = _posts
+        .where('authorUid', isEqualTo: authorUid)
+        .orderBy('createdAt', descending: true)
+        .limit(limit);
+    if (startAfter != null) {
+      query = query.startAfterDocument(startAfter);
+    }
+    final snap = await query.get();
+    final docs = snap.docs;
+    return PostPageResult(
+      docs: docs,
+      lastDoc: docs.isNotEmpty ? docs.last : startAfter,
+      hasMore: docs.length == limit,
+    );
   }
 
   /// Tìm kiếm posts theo caption (sử dụng captionLower)

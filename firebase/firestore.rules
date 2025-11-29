@@ -18,7 +18,7 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && request.auth.uid == uid;
       // Cho phép update nếu là owner hoặc chỉ update followersCount/followingCount
-      // Owner có thể update themeColor và links
+      // Owner có thể update themeColor, links, và pinnedPostIds
       allow update: if isOwner(uid) || (
         isSignedIn() && 
         request.resource.data.diff(resource.data).affectedKeys().hasAny(['followersCount', 'followingCount']) &&
@@ -194,6 +194,7 @@ service cloud.firestore {
 
     // Notifications collection
     match /notifications/{notificationId} {
+      // Cho phép read nếu là toUid (owner của notification)
       allow read: if isSignedIn() && request.auth.uid == resource.data.toUid;
       allow create: if isSignedIn() 
         && request.resource.data.fromUid == request.auth.uid
@@ -201,8 +202,35 @@ service cloud.firestore {
         && request.resource.data.type is string;
       allow update: if isSignedIn() 
         && request.auth.uid == resource.data.toUid
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+        && (
+          // Cho phép update read
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']) ||
+          // Cho phép update grouped notification (count, fromUids, createdAt)
+          (
+            request.resource.data.diff(resource.data).affectedKeys().hasAny(['count', 'fromUids', 'createdAt']) &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['count', 'fromUids', 'createdAt']) &&
+            request.resource.data.count is int &&
+            request.resource.data.count > 0 &&
+            request.resource.data.fromUids is list
+          )
+        );
       allow delete: if isSignedIn() && request.auth.uid == resource.data.toUid;
+    }
+
+    // Notification digests collection
+    // Cấu trúc: notification_digests/{uid}/items/{digestId}
+    match /notification_digests/{uid} {
+      match /items/{digestId} {
+        allow read: if isSignedIn() && request.auth.uid == uid;
+        allow create: if isSignedIn()
+          && request.auth.uid == uid
+          && request.resource.data.uid == uid
+          && request.resource.data.period is string
+          && request.resource.data.startDate is timestamp
+          && request.resource.data.endDate is timestamp
+          && request.resource.data.stats is map;
+        allow update, delete: if isSignedIn() && request.auth.uid == uid;
+      }
     }
 
     // Stories collection
