@@ -18,7 +18,7 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && request.auth.uid == uid;
       // Cho phép update nếu là owner hoặc chỉ update followersCount/followingCount
-      // Owner có thể update themeColor, links, và pinnedPostIds
+      // Owner có thể update themeColor, links, pinnedPostIds, và privacy settings
       allow update: if isOwner(uid) || (
         isSignedIn() && 
         request.resource.data.diff(resource.data).affectedKeys().hasAny(['followersCount', 'followingCount']) &&

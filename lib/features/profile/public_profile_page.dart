@@ -28,10 +28,12 @@ class PublicProfilePage extends StatefulWidget {
 
 class _PublicProfilePageState extends State<PublicProfilePage> {
   final PostRepository _postRepository = PostRepository();
+  final FollowService _followService = FollowService();
   List<Post> _pinnedPosts = [];
   List<Post> _allPosts = [];
   bool _isLoadingPosts = false;
   bool _isLoadingPinned = false;
+  bool? _isFollowing;
 
   @override
   void initState() {
@@ -131,22 +133,35 @@ class _PublicProfilePageState extends State<PublicProfilePage> {
                   ? profile.email!
                   : profile.uid);
 
-          String statusText;
-          if (profile.isOnline) {
-            statusText = 'Đang hoạt động';
-          } else if (profile.lastSeen != null) {
-            final diff = DateTime.now().difference(profile.lastSeen!);
-            if (diff.inMinutes < 1) {
-              statusText = 'Vừa mới hoạt động';
-            } else if (diff.inHours < 1) {
-              statusText = 'Hoạt động ${diff.inMinutes} phút trước';
-            } else if (diff.inDays < 1) {
-              statusText = 'Hoạt động ${diff.inHours} giờ trước';
-            } else {
-              statusText = 'Hoạt động ${diff.inDays} ngày trước';
+          // Kiểm tra privacy settings để hiển thị status
+          String statusText = 'Ngoại tuyến';
+          final isViewer = currentUid == widget.uid;
+          
+          // Nếu là chính mình, luôn hiển thị status
+          if (isViewer) {
+            if (profile.isOnline) {
+              statusText = 'Đang hoạt động';
+            } else if (profile.lastSeen != null) {
+              final diff = DateTime.now().difference(profile.lastSeen!);
+              if (diff.inMinutes < 1) {
+                statusText = 'Vừa mới hoạt động';
+              } else if (diff.inHours < 1) {
+                statusText = 'Hoạt động ${diff.inMinutes} phút trước';
+              } else if (diff.inDays < 1) {
+                statusText = 'Hoạt động ${diff.inHours} giờ trước';
+              } else {
+                statusText = 'Hoạt động ${diff.inDays} ngày trước';
+              }
             }
-          } else {
-            statusText = 'Ngoại tuyến';
+          } else if (currentUid != null) {
+            // Kiểm tra privacy settings
+            // Online status
+            if (profile.showOnlineStatus && profile.isOnline) {
+              statusText = 'Đang hoạt động';
+            } else if (profile.lastSeen != null) {
+              // Last seen visibility - cần check follow status
+              // Sẽ được xử lý trong nested StreamBuilder
+            }
           }
 
           final userUid = currentUid;
@@ -222,13 +237,85 @@ class _PublicProfilePageState extends State<PublicProfilePage> {
                         ),
                       ),
                       const SizedBox(height: 4),
-                      Text(
-                        statusText,
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      // Hiển thị status với privacy check
+                      if (currentUid == widget.uid)
+                        Text(
+                          statusText,
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                        )
+                      else if (currentUid != null)
+                        StreamBuilder<FollowState>(
+                          stream: _followService.watchFollowState(
+                            currentUid,
+                            widget.uid,
+                          ),
+                          builder: (context, followSnapshot) {
+                            final followState = followSnapshot.data ??
+                                const FollowState(
+                                  status: FollowStatus.none,
+                                  isTargetPrivate: false,
+                                );
+                            final isFollowing =
+                                followState.status == FollowStatus.following;
+
+                            // Tính toán statusText dựa trên privacy settings
+                            String displayStatus = 'Ngoại tuyến';
+                            if (profile.showOnlineStatus && profile.isOnline) {
+                              displayStatus = 'Đang hoạt động';
+                            } else if (profile.lastSeen != null) {
+                              bool canViewLastSeen = false;
+                              switch (profile.lastSeenVisibility) {
+                                case LastSeenVisibility.everyone:
+                                  canViewLastSeen = true;
+                                  break;
+                                case LastSeenVisibility.followers:
+                                  canViewLastSeen = isFollowing;
+                                  break;
+                                case LastSeenVisibility.nobody:
+                                  canViewLastSeen = false;
+                                  break;
+                              }
+
+                              if (canViewLastSeen) {
+                                final diff =
+                                    DateTime.now().difference(profile.lastSeen!);
+                                if (diff.inMinutes < 1) {
+                                  displayStatus = 'Vừa mới hoạt động';
+                                } else if (diff.inHours < 1) {
+                                  displayStatus =
+                                      'Hoạt động ${diff.inMinutes} phút trước';
+                                } else if (diff.inDays < 1) {
+                                  displayStatus =
+                                      'Hoạt động ${diff.inHours} giờ trước';
+                                } else {
+                                  displayStatus =
+                                      'Hoạt động ${diff.inDays} ngày trước';
+                                }
+                              }
+                            }
+
+                            return Text(
+                              displayStatus,
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
+                              ),
+                            );
+                          },
+                        )
+                      else
+                        Text(
+                          statusText,
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
                         ),
-                      ),
                       if (blockedByTarget)
                         _BlockedInfoBanner(
                           message:
@@ -522,37 +609,53 @@ class _FollowActionsState extends State<_FollowActions> {
               ),
             );
             buttons.add(
-              OutlinedButton(
-                onPressed: () async {
-                  final isBlocked = await _blockService.isEitherBlocked(
-                    widget.currentUid,
-                    widget.targetUid,
-                  );
-                  if (isBlocked) {
-                    if (!mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Không thể nhắn tin vì đã bị chặn.'),
-                      ),
-                    );
-                    return;
-                  }
-                  final conversationId =
-                      await _chatRepository.createOrGetDirectConversation(
-                    currentUid: widget.currentUid,
-                    otherUid: widget.targetUid,
-                  );
-                  if (!mounted) return;
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => ChatDetailPage(
-                        conversationId: conversationId,
-                        otherUid: widget.targetUid,
-                      ),
-                    ),
+              StreamBuilder<UserProfile?>(
+                stream: userProfileRepository.watchProfile(widget.targetUid),
+                builder: (context, profileSnapshot) {
+                  final targetProfile = profileSnapshot.data;
+                  final canMessage = targetProfile != null &&
+                      userProfileRepository.canSendMessage(
+                        senderUid: widget.currentUid,
+                        receiverUid: widget.targetUid,
+                        isFollowing: state.status == FollowStatus.following,
+                        messagePermission: targetProfile.messagePermission,
+                      );
+
+                  return OutlinedButton(
+                    onPressed: canMessage
+                        ? () async {
+                            final isBlocked = await _blockService.isEitherBlocked(
+                              widget.currentUid,
+                              widget.targetUid,
+                            );
+                            if (isBlocked) {
+                              if (!mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Không thể nhắn tin vì đã bị chặn.'),
+                                ),
+                              );
+                              return;
+                            }
+                            final conversationId =
+                                await _chatRepository.createOrGetDirectConversation(
+                              currentUid: widget.currentUid,
+                              otherUid: widget.targetUid,
+                            );
+                            if (!mounted) return;
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => ChatDetailPage(
+                                  conversationId: conversationId,
+                                  otherUid: widget.targetUid,
+                                ),
+                              ),
+                            );
+                          }
+                        : null,
+                    child: const Text('Nhắn tin'),
                   );
                 },
-                child: const Text('Nhắn tin'),
               ),
             );
             break;

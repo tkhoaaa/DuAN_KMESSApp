@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../notifications/services/notification_service.dart';
+import '../../profile/user_profile_repository.dart';
 import '../models/conversation_summary.dart';
 import '../models/message.dart';
 import '../models/message_attachment.dart';
@@ -87,6 +88,30 @@ class ChatRepository {
       'lastReadAt': FieldValue.serverTimestamp(),
       'notificationsEnabled': true,
     }, SetOptions(merge: true));
+  }
+
+  /// Kiểm tra xem sender có thể nhắn tin cho receiver không
+  /// Trả về true nếu có thể, false nếu không
+  Future<bool> canCreateConversation({
+    required String senderUid,
+    required String receiverUid,
+    required bool isFollowing,
+  }) async {
+    // Không thể nhắn tin cho chính mình
+    if (senderUid == receiverUid) return false;
+
+    final profileRepository = UserProfileRepository();
+    final receiverProfile = await profileRepository.fetchProfile(receiverUid);
+    if (receiverProfile == null) return false;
+
+    switch (receiverProfile.messagePermission) {
+      case MessagePermission.everyone:
+        return true;
+      case MessagePermission.followers:
+        return isFollowing;
+      case MessagePermission.nobody:
+        return false;
+    }
   }
 
   /// Tạo hoặc lấy conversation 1-1 dựa trên hai UID

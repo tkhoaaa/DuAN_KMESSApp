@@ -1,5 +1,17 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+enum LastSeenVisibility {
+  everyone,
+  followers,
+  nobody,
+}
+
+enum MessagePermission {
+  everyone,
+  followers,
+  nobody,
+}
+
 class ProfileLink {
   ProfileLink({
     required this.url,
@@ -44,6 +56,9 @@ class UserProfile {
     this.themeColor,
     this.links = const [],
     this.pinnedPostIds = const [],
+    this.showOnlineStatus = true,
+    this.lastSeenVisibility = LastSeenVisibility.everyone,
+    this.messagePermission = MessagePermission.everyone,
   });
 
   final String uid;
@@ -64,6 +79,9 @@ class UserProfile {
   final String? themeColor; // Hex color code (e.g., "#FF5733")
   final List<ProfileLink> links; // List of external links
   final List<String> pinnedPostIds; // List of pinned post IDs (max 3)
+  final bool showOnlineStatus; // Hiển thị trạng thái online/offline
+  final LastSeenVisibility lastSeenVisibility; // Ai được xem last seen
+  final MessagePermission messagePermission; // Ai được phép nhắn tin
 
   Map<String, dynamic> toMap() {
     return {
@@ -84,6 +102,9 @@ class UserProfile {
       'themeColor': themeColor,
       'links': links.map((link) => link.toMap()).toList(),
       'pinnedPostIds': pinnedPostIds,
+      'showOnlineStatus': showOnlineStatus,
+      'lastSeenVisibility': lastSeenVisibility.name,
+      'messagePermission': messagePermission.name,
     };
   }
 
@@ -100,6 +121,20 @@ class UserProfile {
         .map((item) => item.toString())
         .where((item) => item.isNotEmpty)
         .toList();
+    
+    // Parse privacy settings với default values
+    final lastSeenVisibilityStr = data['lastSeenVisibility'] as String? ?? 'everyone';
+    final lastSeenVisibility = LastSeenVisibility.values.firstWhere(
+      (e) => e.name == lastSeenVisibilityStr,
+      orElse: () => LastSeenVisibility.everyone,
+    );
+    
+    final messagePermissionStr = data['messagePermission'] as String? ?? 'everyone';
+    final messagePermission = MessagePermission.values.firstWhere(
+      (e) => e.name == messagePermissionStr,
+      orElse: () => MessagePermission.everyone,
+    );
+    
     return UserProfile(
       uid: doc.id,
       displayName: data['displayName'] as String?,
@@ -119,6 +154,9 @@ class UserProfile {
       themeColor: data['themeColor'] as String?,
       links: links,
       pinnedPostIds: pinnedPostIds,
+      showOnlineStatus: (data['showOnlineStatus'] as bool?) ?? true,
+      lastSeenVisibility: lastSeenVisibility,
+      messagePermission: messagePermission,
     );
   }
 }
@@ -222,6 +260,9 @@ class UserProfileRepository {
     bool? isPrivate,
     String? themeColor,
     List<ProfileLink>? links,
+    bool? showOnlineStatus,
+    LastSeenVisibility? lastSeenVisibility,
+    MessagePermission? messagePermission,
   }) async {
     final data = <String, dynamic>{
       'updatedAt': FieldValue.serverTimestamp(),
@@ -250,8 +291,79 @@ class UserProfileRepository {
     if (links != null) {
       data['links'] = links.map((link) => link.toMap()).toList();
     }
+    if (showOnlineStatus != null) {
+      data['showOnlineStatus'] = showOnlineStatus;
+    }
+    if (lastSeenVisibility != null) {
+      data['lastSeenVisibility'] = lastSeenVisibility.name;
+    }
+    if (messagePermission != null) {
+      data['messagePermission'] = messagePermission.name;
+    }
 
     await _collection.doc(uid).set(data, SetOptions(merge: true));
+  }
+
+  /// Cập nhật privacy settings
+  Future<void> updatePrivacySettings(
+    String uid, {
+    bool? showOnlineStatus,
+    LastSeenVisibility? lastSeenVisibility,
+    MessagePermission? messagePermission,
+  }) async {
+    final data = <String, dynamic>{
+      'updatedAt': FieldValue.serverTimestamp(),
+    };
+    
+    if (showOnlineStatus != null) {
+      data['showOnlineStatus'] = showOnlineStatus;
+    }
+    if (lastSeenVisibility != null) {
+      data['lastSeenVisibility'] = lastSeenVisibility.name;
+    }
+    if (messagePermission != null) {
+      data['messagePermission'] = messagePermission.name;
+    }
+
+    await _collection.doc(uid).set(data, SetOptions(merge: true));
+  }
+
+  /// Kiểm tra xem viewer có thể xem last seen của profile owner không
+  /// Trả về true nếu có thể xem, false nếu không
+  /// Cần truyền isFollowing từ bên ngoài để tránh circular dependency
+  bool canViewLastSeen({
+    required String viewerUid,
+    required String profileUid,
+    required bool isFollowing,
+  }) {
+    // Nếu là chính mình, luôn có thể xem
+    if (viewerUid == profileUid) return true;
+
+    // Tạm thời return true, sẽ được cập nhật khi có profile data
+    // Logic thực tế sẽ được xử lý trong UI layer với profile data
+    return true;
+  }
+
+  /// Kiểm tra xem sender có thể nhắn tin cho receiver không
+  /// Trả về true nếu có thể, false nếu không
+  /// Cần truyền isFollowing từ bên ngoài để tránh circular dependency
+  bool canSendMessage({
+    required String senderUid,
+    required String receiverUid,
+    required bool isFollowing,
+    required MessagePermission messagePermission,
+  }) {
+    // Không thể nhắn tin cho chính mình
+    if (senderUid == receiverUid) return false;
+
+    switch (messagePermission) {
+      case MessagePermission.everyone:
+        return true;
+      case MessagePermission.followers:
+        return isFollowing;
+      case MessagePermission.nobody:
+        return false;
+    }
   }
 
   Future<void> setPresence(String uid, bool isOnline) async {

@@ -567,16 +567,16 @@
 **Lưu ý:** Phần này chỉ implement sau khi có Stories feature (Task 11). Tạm thời để trống.
 
 #### Phase 1 – Data & Rules (Stories Highlights)
-- [ ] Thêm collection `story_highlights/{uid}/albums/{albumId}` với structure:
+- [x] Thêm collection `story_highlights/{uid}/albums/{albumId}` với structure:
   - `name` (string): Tên highlight album
   - `coverStoryId` (string): ID của story dùng làm cover
   - `storyIds` (list<string>): Danh sách story IDs trong album
   - `createdAt` (timestamp): Thời gian tạo album
   - `updatedAt` (timestamp): Thời gian cập nhật gần nhất
-- [ ] Firestore rules: chỉ owner được đọc/ghi albums highlights của mình.
+- [x] Firestore rules: chỉ owner được đọc/ghi albums highlights của mình.
 
 #### Phase 2 – Repository & Service (Stories Highlights)
-- [ ] Tạo `StoryHighlightRepository`:
+- [x] Tạo `StoryHighlightRepository`:
   - `createHighlightAlbum(String uid, String name, String coverStoryId, List<String> storyIds)` → `Future<String>` (albumId).
   - `updateHighlightAlbum(String uid, String albumId, {String? name, String? coverStoryId, List<String>? storyIds})` → `Future<void>`.
   - `deleteHighlightAlbum(String uid, String albumId)` → `Future<void>`.
@@ -585,13 +585,13 @@
   - `removeStoryFromAlbum(String uid, String albumId, String storyId)` → `Future<void>`.
 
 #### Phase 3 – UI (Stories Highlights)
-- [ ] Tạo widget `StoryHighlightRow`:
+- [x] Tạo widget `StoryHighlightRow`:
   - Hiển thị horizontal scrollable list các highlight albums.
   - Mỗi album hiển thị avatar nhỏ (cover story), tên album bên dưới.
   - Tap vào album → mở story viewer với stories trong album.
-- [ ] Tích hợp vào `PublicProfilePage`:
+- [x] Tích hợp vào `PublicProfilePage`:
   - Hiển thị `StoryHighlightRow` phía trên pinned posts (nếu có highlights).
-- [ ] Tạo màn hình quản lý highlights (từ stories đã hết hạn):
+- [x] Tạo màn hình quản lý highlights (từ stories đã hết hạn):
   - Chọn stories để tạo album mới.
   - Chọn tên album, cover story.
   - Quản lý albums: sửa tên, xóa album, thêm/bớt stories.
@@ -630,20 +630,20 @@
 ## Phần A: Notification Grouping
 
 #### Phase 1 – Data & Rules
-- [ ] Bổ sung fields vào model `Notification`:
+- [x] Bổ sung fields vào model `Notification`:
   - `groupKey` (string, optional): Key để group notifications (format: `{type}_{postId}_{toUid}` hoặc `{type}_{toUid}`)
   - `count` (int, default: 1): Số lượng notifications được group
   - `fromUids` (list<string>, optional): Danh sách UIDs của những người đã thực hiện action (thay vì chỉ `fromUid`)
-- [ ] Cập nhật `toMap()` và `fromDoc()` trong `Notification` để serialize/deserialize các fields mới.
-- [ ] Cập nhật Firestore rules: cho phép update `count` và `fromUids` khi group notifications (cần validate logic).
+- [x] Cập nhật `toMap()` và `fromDoc()` trong `Notification` để serialize/deserialize các fields mới.
+- [x] Cập nhật Firestore rules: cho phép update `count` và `fromUids` khi group notifications (cần validate logic).
 
 #### Phase 2 – Grouping Logic
-- [ ] Tạo utility function `generateGroupKey(NotificationType type, String? postId, String toUid)` → `String`:
+- [x] Tạo utility function `generateGroupKey(NotificationType type, String? postId, String toUid)` → `String`:
   - Like: `like_{postId}_{toUid}`
   - Comment: `comment_{postId}_{toUid}` (hoặc không group comments vì mỗi comment là unique)
   - Follow: `follow_{toUid}` (group tất cả follow notifications cho cùng một user)
   - Message: Không group (mỗi message là unique)
-- [ ] Cập nhật `NotificationService`:
+- [x] Cập nhật `NotificationService`:
   - Thêm method `_findExistingGroupedNotification(String groupKey, String toUid, {Duration? timeWindow})` → `Future<Notification?>`:
     - Query notifications với `groupKey` và `toUid` trong time window (ví dụ: 1 giờ gần đây).
     - Trả về notification đã tồn tại nếu có.
@@ -658,7 +658,7 @@
   - Giữ nguyên `createCommentNotification()` và `createMessageNotification()` (không group).
 
 #### Phase 3 – Repository Updates
-- [ ] Cập nhật `NotificationRepository`:
+- [x] Cập nhật `NotificationRepository`:
   - Thêm method `updateGroupedNotification(String notificationId, {int? count, List<String>? fromUids})` → `Future<void>`:
     - Update `count` và `fromUids` của notification đã tồn tại.
     - Update `createdAt` để notification hiển thị ở đầu list.
@@ -666,7 +666,7 @@
     - Query notification với `groupKey` và `toUid` trong time window.
 
 #### Phase 4 – UI: Grouped Notifications Display
-- [ ] Cập nhật `NotificationCenterPage`:
+- [x] Cập nhật `NotificationCenterPage`:
   - Tạo helper method `_formatGroupedNotificationTitle(Notification notification)` → `String`:
     - Nếu `count > 1`: "5 người đã thích bài viết của bạn"
     - Nếu `count == 1`: "Nguyễn Văn A đã thích bài viết của bạn"
@@ -676,13 +676,13 @@
   - Tap vào grouped notification → navigate đến post/profile tương ứng.
 
 #### Phase 5 – QA & Polish
-- [ ] Test các trường hợp:
+- [x] Test các trường hợp:
   - Spam like nhiều lần (10 likes trong 1 giờ) → chỉ tạo 1 notification với count = 10.
   - Like từ nhiều người khác nhau → group đúng, hiển thị đúng số lượng.
   - Like sau 1 giờ → tạo notification mới (không group với cái cũ).
   - Follow notifications → group đúng theo toUid.
   - Comment và message → không group (giữ nguyên behavior cũ).
-- [ ] Performance:
+- [x] Performance:
   - Query grouped notification hiệu quả (index trên `groupKey` và `toUid`).
   - Giới hạn số lượng `fromUids` trong một notification (ví dụ: tối đa 50 UIDs, sau đó chỉ hiển thị "và X người khác").
 
@@ -691,7 +691,7 @@
 ## Phần B: Notification Digest
 
 #### Phase 1 – Data & Rules
-- [ ] Tạo model `NotificationDigest`:
+- [x] Tạo model `NotificationDigest`:
   - `id` (string): Digest ID
   - `uid` (string): User ID
   - `period` (string): 'daily' hoặc 'weekly'
@@ -704,11 +704,11 @@
     - `messagesCount` (int): Tổng số tin nhắn
   - `topPosts` (list<string>): Danh sách post IDs có nhiều tương tác nhất
   - `createdAt` (DateTime): Thời gian tạo digest
-- [ ] Tạo collection `notification_digests/{uid}/items/{digestId}` trong Firestore.
-- [ ] Firestore rules: chỉ owner được đọc/ghi digests của mình.
+- [x] Tạo collection `notification_digests/{uid}/items/{digestId}` trong Firestore.
+- [x] Firestore rules: chỉ owner được đọc/ghi digests của mình.
 
 #### Phase 2 – Digest Service
-- [ ] Tạo `NotificationDigestService`:
+- [x] Tạo `NotificationDigestService`:
   - Method `generateDailyDigest(String uid, DateTime date)` → `Future<NotificationDigest>`:
     - Query tất cả notifications của user trong ngày.
     - Aggregate: đếm likes, comments, follows, messages.
@@ -722,13 +722,13 @@
     - Fetch digests với pagination.
 
 #### Phase 3 – Auto-Generate Digest
-- [ ] Tích hợp vào app lifecycle:
+- [x] Tích hợp vào app lifecycle:
   - Khi user mở app lần đầu trong ngày/tuần, tự động generate digest (nếu chưa có).
   - Hoặc generate digest khi user mở Notification Center (lazy generation).
-- [ ] Tối ưu: Chỉ generate digest khi có notifications mới trong period.
+- [x] Tối ưu: Chỉ generate digest khi có notifications mới trong period.
 
 #### Phase 4 – UI: Digest Page
-- [ ] Tạo `NotificationDigestPage`:
+- [x] Tạo `NotificationDigestPage`:
   - TabBar với 2 tabs: "Hôm nay" và "Tuần này".
   - Hiển thị digest với:
     - Header: "Hôm nay bạn có X lượt thích, Y bình luận..."
@@ -736,17 +736,17 @@
     - Section "Bài viết nổi bật" hiển thị top posts với preview.
     - Empty state khi chưa có digest hoặc không có tương tác.
   - Tap vào post trong "Bài viết nổi bật" → navigate đến `PostPermalinkPage`.
-- [ ] Tích hợp vào `NotificationCenterPage`:
+- [x] Tích hợp vào `NotificationCenterPage`:
   - Thêm tab "Tổng kết" hoặc nút "Xem tổng kết" trong AppBar.
   - Navigate đến `NotificationDigestPage`.
 
 #### Phase 5 – QA & Polish
-- [ ] Test các trường hợp:
+- [x] Test các trường hợp:
   - Generate digest với ít tương tác (0-5) → hiển thị đúng.
   - Generate digest với nhiều tương tác (100+) → hiển thị đúng, performance tốt.
   - Generate digest cho period không có notifications → empty state.
   - Multiple digests cho cùng period → chỉ giữ 1 digest mới nhất.
-- [ ] UX improvements:
+- [x] UX improvements:
   - Loading state khi đang generate digest.
   - Refresh button để regenerate digest.
   - Share digest (optional).
@@ -768,143 +768,116 @@
 - `lib/features/notifications/pages/notification_digest_page.dart` (UI hiển thị digest)
 - `firebase/firestore.rules` (rules cho `notification_digests`)
 
----
-
-## 🔧 Bug Fixes & Improvements
-
-### Fix: Notification Digest Permission Denied & Index Error
-**Mô tả:** Khắc phục lỗi permission denied và index error khi tạo/xem notification digest
-
-**Vấn đề:**
-- Lỗi permission denied khi tạo digest trong tab "Hôm nay" và "Tuần này"
-- Query notifications trong range thiếu Firestore index
-- Query `watchDigests` với `where('period')` + `orderBy('createdAt')` thiếu index
-- Firestore rules có thể quá strict
-- RenderFlex overflow error trong UI
-- Không thấy thông báo sau khi tạo digest thành công
-
-**Giải pháp:**
-- [x] Thêm Firestore index cho query notifications với range (toUid + createdAt range + orderBy)
-- [x] Kiểm tra và điều chỉnh Firestore rules cho notification_digests
-- [x] Tối ưu query `fetchNotificationsInRange` để tránh lỗi index (filter endDate ở client-side)
-- [x] Sửa query `watchDigests` để bỏ where clause, filter period ở client-side
-- [x] Sửa RenderFlex overflow bằng cách wrap Column với SingleChildScrollView
-- [x] Cải thiện SnackBar message khi tạo digest thành công
-- [ ] Test tạo digest cho cả daily và weekly
-- [ ] Thêm error handling và logging để debug
-
-**Files đã sửa:**
-- `firebase/firestore.indexes.json` - Thêm index cho notifications range query
-- `firebase/firestore.rules` - Điều chỉnh rules cho notification_digests
-- `lib/features/notifications/repositories/notification_repository.dart` - Tối ưu query `fetchNotificationsInRange`
-- `lib/features/notifications/repositories/notification_digest_repository.dart` - Sửa query `watchDigests` để filter client-side
-- `lib/features/notifications/pages/notification_digest_page.dart` - Sửa UI overflow và cải thiện thông báo
 
 ---
 
-### Fix: Điều chỉnh Notification Digest - Bỏ Messages & Thay đổi Comments Display
-**Mô tả:** Điều chỉnh logic tổng kết thông báo: bỏ tin nhắn và thay đổi cách hiển thị comments
+### 22. Privacy Nâng Cao
+**Mô tả:** Cài đặt riêng tư chi tiết để người dùng kiểm soát thông tin hiển thị và quyền tương tác.
 
-**Yêu cầu:**
-1. **Bỏ tổng kết tin nhắn (Messages):**
-   - Không tính `messagesCount` trong stats
-   - Không hiển thị card "Tin nhắn" trong UI
-   - Bỏ `messagesCount` khỏi `DigestStats` model (hoặc giữ nhưng không sử dụng)
+#### Phase 1 – Data & Model
+- [ ] Thêm các fields privacy vào model `UserProfile`:
+  - `showOnlineStatus` (bool, default: true): Hiển thị trạng thái online/offline
+  - `lastSeenVisibility` (enum: `everyone`, `followers`, `nobody`, default: `everyone`): Ai được xem last seen
+  - `messagePermission` (enum: `everyone`, `followers`, `nobody`, default: `everyone`): Ai được phép nhắn tin
+- [ ] Cập nhật `toMap()` và `fromDoc()` trong `UserProfile` để serialize/deserialize các fields mới
+- [ ] Tạo enum `LastSeenVisibility` và `MessagePermission` nếu cần
+- [ ] Cập nhật Firestore rules để cho phép owner update các fields privacy trong `user_profiles`
 
-2. **Thay đổi cách hiển thị Comments:**
-   - Thay vì hiển thị từng thông báo comment riêng lẻ
-   - Hiển thị danh sách bài viết với tổng số comments mới cho mỗi bài viết
-   - Mỗi item hiển thị: Post preview + "X comments mới"
-   - Click vào item để mở PostPermalinkPage
+#### Phase 2 – Repository & Service
+- [ ] Mở rộng `UserProfileRepository`:
+  - Thêm method `updatePrivacySettings(String uid, {bool? showOnlineStatus, String? lastSeenVisibility, String? messagePermission})` → `Future<void>`
+  - Đảm bảo backward compatibility: profiles cũ không có fields này vẫn hoạt động (default values)
+- [ ] Tạo helper methods để check quyền:
+  - `canViewLastSeen(String viewerUid, String profileUid, bool isFollowing)` → `bool`
+  - `canSendMessage(String senderUid, String receiverUid, bool isFollowing)` → `bool`
 
-**Phase 1 - Data & Model:**
-- [ ] Xem xét có cần bỏ `messagesCount` khỏi `DigestStats` model hay chỉ bỏ khỏi UI
-- [ ] Đảm bảo `_aggregateStats` không tính messagesCount (hoặc tính nhưng không hiển thị)
+#### Phase 3 – UI: Privacy Settings Page
+- [ ] Tạo màn hình `PrivacySettingsPage`:
+  - Section "Trạng thái hoạt động":
+    - Switch "Hiển thị trạng thái online" (`showOnlineStatus`)
+    - Radio buttons cho "Ai có thể xem last seen":
+      - Mọi người
+      - Chỉ người theo dõi
+      - Không ai
+  - Section "Tin nhắn":
+    - Radio buttons cho "Ai có thể nhắn tin cho bạn":
+      - Mọi người
+      - Chỉ người theo dõi
+      - Không ai
+  - Section "Giải thích":
+    - Hiển thị mô tả ngắn gọn về từng cài đặt
+  - Nút "Lưu" để cập nhật settings
+  - SnackBar xác nhận sau khi lưu
+- [ ] Tích hợp vào `ProfileScreen`:
+  - Thêm menu item "Quyền riêng tư" hoặc nút trong AppBar
+  - Navigate đến `PrivacySettingsPage`
 
-**Phase 2 - Service Layer:**
-- [ ] Sửa `_aggregateStats` trong `NotificationDigestService` để bỏ tính `messagesCount`
-- [ ] Tạo method mới `_aggregateCommentsByPost` để nhóm comments theo postId và đếm số lượng
-- [ ] Method này trả về Map<postId, count> hoặc List<PostCommentSummary>
+#### Phase 4 – UI: Hiển thị Trạng thái Online/Last Seen
+- [ ] Cập nhật `ConversationsPage`:
+  - Kiểm tra `showOnlineStatus` trước khi hiển thị green dot
+  - Kiểm tra `lastSeenVisibility` trước khi hiển thị "Hoạt động X phút trước"
+  - Logic:
+    - Nếu `showOnlineStatus == false`: Không hiển thị green dot, luôn hiển thị offline
+    - Nếu `lastSeenVisibility == 'nobody'`: Không hiển thị last seen
+    - Nếu `lastSeenVisibility == 'followers'`: Chỉ hiển thị nếu viewer đang follow profile owner
+- [ ] Cập nhật `PublicProfilePage`:
+  - Tương tự như ConversationsPage
+  - Hiển thị "Đang hoạt động" hoặc "Hoạt động X phút trước" theo settings
+- [ ] Cập nhật `ChatDetailPage`:
+  - Hiển thị trạng thái online/offline trong AppBar theo settings
 
-**Phase 3 - UI: Stats Cards:**
-- [ ] Bỏ `_StatCard` cho messages trong `_StatsGrid`
-- [ ] Giữ lại chỉ 3 cards: Like, Comments, Followers
-- [ ] Điều chỉnh `childAspectRatio` nếu cần (từ 2.0 có thể giữ nguyên hoặc điều chỉnh)
+#### Phase 5 – Logic: Kiểm tra Quyền Nhắn Tin
+- [ ] Cập nhật `ChatRepository`:
+  - Thêm method `canCreateConversation(String senderUid, String receiverUid)` → `Future<bool>`
+  - Kiểm tra `messagePermission` của receiver:
+    - `everyone`: Cho phép
+    - `followers`: Chỉ cho phép nếu sender đang follow receiver
+    - `nobody`: Không cho phép
+- [ ] Cập nhật `ConversationsPage`:
+  - Khi tap vào user để tạo conversation mới, kiểm tra quyền trước
+  - Nếu không có quyền: Hiển thị dialog/alert giải thích lý do
+- [ ] Cập nhật `SearchPage`:
+  - Disable nút "Nhắn tin" nếu không có quyền
+  - Hiển thị tooltip/badge giải thích lý do
+- [ ] Cập nhật `PublicProfilePage`:
+  - Tương tự SearchPage
+  - Hiển thị message button theo quyền
 
-**Phase 4 - UI: Comments Modal:**
-- [ ] Tạo model mới `PostCommentSummary` (postId, postPreview, commentsCount) hoặc dùng Map
-- [ ] Sửa `_NotificationDetailsModal` để xử lý riêng cho `NotificationType.comment`
-- [ ] Khi `notificationType == comment`:
-  - Load notifications comments trong range
-  - Nhóm theo `postId` và đếm số lượng
-  - Fetch post details cho mỗi postId (có thể cần batch fetch)
-  - Hiển thị danh sách posts với số comments mới
-- [ ] Mỗi item hiển thị:
-  - Post preview (thumbnail nếu có, hoặc icon)
-  - Post caption (truncated)
-  - "X comments mới" badge
-  - Click để mở PostPermalinkPage
+#### Phase 6 – Integration với Follow System
+- [ ] Đảm bảo logic kiểm tra follow status chính xác:
+  - Sử dụng `FollowService` để check follow status
+  - Xử lý trường hợp follow request đang pending (có thể coi là chưa follow)
+- [ ] Cập nhật logic khi follow/unfollow:
+  - Nếu user unfollow, có thể mất quyền xem last seen/nhắn tin (nếu settings là `followers`)
+  - Có thể cần refresh UI khi follow status thay đổi
 
-**Phase 5 - Performance & Optimization:**
-- [ ] Tối ưu việc fetch post details (có thể dùng batch query hoặc cache)
-- [ ] Xử lý trường hợp post đã bị xóa (postId không tồn tại)
-- [ ] Loading state khi fetch posts
+#### Phase 7 – QA & Polish
+- [ ] Test các trường hợp:
+  - User A set `lastSeenVisibility = 'followers'`, user B không follow → không thấy last seen
+  - User A set `lastSeenVisibility = 'followers'`, user B follow → thấy last seen
+  - User A set `messagePermission = 'followers'`, user B không follow → không thể nhắn tin
+  - User A set `messagePermission = 'followers'`, user B follow → có thể nhắn tin
+  - User A set `showOnlineStatus = false` → không ai thấy green dot
+  - Profile cũ không có privacy settings → hoạt động với default values
+- [ ] UX improvements:
+  - Loading state khi đang cập nhật settings
+  - Confirmation dialog cho các thay đổi quan trọng (ví dụ: set `messagePermission = 'nobody'`)
+  - Tooltip/help text giải thích từng cài đặt
+- [ ] Performance:
+  - Cache privacy settings để tránh query nhiều lần
+  - Optimize queries khi check quyền
 
-**Phase 6 - QA:**
-- [ ] Test tạo digest với nhiều comments trên nhiều posts khác nhau
-- [ ] Test với posts đã bị xóa
-- [ ] Test performance với số lượng lớn comments
-- [ ] Verify UI không còn hiển thị messages
-
-**Files cần sửa:**
-- `lib/features/notifications/models/notification_digest.dart` - Xem xét bỏ `messagesCount` hoặc giữ nhưng không dùng
-- `lib/features/notifications/services/notification_digest_service.dart` - Bỏ tính `messagesCount`, thêm logic nhóm comments theo post
-- `lib/features/notifications/pages/notification_digest_page.dart` - Bỏ card messages, sửa modal comments
-- `lib/features/posts/repositories/post_repository.dart` - Có thể cần thêm method batch fetch posts by IDs
-- `lib/features/posts/models/post.dart` - Có thể cần để fetch post preview
-
-**Lưu ý:**
-- Có thể cần tạo helper model `PostCommentSummary` để lưu thông tin post + số comments
-- Cân nhắc việc fetch post details: có thể fetch từng post hoặc batch fetch
-- UI comments modal nên có loading state và empty state
-
----
-
-### 22. In-App Security & Privacy Nâng Cao
-**Mô tả:** Bảo mật nâng cao và cài đặt riêng tư chi tiết.
-
-#### Phase 1 – 2FA (Two-Factor Authentication)
-- [ ] Thiết kế luồng 2FA qua email/OTP (khi đăng nhập mới, thiết bị mới).
-- [ ] Tạo collection `two_factor_tokens/{uid}/items/{tokenId}` (code, expiresAt, used).
-- [ ] UI: màn nhập OTP sau khi đăng nhập thành công bước 1.
-
-#### Phase 2 – Device Management
-- [ ] Tạo collection `devices/{uid}/sessions/{sessionId}` (deviceInfo, lastActiveAt, ip nếu có).
-- [ ] UI: trang “Thiết bị & Phiên đăng nhập” cho phép:
-  - Xem danh sách thiết bị.
-  - Đăng xuất từng thiết bị.
-  - Đăng xuất tất cả thiết bị khác.
-
-#### Phase 3 – Privacy Settings
-- [ ] Thêm các cài đặt:
-  - Ẩn trạng thái online (`showOnlineStatus`).
-  - Ẩn `lastSeen` với người lạ hoặc tất cả (`lastSeenVisibility`).
-  - Quyền nhắn tin: mọi người / chỉ người theo dõi (`messagePermission`).
-- [ ] UI: trang “Quyền riêng tư” trong settings/profile.
-- [ ] Tích hợp vào logic chat/search: chặn send message / hiển thị trạng thái theo cài đặt.
-
-#### Phase 4 – QA
-- [ ] Test đăng nhập từ nhiều thiết bị, đăng xuất từ xa.
-- [ ] Test quyền nhắn tin giữa các loại tài khoản khác nhau (public/private, follow/not follow).
-
-**Files dự kiến:**
-- `lib/features/auth/pages/two_factor_page.dart`
-- `lib/features/auth/services/two_factor_service.dart`
-- `lib/features/auth/device_session_repository.dart`
-- `lib/features/settings/pages/privacy_settings_page.dart`
-- `lib/features/profile/user_profile_repository.dart` (thêm fields privacy)
-- `lib/features/chat/repositories/chat_repository.dart` (check messagePermission)
-- `firebase/firestore.rules`
+**Files cần tạo/sửa:**
+- `lib/features/profile/models/user_profile.dart` - Thêm fields privacy
+- `lib/features/profile/user_profile_repository.dart` - Thêm methods update privacy settings
+- `lib/features/settings/pages/privacy_settings_page.dart` - UI cài đặt privacy (mới)
+- `lib/features/profile/profile_screen.dart` - Thêm nút navigate đến PrivacySettingsPage
+- `lib/features/chat/pages/conversations_page.dart` - Kiểm tra privacy settings khi hiển thị online/last seen
+- `lib/features/chat/pages/chat_detail_page.dart` - Kiểm tra privacy settings
+- `lib/features/chat/repositories/chat_repository.dart` - Thêm method check quyền nhắn tin
+- `lib/features/search/pages/search_page.dart` - Disable message button theo quyền
+- `lib/features/profile/public_profile_page.dart` - Kiểm tra privacy settings và quyền nhắn tin
+- `firebase/firestore.rules` - Rules cho update privacy fields
 
 ---
 
