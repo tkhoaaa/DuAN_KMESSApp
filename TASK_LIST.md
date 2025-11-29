@@ -881,35 +881,35 @@
 
 ---
 
-### 23. Post Scheduling & Drafts
+### 23. Post Scheduling & Drafts ✅
 **Mô tả:** Lưu bài viết dạng nháp và hẹn giờ đăng trong tương lai.
 
 #### Phase 1 – Data & Rules
-- [ ] Tạo collection `post_drafts/{uid}/items/{draftId}` với structure:
+- [x] Tạo collection `post_drafts/{uid}/items/{draftId}` với structure:
   - `media` (list<map>): Danh sách media (url, type, thumbnailUrl, durationMs)
   - `caption` (string, optional): Caption của bài viết
   - `hashtags` (list<string>, optional): Hashtags đã extract
   - `createdAt` (timestamp): Thời gian tạo draft
   - `updatedAt` (timestamp): Thời gian cập nhật gần nhất
-- [ ] Bổ sung fields vào model `Post`:
+- [x] Bổ sung fields vào model `Post`:  
   - `scheduledAt` (DateTime?, optional): Thời gian hẹn đăng (nếu có)
   - `status` (enum: `draft`, `scheduled`, `published`, `cancelled`, default: `published`): Trạng thái bài viết
-- [ ] Cập nhật `toMap()` và `fromDoc()` trong `Post` để serialize/deserialize các fields mới
-- [ ] Tạo enum `PostStatus` (draft, scheduled, published, cancelled)
-- [ ] Firestore rules:
+- [x] Cập nhật `toMap()` và `fromDoc()` trong `Post` để serialize/deserialize các fields mới
+- [x] Tạo enum `PostStatus` (draft, scheduled, published, cancelled)
+- [x] Firestore rules:
   - Chỉ owner đọc/ghi `post_drafts` của mình
   - Chỉ owner tạo/update post với `scheduledAt` và `status`
   - Post với `status = 'scheduled'` chỉ hiển thị cho owner cho đến khi `published`
 
 #### Phase 2 – Repository & Service
-- [ ] Tạo `DraftPostRepository`:
+- [x] Tạo `DraftPostRepository`:
   - `saveDraft(String uid, {List<PostMedia>? media, String? caption, List<String>? hashtags})` → `Future<String>` (draftId)
   - `updateDraft(String uid, String draftId, {List<PostMedia>? media, String? caption, List<String>? hashtags})` → `Future<void>`
   - `deleteDraft(String uid, String draftId)` → `Future<void>`
   - `fetchDraft(String uid, String draftId)` → `Future<DraftPost?>`
   - `watchDrafts(String uid)` → `Stream<List<DraftPost>>`
   - `fetchDrafts(String uid, {int limit = 20})` → `Future<List<DraftPost>>`
-- [ ] Tạo model `DraftPost`:
+- [x] Tạo model `DraftPost`:
   - `id` (string): Draft ID
   - `uid` (string): User ID
   - `media` (List<PostMedia>): Danh sách media
@@ -917,7 +917,7 @@
   - `hashtags` (List<String>): Hashtags
   - `createdAt` (DateTime): Thời gian tạo
   - `updatedAt` (DateTime): Thời gian cập nhật
-- [ ] Mở rộng `PostRepository`:
+- [x] Mở rộng `PostRepository`:
   - Cập nhật `createPost()` để hỗ trợ `scheduledAt` và `status`:
     - Nếu `scheduledAt != null` và `scheduledAt > now`: Set `status = 'scheduled'`
     - Nếu `scheduledAt == null`: Set `status = 'published'`
@@ -927,14 +927,15 @@
     - Update `status = 'published'`, xóa `scheduledAt` (hoặc giữ lại để log)
   - Thêm method `cancelScheduledPost(String postId)` → `Future<void>`:
     - Update `status = 'cancelled'`
-- [ ] Tạo `PostSchedulingService` (optional):
+  - Thêm method `updateScheduledTime(String postId, DateTime newScheduledAt)` → `Future<void>`
+- [x] Tạo `PostSchedulingService`:
   - Method `checkAndPublishScheduledPosts(String uid)` → `Future<void>`:
     - Query scheduled posts của user có `scheduledAt <= now` và `status = 'scheduled'`
     - Tự động publish các posts này
-  - Tích hợp vào app lifecycle (khi user mở app, check scheduled posts)
+  - Tích hợp vào app lifecycle (khi user mở app, check scheduled posts mỗi phút)
 
 #### Phase 3 – UI: Create Post Page (Draft & Schedule)
-- [ ] Cập nhật `CreatePostPage`:
+- [x] Cập nhật `CreatePostPage`:
   - Thêm nút "Lưu nháp" trong AppBar hoặc bottom bar:
     - Khi tap: Lưu media và caption vào `post_drafts`
     - Hiển thị SnackBar xác nhận "Đã lưu nháp"
@@ -950,9 +951,10 @@
   - Khi load draft:
     - Thêm nút "Tiếp tục chỉnh sửa" hoặc tự động load draft khi mở CreatePostPage
     - Hiển thị media và caption từ draft
+  - Thêm chức năng chỉnh giờ đăng bài (giữ nguyên ngày)
 
 #### Phase 4 – UI: Drafts & Scheduled Posts Page
-- [ ] Tạo `DraftsAndScheduledPage`:
+- [x] Tạo `DraftsAndScheduledPage`:
   - TabBar với 2 tabs: "Bài nháp" và "Bài hẹn giờ"
   - Tab "Bài nháp":
     - List các draft posts với preview (thumbnail, caption truncated)
@@ -975,32 +977,35 @@
   - AppBar:
     - Title: "Bài nháp & Bài hẹn giờ"
     - Action: Refresh button (để check và publish scheduled posts)
+  - Actions cho scheduled posts: "Chỉnh giờ", "Chỉnh ngày và giờ", "Đăng ngay", "Hủy lên lịch"
 
 #### Phase 5 – UI: Integration
-- [ ] Tích hợp vào `ProfileScreen`:
+- [x] Tích hợp vào `ProfileScreen`:
   - Thêm nút "Bài nháp & Bài hẹn giờ" trong AppBar hoặc menu
   - Navigate đến `DraftsAndScheduledPage`
-- [ ] Cập nhật `PostFeedPage`:
+- [x] Cập nhật `PostFeedPage`:
   - Filter posts với `status = 'published'` (không hiển thị scheduled/draft posts)
-  - Hoặc thêm filter option để xem scheduled posts (chỉ cho owner)
-- [ ] Cập nhật `CreatePostPage`:
+  - Xử lý backward compatibility cho posts cũ không có status
+  - Thêm stream listener để tự động refresh khi có posts mới được publish
+- [x] Cập nhật `CreatePostPage`:
   - Khi mở trang, check xem có draft chưa hoàn thành không:
     - Hiển thị dialog: "Bạn có bài nháp chưa hoàn thành. Tiếp tục chỉnh sửa?"
     - Options: "Tiếp tục", "Bỏ qua", "Xóa nháp"
+  - Xử lý lỗi context deactivated khi đăng bài
 
 #### Phase 6 – Auto-Publish Logic
-- [ ] Tạo background task hoặc check khi app mở:
+- [x] Tạo background task hoặc check khi app mở:
   - Method `checkScheduledPosts()` trong app lifecycle hoặc `initState` của main app
   - Query scheduled posts có `scheduledAt <= now` và `status = 'scheduled'`
   - Tự động publish các posts này
   - Hiển thị notification (optional): "Đã đăng X bài viết đã lên lịch"
-- [ ] Tối ưu:
+- [x] Tối ưu:
   - Chỉ check scheduled posts của current user
-  - Cache last check time để tránh check quá nhiều
-  - Có thể dùng Cloud Function (optional) để auto-publish chính xác hơn
+  - Check định kỳ mỗi phút bằng Timer.periodic
+  - Stream listener để tự động refresh feed khi có posts mới được publish
 
 #### Phase 7 – QA & Polish
-- [ ] Test các trường hợp:
+- [x] Test các trường hợp:
   - Lưu draft không có caption → load lại đúng
   - Lưu draft không có media → load lại đúng
   - Lưu draft có cả media và caption → load lại đúng
@@ -1009,14 +1014,18 @@
   - Đến giờ scheduled → tự động publish (hoặc khi mở app)
   - Hủy scheduled post → chuyển sang `status = 'cancelled'`
   - Chỉnh sửa giờ scheduled post → update `scheduledAt`
+  - Chỉnh giờ đăng bài (giữ nguyên ngày) → hoạt động đúng
   - Xóa draft → confirm dialog, xóa khỏi Firestore
-- [ ] UX improvements:
+  - Posts cũ không có status → vẫn hiển thị bình thường
+  - Auto-publish realtime → feed tự động cập nhật
+- [x] UX improvements:
   - Loading state khi lưu draft/publish scheduled post
   - SnackBar feedback sau mỗi action
   - Confirmation dialog khi xóa draft hoặc hủy scheduled post
   - DateTime picker với timezone support (hiển thị timezone local)
   - Preview scheduled time với format dễ đọc (ví dụ: "Ngày 15/12/2024 lúc 14:30")
-- [ ] Performance:
+  - 2 nút riêng: "Chọn ngày" và "Chọn giờ" trong CreatePostPage
+- [x] Performance:
   - Lazy load drafts và scheduled posts (pagination nếu có nhiều)
   - Optimize queries với Firestore indexes
   - Cache draft data locally (optional) để tránh mất data khi offline
@@ -1035,63 +1044,346 @@
 
 ---
 
-### 24. Share & Deep-linking Nâng Cao
+### 24. Share & Deep-linking Nâng Cao ✅
 **Mô tả:** Chia sẻ bài viết/profiles ra ngoài app và hỗ trợ deep link vào trong app.
 
-#### Phase 1 – Deep Link Design
-- [ ] Chuẩn hoá format deep link:
-  - Bài viết: `kmessapp://posts/{postId}`
-  - Profile: `kmessapp://user/{uid}`
-- [ ] Cấu hình deep link trên Android/iOS (intent filters, universal links nếu cần).
+#### Phase 1 – Deep Link Design & Configuration ✅
+- [x] Chuẩn hoá format deep link:
+  - Bài viết: `kmessapp://posts/{postId}` hoặc `https://kmessapp.com/posts/{postId}` (universal link)
+  - Profile: `kmessapp://user/{uid}` hoặc `https://kmessapp.com/user/{uid}` (universal link)
+  - Hashtag: `kmessapp://hashtag/{tag}` hoặc `https://kmessapp.com/hashtag/{tag}`
+- [x] Cấu hình deep link trên Android:
+  - Thêm intent filters vào `android/app/src/main/AndroidManifest.xml`
+  - Cấu hình scheme `kmessapp://` và host `kmessapp.com`
+  - Xử lý `android.intent.action.VIEW` với data URI
+- [x] Cấu hình deep link trên iOS:
+  - Thêm URL schemes vào `ios/Runner/Info.plist`
+  - Cấu hình Associated Domains cho universal links (nếu dùng)
+  - Xử lý `UIApplicationDelegate` methods
+- [ ] (Optional) Cấu hình universal links (App Links/Universal Links):
+  - Tạo `.well-known/apple-app-site-association` và `assetlinks.json`
+  - Host trên domain `kmessapp.com` (nếu có)
 
-#### Phase 2 – Implementation
-- [ ] Tạo `DeepLinkService` để phân tích URL và điều hướng tới `PostPermalinkPage` hoặc `PublicProfilePage`.
-- [ ] Cập nhật nơi hiển thị link (Saved Posts, share menu) sử dụng format đã chuẩn hóa.
+#### Phase 2 – Deep Link Service Implementation ✅
+- [x] Tạo model `DeepLink`:
+  - `type` (enum: `post`, `profile`, `hashtag`, `unknown`): Loại deep link
+  - `postId` (String?): ID bài viết (nếu type = post)
+  - `uid` (String?): User ID (nếu type = profile)
+  - `hashtag` (String?): Hashtag (nếu type = hashtag)
+  - `rawUrl` (String): URL gốc
+- [x] Tạo `DeepLinkService`:
+  - Method `parseDeepLink(String url)` → `DeepLink?`:
+    - Parse URL và extract type, postId, uid, hashtag
+    - Validate format và return `DeepLink` object
+    - Return `null` nếu URL không hợp lệ
+  - Method `handleDeepLink(DeepLink link)` → `Future<void>`:
+    - Navigate đến `PostPermalinkPage` nếu type = post
+    - Navigate đến `PublicProfilePage` nếu type = profile
+    - Navigate đến `HashtagPage` nếu type = hashtag
+    - Hiển thị error nếu type = unknown hoặc data không hợp lệ
+  - Method `generatePostLink(String postId)` → `String`:
+    - Generate deep link URL cho bài viết
+  - Method `generateProfileLink(String uid)` → `String`:
+    - Generate deep link URL cho profile
+  - Method `generateHashtagLink(String hashtag)` → `String`:
+    - Generate deep link URL cho hashtag
+- [x] Tích hợp vào app lifecycle:
+  - Listen deep link khi app mở từ external link
+  - Handle deep link khi app đang chạy (background/foreground)
+  - Xử lý deep link khi app khởi động từ terminated state
 
-#### Phase 3 – Share Out
-- [ ] Tích hợp package share (vd: `share_plus`) để share link bài viết/profile ra ngoài (Messenger, Zalo,…).
-- [ ] UI: nút “Chia sẻ” trong post menu và profile menu.
+#### Phase 3 – Share Functionality ✅
+- [x] Thêm package `share_plus` vào `pubspec.yaml`
+- [x] Tạo `ShareService`:
+  - Method `sharePost(String postId, {String? caption})` → `Future<void>`:
+    - Generate deep link cho post
+    - Share text với format: "[Caption]\n\nXem bài viết: [deep link]"
+    - Sử dụng `Share.share()` từ `share_plus`
+  - Method `shareProfile(String uid, {String? displayName})` → `Future<void>`:
+    - Generate deep link cho profile
+    - Share text với format: "Xem profile của [displayName]: [deep link]"
+  - Method `shareHashtag(String hashtag)` → `Future<void>`:
+    - Generate deep link cho hashtag
+    - Share text với format: "Khám phá #hashtag: [deep link]"
+  - Method `copyPostLink(String postId)` → `Future<void>`:
+    - Copy post link vào clipboard
+  - Method `copyProfileLink(String uid)` → `Future<void>`:
+    - Copy profile link vào clipboard
+  - Method `copyHashtagLink(String hashtag)` → `Future<void>`:
+    - Copy hashtag link vào clipboard
+- [x] Cập nhật UI:
+  - Thêm nút "Chia sẻ" trong `PostFeedPage` post menu:
+    - PopupMenuButton với options: "Chia sẻ link", "Sao chép link"
+    - Tap → share hoặc copy post link
+  - Thêm nút "Chia sẻ" trong `PublicProfilePage`:
+    - Icon share trong AppBar
+    - Tap → share profile link
+  - Thêm nút "Chia sẻ" trong `HashtagPage`:
+    - PopupMenuButton với options: "Chia sẻ link", "Sao chép link"
+    - Tap → share hoặc copy hashtag link
+  - Thêm nút "Chia sẻ" trong `PostPermalinkPage`:
+    - PopupMenuButton với options: "Chia sẻ link", "Sao chép link"
+  - `SavedPostsPage` đã có chức năng copy link sẵn
 
-#### Phase 4 – QA
-- [ ] Test mở deep link từ trạng thái app khác nhau: app chưa mở / đang nền / đang mở.
-- [ ] Test link lỗi, bài viết/profile đã bị xóa → hiển thị màn thông báo phù hợp.
+#### Phase 4 – Link Preview & Metadata
+- [ ] (Optional) Tạo link preview khi share:
+  - Generate preview card với:
+    - Post: thumbnail, caption preview, author name, like/comment count
+    - Profile: avatar, display name, bio preview, follower count
+    - Hashtag: hashtag name, post count
+  - Sử dụng `flutter_link_preview` hoặc custom widget
+- [ ] (Optional) Open Graph meta tags cho web:
+  - Nếu có web version, thêm OG tags cho posts/profiles
+  - Enable rich preview khi share lên social media
 
-**Files dự kiến:**
-- `lib/features/deeplink/deep_link_service.dart`
-- `lib/features/posts/pages/post_permalink_page.dart` (mở rộng)
-- `lib/features/profile/public_profile_page.dart` (mở rộng nhận từ deep link)
-- Android/iOS native config cho deep links
+#### Phase 5 – Integration & Error Handling ✅
+- [x] Cập nhật `PostPermalinkPage`:
+  - Nhận `postId` từ deep link (đã có sẵn)
+  - Validate post tồn tại, hiển thị error nếu không tìm thấy
+  - Handle case post đã bị xóa hoặc private
+- [x] Cập nhật `PublicProfilePage`:
+  - Nhận `uid` từ deep link (đã có sẵn)
+  - Validate user tồn tại, hiển thị error nếu không tìm thấy
+  - Handle case profile private hoặc user đã bị block
+- [x] Cập nhật `HashtagPage`:
+  - Nhận `hashtag` từ deep link (đã có sẵn)
+  - Validate hashtag hợp lệ
+- [x] Error handling:
+  - Hiển thị SnackBar khi deep link không hợp lệ
+  - Hiển thị message khi post/profile không tồn tại
+  - Hiển thị message khi không có quyền truy cập (private profile, blocked user)
+
+#### Phase 6 – Clipboard & Quick Actions ✅
+- [x] Thêm chức năng "Sao chép link":
+  - Sử dụng `Clipboard.setData()` từ `flutter/services.dart`
+  - SnackBar xác nhận "Đã sao chép link vào clipboard"
+- [ ] (Optional) Quick actions:
+  - Long press trên post → show menu với "Chia sẻ", "Sao chép link"
+  - Long press trên profile avatar → show menu với "Chia sẻ profile"
+
+#### Phase 7 – QA & Polish ✅
+- [x] Test các trường hợp:
+  - Mở deep link khi app chưa mở → navigate đúng sau khi login (MethodChannel)
+  - Mở deep link khi app đang nền → navigate đúng khi resume (MethodChannel)
+  - Mở deep link khi app đang mở → navigate đúng không duplicate
+  - Share post → link hoạt động đúng khi mở
+  - Share profile → link hoạt động đúng khi mở
+  - Share hashtag → link hoạt động đúng khi mở
+  - Copy link → paste vào app khác và mở đúng
+  - Deep link với postId không tồn tại → hiển thị error
+  - Deep link với uid không tồn tại → hiển thị error
+  - Deep link với post private → hiển thị error hoặc yêu cầu follow
+- [x] UX improvements:
+  - Loading state khi đang parse và navigate deep link (context.mounted check)
+  - Smooth transition khi navigate từ deep link
+  - Toast/SnackBar feedback khi share thành công
+  - Confirmation dialog khi share sensitive content (optional)
+- [x] Performance:
+  - Parse deep link nhanh (không block UI)
+  - Lazy load data khi navigate từ deep link
+  - Cache parsed deep links để tránh parse lại (optional)
+
+**Files cần tạo/sửa:**
+- `lib/features/share/models/deep_link.dart` - Model cho deep link
+- `lib/features/share/services/deep_link_service.dart` - Service parse và handle deep links
+- `lib/features/share/services/share_service.dart` - Service share content
+- `lib/features/posts/pages/post_feed_page.dart` - Thêm nút share trong post menu
+- `lib/features/posts/pages/post_permalink_page.dart` - Nhận postId từ deep link, thêm nút share
+- `lib/features/profile/public_profile_page.dart` - Nhận uid từ deep link, thêm nút share
+- `lib/features/posts/pages/hashtag_page.dart` - Nhận hashtag từ deep link, thêm nút share
+- `lib/features/saved_posts/pages/saved_posts_page.dart` - Thêm nút copy link
+- `lib/features/auth/auth_gate.dart` - Listen và handle deep links khi app mở
+- `android/app/src/main/AndroidManifest.xml` - Cấu hình intent filters
+- `ios/Runner/Info.plist` - Cấu hình URL schemes
+- `pubspec.yaml` - Thêm dependency `share_plus`
 
 ---
 
 ### 25. Bộ lọc & Sort nâng cao cho Feed/Search
 **Mô tả:** Cho phép người dùng lọc và sắp xếp nội dung linh hoạt hơn.
 
-#### Phase 1 – Feed Filters
-- [ ] Trong post feed: bộ lọc theo loại media (tất cả / chỉ ảnh / chỉ video).
-- [ ] Bộ lọc theo khoảng thời gian (hôm nay / tuần này / tháng này).
-- [ ] Sort theo: mới nhất, nhiều like nhất, nhiều comment nhất.
+#### Phase 1 – Data & Model Design
+- [ ] Tạo enum `PostMediaFilter` (all, images, videos):
+  - `all`: Hiển thị tất cả posts
+  - `images`: Chỉ hiển thị posts có ít nhất 1 ảnh
+  - `videos`: Chỉ hiển thị posts có ít nhất 1 video
+- [ ] Tạo enum `TimeFilter` (all, today, thisWeek, thisMonth):
+  - `all`: Tất cả thời gian
+  - `today`: Chỉ posts trong ngày hôm nay
+  - `thisWeek`: Chỉ posts trong tuần này
+  - `thisMonth`: Chỉ posts trong tháng này
+- [ ] Tạo enum `PostSortOption` (newest, mostLiked, mostCommented):
+  - `newest`: Sắp xếp theo `createdAt DESC` (mặc định)
+  - `mostLiked`: Sắp xếp theo `likeCount DESC`
+  - `mostCommented`: Sắp xếp theo `commentCount DESC`
+- [ ] Tạo model `FeedFilters`:
+  - `mediaFilter` (PostMediaFilter, default: all)
+  - `timeFilter` (TimeFilter, default: all)
+  - `sortOption` (PostSortOption, default: newest)
+- [ ] Tạo enum `UserSearchFilter` (all, following, notFollowing, followRequest):
+  - `all`: Tất cả users
+  - `following`: Chỉ users đang follow
+  - `notFollowing`: Chỉ users chưa follow
+  - `followRequest`: Chỉ users có follow request pending
+- [ ] Tạo enum `PrivacyFilter` (all, public, private):
+  - `all`: Tất cả (public + private nếu có quyền)
+  - `public`: Chỉ public profiles
+  - `private`: Chỉ private profiles (nếu có quyền)
+- [ ] Tạo model `UserSearchFilters`:
+  - `followStatus` (UserSearchFilter, default: all)
+  - `privacyFilter` (PrivacyFilter, default: all)
 
-#### Phase 2 – Search Filters
-- [ ] Trong `SearchPage`, tab Users:
-  - Filter theo trạng thái follow: đang follow / chưa follow / follow request.
-  - Filter theo quyền riêng tư: public / private.
-- [ ] Trong tab Posts:
-  - Filter theo loại media (image/video).
-  - (Optional) Filter theo hashtag nếu đã có hệ thống hashtag.
+#### Phase 2 – Repository & Service Layer
+- [ ] Mở rộng `PostRepository`:
+  - Thêm method `fetchPostsWithFilters({FeedFilters? filters, int limit = 20, DocumentSnapshot? startAfter})` → `Future<PageResult<Post>>`:
+    - Apply media filter: Query posts có media type tương ứng (client-side filter nếu cần)
+    - Apply time filter: Query posts trong khoảng thời gian (từ `startDate` đến `endDate`)
+    - Apply sort option: OrderBy theo field tương ứng
+    - Pagination với `startAfter`
+  - Thêm method `watchPostsWithFilters(FeedFilters filters)` → `Stream<List<Post>>`:
+    - Stream posts với filters đã áp dụng
+    - Realtime updates khi có posts mới
+  - Tối ưu query:
+    - Sử dụng composite indexes cho các query phức tạp
+    - Client-side filter cho media type nếu Firestore không hỗ trợ tốt
+- [ ] Mở rộng `UserProfileRepository`:
+  - Thêm method `searchUsersWithFilters(String query, {UserSearchFilters? filters, int limit = 20})` → `Future<List<UserProfile>>`:
+    - Apply follow status filter: Query users theo follow state
+    - Apply privacy filter: Query users theo `isPrivate`
+    - Combine với search query (displayName, email)
+- [ ] Tạo `FeedFilterService` (optional):
+  - Method `applyMediaFilter(List<Post> posts, PostMediaFilter filter)` → `List<Post>`:
+    - Filter posts theo media type (client-side)
+  - Method `applyTimeFilter(List<Post> posts, TimeFilter filter)` → `List<Post>`:
+    - Filter posts theo time range (client-side)
+  - Method `applySort(List<Post> posts, PostSortOption sort)` → `List<Post>`:
+    - Sort posts theo option (client-side fallback)
 
-#### Phase 3 – UX
-- [ ] Thiết kế bottom sheet/filter bar để chọn filter & sort.
-- [ ] Hiển thị chip/label các filter đang áp dụng.
+#### Phase 3 – UI: Feed Filters
+- [ ] Cập nhật `PostFeedPage`:
+  - Thêm AppBar action: Icon filter (hoặc nút "Lọc")
+  - Tap → show bottom sheet `FeedFilterBottomSheet`:
+    - Section "Loại media":
+      - Radio buttons: "Tất cả", "Chỉ ảnh", "Chỉ video"
+    - Section "Thời gian":
+      - Radio buttons: "Tất cả", "Hôm nay", "Tuần này", "Tháng này"
+    - Section "Sắp xếp":
+      - Radio buttons: "Mới nhất", "Nhiều like nhất", "Nhiều comment nhất"
+    - Nút "Áp dụng" và "Đặt lại"
+    - Nút "Đóng"
+  - Hiển thị active filters:
+    - Chips hiển thị filters đang áp dụng (ví dụ: "Chỉ ảnh", "Tuần này", "Nhiều like nhất")
+    - Tap chip → mở filter sheet để chỉnh sửa
+    - Nút "Xóa tất cả" để reset filters
+  - Cập nhật query khi filters thay đổi:
+    - Gọi `fetchPostsWithFilters()` với filters mới
+    - Reset pagination khi filters thay đổi
+    - Loading state khi đang apply filters
+- [ ] Tạo widget `FeedFilterChips`:
+  - Hiển thị chips cho các filters đang active
+  - Tap chip → remove filter hoặc mở filter sheet
+  - Empty state khi không có filters
 
-#### Phase 4 – QA
-- [ ] Test kết hợp nhiều filter và sort, tránh query quá nặng (giới hạn page size).
-- [ ] Đảm bảo tôn trọng Firestore rules (không lộ nội dung private).
+#### Phase 4 – UI: Search Filters
+- [ ] Cập nhật `SearchPage`:
+  - Tab "Người dùng":
+    - Thêm filter bar phía trên search results:
+      - Dropdown "Trạng thái follow": "Tất cả", "Đang follow", "Chưa follow", "Follow request"
+      - Dropdown "Quyền riêng tư": "Tất cả", "Công khai", "Riêng tư"
+    - Apply filters khi user chọn:
+      - Gọi `searchUsersWithFilters()` với filters
+      - Reset results khi filters thay đổi
+    - Hiển thị active filters dạng chips
+  - Tab "Bài viết":
+    - Thêm filter bar:
+      - Dropdown "Loại media": "Tất cả", "Chỉ ảnh", "Chỉ video"
+      - Dropdown "Sắp xếp": "Mới nhất", "Nhiều like nhất", "Nhiều comment nhất"
+    - Apply filters khi user chọn:
+      - Gọi `fetchPostsWithFilters()` với filters
+      - Reset results khi filters thay đổi
+    - Hiển thị active filters dạng chips
+  - (Optional) Tab "Hashtag":
+    - Thêm filter "Sắp xếp": "Mới nhất", "Nổi bật nhất"
+    - Apply filter khi user chọn
 
-**Files dự kiến:**
-- `lib/features/posts/repositories/post_repository.dart` (bổ sung query theo filter)
-- `lib/features/posts/pages/post_feed_page.dart` (UI filter & sort)
-- `lib/features/search/pages/search_page.dart` (bổ sung filter UI & logic)
+#### Phase 5 – UI: Filter Bottom Sheet
+- [ ] Tạo `FeedFilterBottomSheet`:
+  - DraggableScrollableSheet với 3 sections:
+    - Section 1: Media Filter (Radio buttons)
+    - Section 2: Time Filter (Radio buttons)
+    - Section 3: Sort Option (Radio buttons)
+  - Bottom actions:
+    - Nút "Đặt lại" (reset về defaults)
+    - Nút "Áp dụng" (apply filters và đóng sheet)
+  - State management:
+    - Lưu selected filters trong state
+    - Preview filters trước khi apply
+- [ ] Tạo `UserSearchFilterBottomSheet`:
+  - Tương tự `FeedFilterBottomSheet` nhưng cho user search filters
+  - Sections:
+    - Follow Status Filter
+    - Privacy Filter
+
+#### Phase 6 – State Management & Persistence
+- [ ] Lưu filters vào local state:
+  - Sử dụng `StatefulWidget` state hoặc `Provider`/`Riverpod` nếu có
+  - Persist filters trong session (không mất khi navigate)
+- [ ] (Optional) Lưu filters vào SharedPreferences:
+  - Lưu last used filters để restore khi mở lại app
+  - Clear filters khi user logout
+- [ ] Reset filters:
+  - Nút "Xóa tất cả" trong filter UI
+  - Reset về defaults khi navigate away (optional)
+
+#### Phase 7 – Firestore Indexes & Performance
+- [ ] Tạo composite indexes cho queries phức tạp:
+  - Index cho `posts` collection:
+    - `createdAt` + `likeCount` (cho sort mostLiked)
+    - `createdAt` + `commentCount` (cho sort mostCommented)
+    - `createdAt` + `authorUid` (cho filter theo time + author)
+  - Index cho `user_profiles` collection:
+    - `displayNameLower` + `isPrivate` (cho search + privacy filter)
+  - Thêm vào `firebase/firestore.indexes.json`
+- [ ] Tối ưu queries:
+  - Giới hạn số lượng filters kết hợp (tránh query quá phức tạp)
+  - Client-side filter cho media type nếu Firestore query không hiệu quả
+  - Debounce filter changes để tránh spam queries
+  - Cache filter results nếu có thể
+
+#### Phase 8 – QA & Polish
+- [ ] Test các trường hợp:
+  - Apply single filter → kết quả đúng
+  - Apply multiple filters → kết quả đúng
+  - Combine filters với search query → kết quả đúng
+  - Reset filters → về trạng thái mặc định
+  - Pagination với filters → load more đúng
+  - Realtime updates với filters → cập nhật đúng
+  - Filter với empty results → hiển thị empty state
+  - Filter với private posts/users → không lộ nội dung private
+- [ ] UX improvements:
+  - Loading state khi đang apply filters
+  - Smooth transition khi filters thay đổi
+  - SnackBar feedback khi apply/reset filters
+  - Tooltip giải thích từng filter option
+  - Preview số lượng kết quả trước khi apply (optional)
+- [ ] Performance:
+  - Debounce filter changes (300-500ms)
+  - Lazy load filter options
+  - Optimize queries với indexes
+  - Cache filter results nếu có thể
+
+**Files cần tạo/sửa:**
+- `lib/features/posts/models/feed_filters.dart` - Models cho feed filters
+- `lib/features/search/models/user_search_filters.dart` - Models cho user search filters
+- `lib/features/posts/repositories/post_repository.dart` - Thêm methods query với filters
+- `lib/features/profile/user_profile_repository.dart` - Thêm methods search với filters
+- `lib/features/posts/services/feed_filter_service.dart` - Service xử lý filters (optional)
+- `lib/features/posts/pages/post_feed_page.dart` - UI filter & sort cho feed
+- `lib/features/posts/widgets/feed_filter_bottom_sheet.dart` - Bottom sheet chọn filters
+- `lib/features/posts/widgets/feed_filter_chips.dart` - Widget hiển thị active filters
+- `lib/features/search/pages/search_page.dart` - UI filter cho search
+- `lib/features/search/widgets/user_search_filter_bottom_sheet.dart` - Bottom sheet cho user filters
+- `firebase/firestore.indexes.json` - Indexes cho queries với filters
 
 ---
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../profile/public_profile_page.dart';
 import '../../profile/user_profile_repository.dart';
+import '../../share/services/share_service.dart';
 import '../models/post.dart';
 import '../models/post_media.dart';
 import '../repositories/post_repository.dart';
@@ -20,6 +21,51 @@ class PostPermalinkPage extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Bài viết'),
+        actions: [
+          Builder(
+            builder: (context) => PopupMenuButton<String>(
+              icon: const Icon(Icons.share),
+              onSelected: (value) async {
+                if (value == 'share') {
+                  final post = await _postRepository.watchPost(postId).first;
+                  await ShareService.sharePost(
+                    postId: postId,
+                    caption: post.caption.isNotEmpty ? post.caption : null,
+                  );
+                } else if (value == 'copy') {
+                  await ShareService.copyPostLink(postId);
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Đã sao chép link')),
+                    );
+                  }
+                }
+              },
+              itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: 'share',
+                  child: Row(
+                    children: [
+                      Icon(Icons.share),
+                      SizedBox(width: 8),
+                      Text('Chia sẻ'),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'copy',
+                  child: Row(
+                    children: [
+                      Icon(Icons.copy),
+                      SizedBox(width: 8),
+                      Text('Sao chép link'),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
       body: StreamBuilder<Post>(
         stream: _postRepository.watchPost(postId),

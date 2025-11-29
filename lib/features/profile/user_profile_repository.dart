@@ -465,6 +465,19 @@ class UserProfileRepository {
     required String query,
     int limit = 20,
   }) async {
+    return searchUsersWithFilters(
+      query: query,
+      limit: limit,
+    );
+  }
+
+  /// Search users với filters (follow status, privacy)
+  Future<List<UserProfile>> searchUsersWithFilters({
+    required String query,
+    int limit = 20,
+    bool? isFollowing,
+    bool? isPrivate,
+  }) async {
     if (query.trim().isEmpty) return [];
     
     final normalizedQuery = query.trim().toLowerCase();
@@ -508,7 +521,12 @@ class UserProfileRepository {
           final displayNameMatch = profile.displayNameLower?.contains(normalizedQuery) ?? false;
           final emailMatch = profile.emailLower?.contains(normalizedQuery) ?? false;
           final phoneMatch = profile.phoneNumber?.contains(normalizedQuery) ?? false;
-          return displayNameMatch || emailMatch || phoneMatch;
+          if (!(displayNameMatch || emailMatch || phoneMatch)) return false;
+
+          // Apply privacy filter
+          if (isPrivate != null && profile.isPrivate != isPrivate) return false;
+
+          return true;
         })
         .take(limit)
         .toList();

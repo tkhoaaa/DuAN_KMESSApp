@@ -1,9 +1,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../models/post.dart';
 import '../models/post_media.dart';
 import '../repositories/post_repository.dart';
+import '../../share/services/share_service.dart';
 import 'post_permalink_page.dart';
 import 'post_video_page.dart';
 import '../../profile/public_profile_page.dart';
@@ -146,6 +148,44 @@ class _HashtagPageState extends State<HashtagPage>
     return Scaffold(
       appBar: AppBar(
         title: Text('#${widget.hashtag}'),
+        actions: [
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.share),
+            onSelected: (value) async {
+              if (value == 'share') {
+                await ShareService.shareHashtag(hashtag: widget.hashtag);
+              } else if (value == 'copy') {
+                await ShareService.copyHashtagLink(widget.hashtag);
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Đã sao chép link')),
+                );
+              }
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'share',
+                child: Row(
+                  children: [
+                    Icon(Icons.share),
+                    SizedBox(width: 8),
+                    Text('Chia sẻ'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'copy',
+                child: Row(
+                  children: [
+                    Icon(Icons.copy),
+                    SizedBox(width: 8),
+                    Text('Sao chép link'),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
         bottom: TabBar(
           controller: _tabController,
           tabs: const [

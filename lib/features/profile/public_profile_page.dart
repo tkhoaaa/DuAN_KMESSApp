@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../auth/auth_repository.dart';
@@ -8,6 +9,7 @@ import '../follow/models/follow_state.dart';
 import '../follow/services/follow_service.dart';
 import '../safety/services/block_service.dart';
 import '../safety/services/report_service.dart';
+import '../share/services/share_service.dart';
 import '../posts/repositories/post_repository.dart';
 import '../posts/models/post.dart';
 import '../posts/models/post_media.dart';
@@ -108,13 +110,24 @@ class _PublicProfilePageState extends State<PublicProfilePage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Trang cá nhân'),
-        actions: currentUid != null && currentUid != widget.uid
-            ? [
-                _ProfileMoreMenu(
-                  targetUid: widget.uid,
-                ),
-              ]
-            : null,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.share),
+            onPressed: () async {
+              final profile = await userProfileRepository.fetchProfile(widget.uid);
+              final displayName = profile?.displayName ?? 'người dùng này';
+              await ShareService.shareProfile(
+                uid: widget.uid,
+                displayName: displayName,
+              );
+            },
+            tooltip: 'Chia sẻ profile',
+          ),
+          if (currentUid != null && currentUid != widget.uid)
+            _ProfileMoreMenu(
+              targetUid: widget.uid,
+            ),
+        ],
       ),
       body: StreamBuilder<UserProfile?>(
         stream: userProfileRepository.watchProfile(widget.uid),

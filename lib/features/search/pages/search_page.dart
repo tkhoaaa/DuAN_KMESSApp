@@ -8,10 +8,12 @@ import '../../follow/models/follow_state.dart' as follow_models;
 import '../../follow/services/follow_service.dart';
 import '../../posts/models/post.dart';
 import '../../posts/models/post_media.dart';
+import '../../posts/models/feed_filters.dart';
 import '../../posts/pages/post_permalink_page.dart';
 import '../../profile/public_profile_page.dart';
 import '../../profile/user_profile_repository.dart';
 import '../services/search_service.dart';
+import '../models/user_search_filters.dart';
 
 class SearchPage extends StatefulWidget {
   const SearchPage({super.key});
@@ -33,6 +35,8 @@ class _SearchPageState extends State<SearchPage>
   bool _isSearchingUsers = false;
   bool _isSearchingPosts = false;
   String _currentQuery = '';
+  UserSearchFilters _userFilters = UserSearchFilters();
+  FeedFilters _postFilters = FeedFilters();
 
   @override
   void initState() {
@@ -77,20 +81,87 @@ class _SearchPageState extends State<SearchPage>
       _isSearchingPosts = true;
     });
 
-    // Tìm kiếm users và posts song song
-    final results = await Future.wait([
-      _searchService.searchUsers(query: query, limit: 20),
-      _searchService.searchPosts(query: query, limit: 20),
-    ]);
+    final currentUid = authRepository.currentUser()?.uid;
+
+    // Tìm kiếm users với filters
+    final userResults = await _searchService.searchUsersWithFilters(
+      query: query,
+      filters: _userFilters.isDefault ? null : _userFilters,
+      limit: 20,
+      checkFollowing: currentUid != null
+          ? (uid) async {
+              try {
+                final state = await _followService.watchFollowState(currentUid, uid).first;
+                return state.status == FollowStatus.following;
+              } catch (e) {
+                return false;
+              }
+            }
+          : null,
+    );
+
+    // Tìm kiếm posts với filters
+    List<Post> postResults = [];
+    if (_postFilters.isDefault) {
+      postResults = await _searchService.searchPosts(query: query, limit: 20);
+    } else {
+      // Apply filters cho posts search (client-side filter)
+      final allPosts = await _searchService.searchPosts(query: query, limit: 50);
+      postResults = _applyPostFilters(allPosts);
+    }
 
     if (!mounted) return;
 
     setState(() {
-      _userResults = results[0] as List<UserProfile>;
-      _postResults = results[1] as List<Post>;
+      _userResults = userResults;
+      _postResults = postResults;
       _isSearchingUsers = false;
       _isSearchingPosts = false;
     });
+  }
+
+  List<Post> _applyPostFilters(List<Post> posts) {
+    var filtered = posts;
+
+    // Apply media filter
+    switch (_postFilters.mediaFilter) {
+      case PostMediaFilter.all:
+        break;
+      case PostMediaFilter.images:
+        filtered = filtered.where((p) => p.media.any((m) => m.type == PostMediaType.image)).toList();
+        break;
+      case PostMediaFilter.videos:
+        filtered = filtered.where((p) => p.media.any((m) => m.type == PostMediaType.video)).toList();
+        break;
+    }
+
+    // Apply time filter
+    final startDate = _postFilters.getStartDate();
+    if (startDate != null) {
+      filtered = filtered.where((p) {
+        if (p.createdAt == null) return false;
+        return p.createdAt!.isAfter(startDate) || p.createdAt!.isAtSameMomentAs(startDate);
+      }).toList();
+    }
+
+    // Apply sort
+    switch (_postFilters.sortOption) {
+      case PostSortOption.newest:
+        filtered.sort((a, b) {
+          final aTime = a.createdAt ?? DateTime(1970);
+          final bTime = b.createdAt ?? DateTime(1970);
+          return bTime.compareTo(aTime);
+        });
+        break;
+      case PostSortOption.mostLiked:
+        filtered.sort((a, b) => b.likeCount.compareTo(a.likeCount));
+        break;
+      case PostSortOption.mostCommented:
+        filtered.sort((a, b) => b.commentCount.compareTo(a.commentCount));
+        break;
+    }
+
+    return filtered.take(20).toList();
   }
 
   @override
@@ -112,6 +183,15 @@ class _SearchPageState extends State<SearchPage>
             }
           },
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.filter_list),
+            tooltip: 'Lọc',
+            onPressed: () {
+              _showFilterDialog();
+            },
+          ),
+        ],
         bottom: TabBar(
           controller: _tabController,
           tabs: const [
@@ -137,44 +217,48 @@ class _SearchPageState extends State<SearchPage>
       );
     }
 
-    if (_isSearchingUsers) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    if (_userResults.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.person_search, size: 64, color: Colors.grey),
-            const SizedBox(height: 16),
-            Text(
-              'Không tìm thấy người dùng nào với từ khóa "$_currentQuery"',
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.grey),
-            ),
-          ],
+    return Column(
+      children: [
+        if (!_userFilters.isDefault)
+          _buildUserFilterChips(),
+        Expanded(
+          child: _isSearchingUsers
+              ? const Center(child: CircularProgressIndicator())
+              : _userResults.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.person_search, size: 64, color: Colors.grey),
+                          const SizedBox(height: 16),
+                          Text(
+                            'Không tìm thấy người dùng nào với từ khóa "$_currentQuery"',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(color: Colors.grey),
+                          ),
+                        ],
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.all(8),
+                      itemCount: _userResults.length,
+                      itemBuilder: (context, index) {
+                        final profile = _userResults[index];
+                        return _UserResultTile(
+                          profile: profile,
+                          followService: _followService,
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => PublicProfilePage(uid: profile.uid),
+                              ),
+                            );
+                          },
+                        );
+                      },
+                    ),
         ),
-      );
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.all(8),
-      itemCount: _userResults.length,
-      itemBuilder: (context, index) {
-        final profile = _userResults[index];
-        return _UserResultTile(
-          profile: profile,
-          followService: _followService,
-          onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => PublicProfilePage(uid: profile.uid),
-              ),
-            );
-          },
-        );
-      },
+      ],
     );
   }
 
@@ -185,49 +269,351 @@ class _SearchPageState extends State<SearchPage>
       );
     }
 
-    if (_isSearchingPosts) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    if (_postResults.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.search_off, size: 64, color: Colors.grey),
-            const SizedBox(height: 16),
-            Text(
-              'Không tìm thấy bài viết nào với từ khóa "$_currentQuery"',
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.grey),
-            ),
-          ],
+    return Column(
+      children: [
+        if (!_postFilters.isDefault)
+          _buildPostFilterChips(),
+        Expanded(
+          child: _isSearchingPosts
+              ? const Center(child: CircularProgressIndicator())
+              : _postResults.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.search_off, size: 64, color: Colors.grey),
+                          const SizedBox(height: 16),
+                          Text(
+                            'Không tìm thấy bài viết nào với từ khóa "$_currentQuery"',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(color: Colors.grey),
+                          ),
+                        ],
+                      ),
+                    )
+                  : GridView.builder(
+                      padding: const EdgeInsets.all(8),
+                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 3,
+                        crossAxisSpacing: 4,
+                        mainAxisSpacing: 4,
+                      ),
+                      itemCount: _postResults.length,
+                      itemBuilder: (context, index) {
+                        final post = _postResults[index];
+                        return _PostGridItem(
+                          post: post,
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => PostPermalinkPage(postId: post.id),
+                              ),
+                            );
+                          },
+                        );
+                      },
+                    ),
         ),
-      );
-    }
-
-    return GridView.builder(
-      padding: const EdgeInsets.all(8),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
-        crossAxisSpacing: 4,
-        mainAxisSpacing: 4,
-      ),
-      itemCount: _postResults.length,
-      itemBuilder: (context, index) {
-        final post = _postResults[index];
-        return _PostGridItem(
-          post: post,
-          onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => PostPermalinkPage(postId: post.id),
-              ),
-            );
-          },
-        );
-      },
+      ],
     );
+  }
+
+  Widget _buildUserFilterChips() {
+    final chips = <Widget>[];
+    if (_userFilters.followStatus != UserSearchFilter.all) {
+      chips.add(_buildFilterChip(
+        label: _userFilters.getFollowStatusName(),
+        onDeleted: () {
+          setState(() {
+            _userFilters = _userFilters.copyWith(followStatus: UserSearchFilter.all);
+          });
+          if (_currentQuery.isNotEmpty) {
+            _performSearch(_currentQuery);
+          }
+        },
+      ));
+    }
+    if (_userFilters.privacyFilter != PrivacyFilter.all) {
+      chips.add(_buildFilterChip(
+        label: _userFilters.getPrivacyFilterName(),
+        onDeleted: () {
+          setState(() {
+            _userFilters = _userFilters.copyWith(privacyFilter: PrivacyFilter.all);
+          });
+          if (_currentQuery.isNotEmpty) {
+            _performSearch(_currentQuery);
+          }
+        },
+      ));
+    }
+    if (chips.isEmpty) return const SizedBox.shrink();
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(children: chips),
+            ),
+          ),
+          TextButton(
+            onPressed: () {
+              setState(() {
+                _userFilters = _userFilters.reset();
+              });
+              if (_currentQuery.isNotEmpty) {
+                _performSearch(_currentQuery);
+              }
+            },
+            child: const Text('Xóa tất cả'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPostFilterChips() {
+    final chips = <Widget>[];
+    if (_postFilters.mediaFilter != PostMediaFilter.all) {
+      chips.add(_buildFilterChip(
+        label: _postFilters.getMediaFilterName(),
+        onDeleted: () {
+          setState(() {
+            _postFilters = _postFilters.copyWith(mediaFilter: PostMediaFilter.all);
+          });
+          if (_currentQuery.isNotEmpty) {
+            _performSearch(_currentQuery);
+          }
+        },
+      ));
+    }
+    if (_postFilters.timeFilter != TimeFilter.all) {
+      chips.add(_buildFilterChip(
+        label: _postFilters.getTimeFilterName(),
+        onDeleted: () {
+          setState(() {
+            _postFilters = _postFilters.copyWith(timeFilter: TimeFilter.all);
+          });
+          if (_currentQuery.isNotEmpty) {
+            _performSearch(_currentQuery);
+          }
+        },
+      ));
+    }
+    if (_postFilters.sortOption != PostSortOption.newest) {
+      chips.add(_buildFilterChip(
+        label: _postFilters.getSortOptionName(),
+        onDeleted: () {
+          setState(() {
+            _postFilters = _postFilters.copyWith(sortOption: PostSortOption.newest);
+          });
+          if (_currentQuery.isNotEmpty) {
+            _performSearch(_currentQuery);
+          }
+        },
+      ));
+    }
+    if (chips.isEmpty) return const SizedBox.shrink();
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(children: chips),
+            ),
+          ),
+          TextButton(
+            onPressed: () {
+              setState(() {
+                _postFilters = _postFilters.reset();
+              });
+              if (_currentQuery.isNotEmpty) {
+                _performSearch(_currentQuery);
+              }
+            },
+            child: const Text('Xóa tất cả'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterChip({
+    required String label,
+    required VoidCallback onDeleted,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: InputChip(
+        label: Text(label),
+        onDeleted: onDeleted,
+        deleteIcon: const Icon(Icons.close, size: 18),
+      ),
+    );
+  }
+
+  void _showFilterDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Lọc kết quả'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              if (_tabController.index == 0) ...[
+                // User filters
+                const Text('Trạng thái follow:', style: TextStyle(fontWeight: FontWeight.bold)),
+                ...UserSearchFilter.values.map((filter) {
+                  return RadioListTile<UserSearchFilter>(
+                    title: Text(_getUserFilterName(filter)),
+                    value: filter,
+                    groupValue: _userFilters.followStatus,
+                    onChanged: (value) {
+                      if (value != null) {
+                        setState(() {
+                          _userFilters = _userFilters.copyWith(followStatus: value);
+                        });
+                      }
+                    },
+                  );
+                }),
+                const SizedBox(height: 16),
+                const Text('Quyền riêng tư:', style: TextStyle(fontWeight: FontWeight.bold)),
+                ...PrivacyFilter.values.map((filter) {
+                  return RadioListTile<PrivacyFilter>(
+                    title: Text(_getPrivacyFilterName(filter)),
+                    value: filter,
+                    groupValue: _userFilters.privacyFilter,
+                    onChanged: (value) {
+                      if (value != null) {
+                        setState(() {
+                          _userFilters = _userFilters.copyWith(privacyFilter: value);
+                        });
+                      }
+                    },
+                  );
+                }),
+              ] else ...[
+                // Post filters
+                const Text('Loại media:', style: TextStyle(fontWeight: FontWeight.bold)),
+                ...PostMediaFilter.values.map((filter) {
+                  return RadioListTile<PostMediaFilter>(
+                    title: Text(_getPostMediaFilterName(filter)),
+                    value: filter,
+                    groupValue: _postFilters.mediaFilter,
+                    onChanged: (value) {
+                      if (value != null) {
+                        setState(() {
+                          _postFilters = _postFilters.copyWith(mediaFilter: value);
+                        });
+                      }
+                    },
+                  );
+                }),
+                const SizedBox(height: 16),
+                const Text('Sắp xếp:', style: TextStyle(fontWeight: FontWeight.bold)),
+                ...PostSortOption.values.map((option) {
+                  return RadioListTile<PostSortOption>(
+                    title: Text(_getPostSortOptionName(option)),
+                    value: option,
+                    groupValue: _postFilters.sortOption,
+                    onChanged: (value) {
+                      if (value != null) {
+                        setState(() {
+                          _postFilters = _postFilters.copyWith(sortOption: value);
+                        });
+                      }
+                    },
+                  );
+                }),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              setState(() {
+                if (_tabController.index == 0) {
+                  _userFilters = _userFilters.reset();
+                } else {
+                  _postFilters = _postFilters.reset();
+                }
+              });
+              Navigator.of(context).pop();
+              if (_currentQuery.isNotEmpty) {
+                _performSearch(_currentQuery);
+              }
+            },
+            child: const Text('Đặt lại'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Hủy'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              if (_currentQuery.isNotEmpty) {
+                _performSearch(_currentQuery);
+              }
+            },
+            child: const Text('Áp dụng'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _getUserFilterName(UserSearchFilter filter) {
+    switch (filter) {
+      case UserSearchFilter.all:
+        return 'Tất cả';
+      case UserSearchFilter.following:
+        return 'Đang follow';
+      case UserSearchFilter.notFollowing:
+        return 'Chưa follow';
+      case UserSearchFilter.followRequest:
+        return 'Follow request';
+    }
+  }
+
+  String _getPrivacyFilterName(PrivacyFilter filter) {
+    switch (filter) {
+      case PrivacyFilter.all:
+        return 'Tất cả';
+      case PrivacyFilter.public:
+        return 'Công khai';
+      case PrivacyFilter.private:
+        return 'Riêng tư';
+    }
+  }
+
+  String _getPostMediaFilterName(PostMediaFilter filter) {
+    switch (filter) {
+      case PostMediaFilter.all:
+        return 'Tất cả';
+      case PostMediaFilter.images:
+        return 'Chỉ ảnh';
+      case PostMediaFilter.videos:
+        return 'Chỉ video';
+    }
+  }
+
+  String _getPostSortOptionName(PostSortOption option) {
+    switch (option) {
+      case PostSortOption.newest:
+        return 'Mới nhất';
+      case PostSortOption.mostLiked:
+        return 'Nhiều like nhất';
+      case PostSortOption.mostCommented:
+        return 'Nhiều comment nhất';
+    }
   }
 }
 

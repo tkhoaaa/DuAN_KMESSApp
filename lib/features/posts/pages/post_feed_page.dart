@@ -1,7 +1,10 @@
 import 'dart:async';
 
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../auth/auth_repository.dart';
 import '../../profile/public_profile_page.dart';
@@ -14,10 +17,14 @@ import '../../stories/pages/story_viewer_page.dart';
 import '../../stories/models/story.dart';
 import '../../stories/repositories/story_repository.dart';
 import '../../follow/services/follow_service.dart';
+import '../../share/services/share_service.dart';
 import '../models/post.dart';
 import '../models/post_media.dart';
+import '../models/feed_filters.dart';
 import '../services/post_service.dart';
 import '../widgets/post_caption_with_hashtags.dart';
+import '../widgets/feed_filter_bottom_sheet.dart';
+import '../widgets/feed_filter_chips.dart';
 import 'post_comments_sheet.dart';
 import 'post_create_page.dart';
 import 'post_video_page.dart';
@@ -41,6 +48,7 @@ class _PostFeedPageState extends State<PostFeedPage> {
   bool _initialLoading = true;
   StreamSubscription<List<Post>>? _publishedPostsSubscription;
   Set<String> _knownPostIds = {}; // Track posts đã load để tránh duplicate
+  FeedFilters _filters = FeedFilters(); // Default filters
 
   @override
   void initState() {
@@ -114,10 +122,16 @@ class _PostFeedPageState extends State<PostFeedPage> {
       _isLoading = true;
     });
     try {
-      final result = await _postService.fetchFeedPage(
-        startAfter: reset ? null : _lastDoc,
-        limit: 8,
-      );
+      final result = _filters.isDefault
+          ? await _postService.fetchFeedPage(
+              startAfter: reset ? null : _lastDoc,
+              limit: 8,
+            )
+          : await _postService.fetchFeedPageWithFilters(
+              filters: _filters,
+              startAfter: reset ? null : _lastDoc,
+              limit: 8,
+            );
       setState(() {
         _entries.addAll(result.entries);
         _lastDoc = result.lastDoc;
@@ -144,6 +158,25 @@ class _PostFeedPageState extends State<PostFeedPage> {
         title: const Text('Bảng tin'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.filter_list),
+            tooltip: 'Lọc & Sắp xếp',
+            onPressed: () {
+              showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                builder: (context) => FeedFilterBottomSheet(
+                  initialFilters: _filters,
+                  onApply: (filters) {
+                    setState(() {
+                      _filters = filters;
+                    });
+                    _loadInitial();
+                  },
+                ),
+              );
+            },
+          ),
+          IconButton(
             icon: const Icon(Icons.history),
             tooltip: 'Story của bạn',
             onPressed: () {
@@ -169,45 +202,75 @@ class _PostFeedPageState extends State<PostFeedPage> {
         onRefresh: _loadInitial,
         child: _initialLoading
             ? const Center(child: CircularProgressIndicator())
-            : ListView.builder(
-                controller: _scrollController,
-                padding: const EdgeInsets.only(bottom: 80),
-                itemCount: _entries.length + 1 + (_hasMore ? 1 : 0),
-                itemBuilder: (context, index) {
-                  if (index == 0) {
-                    return _StoriesBar(storyRepository: _storyRepository);
-                  }
-                  final postIndex = index - 1;
-                  if (postIndex >= _entries.length) {
-                    return const Padding(
-                      padding: EdgeInsets.all(16),
-                      child: Center(child: CircularProgressIndicator()),
-                    );
-                  }
-                  final entry = _entries[postIndex];
-                  return PostFeedItem(
-                    entry: entry,
-                    service: _postService,
-                    onOpenProfile: (uid) {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => PublicProfilePage(uid: uid),
-                        ),
-                      );
+            : Column(
+                children: [
+                  FeedFilterChips(
+                    filters: _filters,
+                    onRemoveFilter: (filters) {
+                      setState(() {
+                        _filters = filters;
+                      });
+                      _loadInitial();
                     },
-                    onOpenComments: (post) {
+                    onTap: () {
                       showModalBottomSheet(
                         context: context,
                         isScrollControlled: true,
-                        builder: (_) => PostCommentsSheet(post: post),
+                        builder: (context) => FeedFilterBottomSheet(
+                          initialFilters: _filters,
+                          onApply: (filters) {
+                            setState(() {
+                              _filters = filters;
+                            });
+                            _loadInitial();
+                          },
+                        ),
                       );
                     },
-                    onPostDeleted: () {
-                      // Reload feed sau khi xóa post
-                      _loadInitial();
-                    },
-                  );
-                },
+                  ),
+                  Expanded(
+                    child: ListView.builder(
+                      controller: _scrollController,
+                      padding: const EdgeInsets.only(bottom: 80),
+                      itemCount: _entries.length + 1 + (_hasMore ? 1 : 0),
+                      itemBuilder: (context, index) {
+                        if (index == 0) {
+                          return _StoriesBar(storyRepository: _storyRepository);
+                        }
+                        final postIndex = index - 1;
+                        if (postIndex >= _entries.length) {
+                          return const Padding(
+                            padding: EdgeInsets.all(16),
+                            child: Center(child: CircularProgressIndicator()),
+                          );
+                        }
+                        final entry = _entries[postIndex];
+                        return PostFeedItem(
+                          entry: entry,
+                          service: _postService,
+                          onOpenProfile: (uid) {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => PublicProfilePage(uid: uid),
+                              ),
+                            );
+                          },
+                          onOpenComments: (post) {
+                            showModalBottomSheet(
+                              context: context,
+                              isScrollControlled: true,
+                              builder: (_) => PostCommentsSheet(post: post),
+                            );
+                          },
+                          onPostDeleted: () {
+                            // Reload feed sau khi xóa post
+                            _loadInitial();
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
               ),
       ),
     );
@@ -581,9 +644,44 @@ class _PostFeedItemState extends State<PostFeedItem> {
                       );
                     },
                   ),
-                IconButton(
+                PopupMenuButton<String>(
                   icon: const Icon(Icons.share),
-                  onPressed: () {},
+                  onSelected: (value) async {
+                    if (value == 'share') {
+                      await ShareService.sharePost(
+                        postId: post.id,
+                        caption: post.caption.isNotEmpty ? post.caption : null,
+                      );
+                    } else if (value == 'copy') {
+                      await ShareService.copyPostLink(post.id);
+                      if (!mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Đã sao chép link')),
+                      );
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: 'share',
+                      child: Row(
+                        children: [
+                          Icon(Icons.share),
+                          SizedBox(width: 8),
+                          Text('Chia sẻ'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'copy',
+                      child: Row(
+                        children: [
+                          Icon(Icons.copy),
+                          SizedBox(width: 8),
+                          Text('Sao chép link'),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),

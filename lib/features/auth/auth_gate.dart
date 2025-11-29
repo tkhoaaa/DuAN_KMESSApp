@@ -5,6 +5,7 @@ import 'email_verification_screen.dart';
 import 'login_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../notifications/pages/notification_center_page.dart';
 import '../notifications/services/notification_service.dart';
 import '../profile/user_profile_repository.dart';
@@ -14,6 +15,8 @@ import '../chat/pages/conversations_page.dart';
 import '../posts/pages/post_feed_page.dart';
 import '../posts/services/post_scheduling_service.dart';
 import '../search/pages/search_page.dart';
+import '../share/models/deep_link.dart';
+import '../share/services/deep_link_service.dart';
 
 class AuthGate extends StatelessWidget {
   const AuthGate({super.key});
@@ -69,6 +72,7 @@ class _SignedInHome extends StatefulWidget {
 class _SignedInHomeState extends State<_SignedInHome> {
   final PostSchedulingService _schedulingService = PostSchedulingService();
   Timer? _scheduledPostsTimer;
+  final MethodChannel _methodChannel = const MethodChannel('app.channel.deeplink');
 
   @override
   void initState() {
@@ -90,6 +94,49 @@ class _SignedInHomeState extends State<_SignedInHome> {
         const Duration(minutes: 1),
         (_) => _checkScheduledPosts(),
       );
+    }
+    
+    // Listen deep links
+    _initDeepLinkListener();
+  }
+
+  void _initDeepLinkListener() {
+    // Listen for deep links when app is opened from terminated state
+    _methodChannel.setMethodCallHandler((call) async {
+      if (call.method == 'onDeepLink' && mounted) {
+        final url = call.arguments as String?;
+        if (url != null) {
+          _handleDeepLink(url);
+        }
+      }
+    });
+    
+    // Try to get initial link (when app opened from link)
+    _getInitialLink();
+  }
+
+  Future<void> _getInitialLink() async {
+    try {
+      final initialLink = await _methodChannel.invokeMethod<String>('getInitialLink');
+      if (initialLink != null && mounted) {
+        _handleDeepLink(initialLink);
+      }
+    } catch (e) {
+      debugPrint('Error getting initial link: $e');
+    }
+  }
+
+  void _handleDeepLink(String url) {
+    if (!mounted) return;
+    
+    final link = DeepLink.fromUrl(url);
+    if (link.type != DeepLinkType.unknown) {
+      // Delay navigation để đảm bảo context sẵn sàng
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          DeepLinkService.handleDeepLink(context, link);
+        }
+      });
     }
   }
 

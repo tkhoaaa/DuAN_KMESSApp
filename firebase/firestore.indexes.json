@@ -103,6 +103,53 @@
             ]
         },
         {
+            "collectionGroup": "posts",
+            "queryScope": "COLLECTION",
+            "fields": [{
+                    "fieldPath": "status",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "createdAt",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "likeCount",
+                    "order": "DESCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "posts",
+            "queryScope": "COLLECTION",
+            "fields": [{
+                    "fieldPath": "status",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "createdAt",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "commentCount",
+                    "order": "DESCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "user_profiles",
+            "queryScope": "COLLECTION",
+            "fields": [{
+                    "fieldPath": "displayNameLower",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "isPrivate",
+                    "order": "ASCENDING"
+                }
+            ]
+        },
+        {
             "collectionGroup": "notification_digests",
             "queryScope": "COLLECTION_GROUP",
             "fields": [{

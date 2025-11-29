@@ -2,6 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/post.dart';
 import '../models/post_comment.dart';
+import '../models/feed_filters.dart';
+import '../models/post_media.dart';
 
 class PostPageResult {
   PostPageResult({
@@ -231,6 +233,86 @@ class PostRepository {
       docs: docs,
       lastDoc: docs.isNotEmpty ? docs.last : startAfter,
       hasMore: docs.length == limit,
+    );
+  }
+
+  /// Fetch posts với filters (media, time, sort)
+  Future<PostPageResult> fetchPostsWithFilters({
+    required FeedFilters filters,
+    DocumentSnapshot<Map<String, dynamic>>? startAfter,
+    int limit = 20,
+  }) async {
+    // Build query với time filter và sort option
+    Query<Map<String, dynamic>> query = _posts
+        .where('status', isEqualTo: PostStatus.published.name);
+
+    // Apply time filter
+    final startDate = filters.getStartDate();
+    if (startDate != null) {
+      query = query.where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(startDate));
+    }
+
+    // Apply sort option
+    String orderByField;
+    bool descending;
+    switch (filters.sortOption) {
+      case PostSortOption.newest:
+        orderByField = 'createdAt';
+        descending = true;
+        break;
+      case PostSortOption.mostLiked:
+        orderByField = 'likeCount';
+        descending = true;
+        break;
+      case PostSortOption.mostCommented:
+        orderByField = 'commentCount';
+        descending = true;
+        break;
+    }
+    query = query.orderBy(orderByField, descending: descending);
+
+    // Nếu sort không phải createdAt, cần thêm orderBy createdAt làm secondary sort
+    if (orderByField != 'createdAt') {
+      // Firestore chỉ cho phép 1 orderBy, nên ta sẽ sort client-side nếu cần
+      // Hoặc tạo composite index với cả 2 fields
+    }
+
+    // Limit và pagination
+    query = query.limit(limit * 2); // Lấy nhiều hơn để filter client-side cho media type
+    if (startAfter != null) {
+      query = query.startAfterDocument(startAfter);
+    }
+
+    final snap = await query.get();
+
+    // Convert to Post objects
+    final posts = snap.docs
+        .map((doc) => Post.fromDoc(doc))
+        .where((post) {
+          // Filter backward compatibility: posts không có status
+          if (post.status != PostStatus.published) return false;
+
+          // Apply media filter (client-side)
+          switch (filters.mediaFilter) {
+            case PostMediaFilter.all:
+              return true;
+            case PostMediaFilter.images:
+              return post.media.any((m) => m.type == PostMediaType.image);
+            case PostMediaFilter.videos:
+              return post.media.any((m) => m.type == PostMediaType.video);
+          }
+        })
+        .take(limit)
+        .toList();
+
+    // Convert back to docs for pagination
+    final postIds = posts.map((p) => p.id).toSet();
+    final filteredDocs = snap.docs.where((doc) => postIds.contains(doc.id)).toList();
+
+    return PostPageResult(
+      docs: filteredDocs,
+      lastDoc: filteredDocs.isNotEmpty ? filteredDocs.last : startAfter,
+      hasMore: filteredDocs.length == limit,
     );
   }
 

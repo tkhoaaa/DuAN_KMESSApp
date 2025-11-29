@@ -17,6 +17,7 @@ import '../models/post.dart';
 import '../models/post_comment.dart';
 import '../models/post_media.dart';
 import '../models/draft_post.dart';
+import '../models/feed_filters.dart';
 import '../repositories/post_repository.dart';
 import '../repositories/draft_post_repository.dart';
 
@@ -87,6 +88,34 @@ class PostService {
     int limit = 10,
   }) async {
     final page = await _repository.fetchPosts(
+      startAfter: startAfter,
+      limit: limit,
+    );
+
+    final futures = page.docs.map((doc) async {
+      final post = Post.fromDoc(doc);
+      final author = await _profiles.fetchProfile(post.authorUid);
+      return PostFeedEntry(
+        doc: doc,
+        author: author,
+      );
+    }).toList();
+
+    final entries = await Future.wait(futures);
+    return PostFeedPageResult(
+      entries: entries,
+      lastDoc: page.lastDoc,
+      hasMore: page.hasMore,
+    );
+  }
+
+  Future<PostFeedPageResult> fetchFeedPageWithFilters({
+    required FeedFilters filters,
+    DocumentSnapshot<Map<String, dynamic>>? startAfter,
+    int limit = 10,
+  }) async {
+    final page = await _repository.fetchPostsWithFilters(
+      filters: filters,
       startAfter: startAfter,
       limit: limit,
     );
