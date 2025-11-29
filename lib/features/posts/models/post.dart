@@ -11,6 +11,7 @@ class Post {
     required this.createdAt,
     required this.likeCount,
     required this.commentCount,
+    this.hashtags = const [],
   });
 
   final String id;
@@ -20,6 +21,7 @@ class Post {
   final DateTime? createdAt;
   final int likeCount;
   final int commentCount;
+  final List<String> hashtags;
 
   factory Post.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data() ?? {};
@@ -34,6 +36,11 @@ class Post {
         mediaList.add(PostMedia(url: legacyUrl, type: PostMediaType.image));
       }
     }
+    final hashtagsList = (data['hashtags'] as List<dynamic>? ?? [])
+        .map((item) => item.toString())
+        .where((item) => item.isNotEmpty)
+        .toList();
+    
     return Post(
       id: doc.id,
       authorUid: data['authorUid'] as String? ?? '',
@@ -42,6 +49,7 @@ class Post {
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
       likeCount: (data['likeCount'] as num?)?.toInt() ?? 0,
       commentCount: (data['commentCount'] as num?)?.toInt() ?? 0,
+      hashtags: hashtagsList,
     );
   }
 }

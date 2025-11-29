@@ -14,6 +14,7 @@ import '../../follow/services/follow_service.dart';
 import '../models/post.dart';
 import '../models/post_media.dart';
 import '../services/post_service.dart';
+import '../widgets/post_caption_with_hashtags.dart';
 import 'post_comments_sheet.dart';
 import 'post_create_page.dart';
 import 'post_video_page.dart';
@@ -481,7 +482,9 @@ class _PostFeedItemState extends State<PostFeedItem> {
                 horizontal: 12,
                 vertical: 8,
               ),
-              child: Text(post.caption),
+              child: PostCaptionWithHashtags(
+                caption: post.caption,
+              ),
             ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8),

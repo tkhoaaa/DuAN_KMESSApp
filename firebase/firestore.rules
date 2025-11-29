@@ -150,12 +150,14 @@ service cloud.firestore {
           'media',
           'caption',
           'captionLower',
+          'hashtags',
           'createdAt',
           'likeCount',
           'commentCount'
         ])
         && request.resource.data.media is list
-        && (request.resource.data.captionLower == null || request.resource.data.captionLower is string);
+        && (request.resource.data.captionLower == null || request.resource.data.captionLower is string)
+        && (request.resource.data.hashtags == null || request.resource.data.hashtags is list);
 
       // Cho phép owner update/delete hoặc chỉ update likeCount/commentCount
       allow update: if isPostOwner() || (

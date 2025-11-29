@@ -5,6 +5,7 @@ import '../../profile/user_profile_repository.dart';
 import '../models/post.dart';
 import '../models/post_media.dart';
 import '../repositories/post_repository.dart';
+import '../widgets/post_caption_with_hashtags.dart';
 import 'post_video_page.dart';
 
 class PostPermalinkPage extends StatelessWidget {
@@ -100,8 +101,8 @@ class PostPermalinkPage extends StatelessWidget {
                     _PermalinkMediaCarousel(post: post),
                     if (post.caption.isNotEmpty) ...[
                       const SizedBox(height: 16),
-                      Text(
-                        post.caption,
+                      PostCaptionWithHashtags(
+                        caption: post.caption,
                         style: const TextStyle(fontSize: 15),
                       ),
                     ],

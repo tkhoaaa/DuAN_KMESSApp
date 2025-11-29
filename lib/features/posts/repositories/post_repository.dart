@@ -21,6 +21,27 @@ class PostRepository {
 
   final FirebaseFirestore _firestore;
 
+  /// Trích xuất hashtags từ caption (regex tìm từ bắt đầu bằng #)
+  /// Trả về list hashtags đã normalize (lowercase, loại bỏ trùng lặp, giới hạn độ dài)
+  static List<String> extractHashtagsFromCaption(String caption) {
+    if (caption.trim().isEmpty) return [];
+    
+    // Regex để tìm hashtag: bắt đầu bằng #, theo sau là chữ, số, underscore
+    // Giới hạn độ dài tối đa 50 ký tự (không tính #)
+    final regex = RegExp(r'#[\w]{1,50}', caseSensitive: false);
+    final matches = regex.allMatches(caption);
+    
+    // Extract và normalize (lowercase, loại bỏ #)
+    final hashtags = matches
+        .map((match) => match.group(0)?.substring(1).toLowerCase() ?? '')
+        .where((tag) => tag.isNotEmpty)
+        .toSet() // Loại bỏ trùng lặp
+        .toList();
+    
+    // Giới hạn tối đa 10 hashtags mỗi post
+    return hashtags.take(10).toList();
+  }
+
   CollectionReference<Map<String, dynamic>> get _posts =>
       _firestore.collection('posts');
 
@@ -37,11 +58,14 @@ class PostRepository {
   }) async {
     final doc = _posts.doc();
     final captionText = caption ?? '';
+    final hashtags = extractHashtagsFromCaption(captionText);
+    
     await doc.set({
       'authorUid': authorUid,
       'media': media,
       'caption': captionText,
       'captionLower': captionText.toLowerCase(),
+      'hashtags': hashtags,
       'createdAt': FieldValue.serverTimestamp(),
       'likeCount': 0,
       'commentCount': 0,
@@ -333,6 +357,136 @@ class PostRepository {
     });
     
     return posts;
+  }
+
+  /// Stream posts theo hashtag (realtime)
+  Stream<List<Post>> watchPostsByHashtag(
+    String tag, {
+    int limit = 20,
+    String sortBy = 'createdAt', // 'createdAt' hoặc 'hot' (likeCount + commentCount)
+  }) {
+    if (tag.trim().isEmpty) return Stream.value([]);
+    
+    final normalizedTag = tag.trim().toLowerCase();
+    
+    Query<Map<String, dynamic>> query = _posts
+        .where('hashtags', arrayContains: normalizedTag)
+        .limit(limit);
+    
+    // Sort theo thời gian hoặc độ hot
+    if (sortBy == 'hot') {
+      // Không thể sort trực tiếp theo likeCount + commentCount trong Firestore
+      // Sẽ sort client-side sau khi fetch
+      query = query.orderBy('createdAt', descending: true);
+    } else {
+      query = query.orderBy('createdAt', descending: true);
+    }
+    
+    return query.snapshots().map((snapshot) {
+      final posts = snapshot.docs.map((doc) => Post.fromDoc(doc)).toList();
+      
+      // Nếu sortBy == 'hot', sort lại theo likeCount + commentCount
+      if (sortBy == 'hot') {
+        posts.sort((a, b) {
+          final aScore = a.likeCount + a.commentCount;
+          final bScore = b.likeCount + b.commentCount;
+          if (aScore != bScore) {
+            return bScore.compareTo(aScore); // Descending
+          }
+          // Nếu score bằng nhau, sort theo thời gian
+          final aTime = a.createdAt ?? DateTime(1970);
+          final bTime = b.createdAt ?? DateTime(1970);
+          return bTime.compareTo(aTime);
+        });
+      }
+      
+      return posts;
+    });
+  }
+
+  /// Fetch posts theo hashtag (pagination)
+  Future<PostPageResult> fetchPostsByHashtag(
+    String tag, {
+    int limit = 20,
+    DocumentSnapshot<Map<String, dynamic>>? startAfter,
+    String sortBy = 'createdAt', // 'createdAt' hoặc 'hot'
+  }) async {
+    if (tag.trim().isEmpty) {
+      return PostPageResult(docs: [], lastDoc: null, hasMore: false);
+    }
+    
+    final normalizedTag = tag.trim().toLowerCase();
+    
+    Query<Map<String, dynamic>> query = _posts
+        .where('hashtags', arrayContains: normalizedTag)
+        .orderBy('createdAt', descending: true)
+        .limit(limit);
+    
+    if (startAfter != null) {
+      query = query.startAfterDocument(startAfter);
+    }
+    
+    final snapshot = await query.get();
+    final docs = snapshot.docs;
+    
+    // Nếu sortBy == 'hot', cần sort lại client-side
+    // Nhưng vì Firestore không hỗ trợ sort theo computed field,
+    // ta sẽ sort sau khi fetch
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> sortedDocs = docs;
+    if (sortBy == 'hot') {
+      sortedDocs = List.from(docs);
+      sortedDocs.sort((a, b) {
+        final aData = a.data();
+        final bData = b.data();
+        final aScore = ((aData['likeCount'] as num?)?.toInt() ?? 0) +
+            ((aData['commentCount'] as num?)?.toInt() ?? 0);
+        final bScore = ((bData['likeCount'] as num?)?.toInt() ?? 0) +
+            ((bData['commentCount'] as num?)?.toInt() ?? 0);
+        if (aScore != bScore) {
+          return bScore.compareTo(aScore); // Descending
+        }
+        // Nếu score bằng nhau, sort theo thời gian
+        final aTime = (aData['createdAt'] as Timestamp?)?.toDate() ?? DateTime(1970);
+        final bTime = (bData['createdAt'] as Timestamp?)?.toDate() ?? DateTime(1970);
+        return bTime.compareTo(aTime);
+      });
+    }
+    
+    return PostPageResult(
+      docs: sortedDocs,
+      lastDoc: sortedDocs.isNotEmpty ? sortedDocs.last : startAfter,
+      hasMore: sortedDocs.length == limit,
+    );
+  }
+
+  /// Fetch trending hashtags (dựa trên số lượng posts sử dụng)
+  /// Tạm thời: aggregate từ posts collection (có thể optimize sau với hashtags collection)
+  Future<List<String>> fetchTrendingHashtags({int limit = 10}) async {
+    // Lấy các posts gần đây và đếm hashtags
+    final recentPosts = await _posts
+        .orderBy('createdAt', descending: true)
+        .limit(100) // Lấy 100 posts gần nhất để tính trending
+        .get();
+    
+    final hashtagCounts = <String, int>{};
+    
+    for (final doc in recentPosts.docs) {
+      final data = doc.data();
+      final hashtags = (data['hashtags'] as List<dynamic>? ?? [])
+          .map((item) => item.toString().toLowerCase())
+          .where((item) => item.isNotEmpty)
+          .toList();
+      
+      for (final tag in hashtags) {
+        hashtagCounts[tag] = (hashtagCounts[tag] ?? 0) + 1;
+      }
+    }
+    
+    // Sort theo số lượng và lấy top N
+    final sortedTags = hashtagCounts.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    
+    return sortedTags.take(limit).map((e) => e.key).toList();
   }
 }
 

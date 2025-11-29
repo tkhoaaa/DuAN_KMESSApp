@@ -360,46 +360,363 @@
 **Mô tả:** Tùy biến profile người dùng với theme color và links ngoài (website, social media)
 
 #### Phase 1 – Data & Rules
-- [ ] Model: Thêm `themeColor` (string, hex color code) và `links` (list<map> với `url` và `label`) vào `UserProfile` class.
-- [ ] Cập nhật `toMap()` và `fromDoc()` để serialize/deserialize các field mới.
-- [ ] Cập nhật Firestore rules để cho phép owner update `themeColor` và `links` trong `user_profiles`.
-- [ ] (Optional) Validation: `themeColor` phải là hex color hợp lệ (ví dụ: `#FF5733`), `links` mỗi item phải có `url` (valid URL) và `label` (string).
+- [x] Model: Thêm `themeColor` (string, hex color code) và `links` (list<map> với `url` và `label`) vào `UserProfile` class.
+- [x] Cập nhật `toMap()` và `fromDoc()` để serialize/deserialize các field mới.
+- [x] Cập nhật Firestore rules để cho phép owner update `themeColor` và `links` trong `user_profiles`.
+- [x] (Optional) Validation: `themeColor` phải là hex color hợp lệ (ví dụ: `#FF5733`), `links` mỗi item phải có `url` (valid URL) và `label` (string).
 
 #### Phase 2 – Repository & Service
-- [ ] Mở rộng `UserProfileRepository.updateProfile()` để nhận tham số `themeColor` và `links`.
-- [ ] Thêm method `updateThemeColor(uid, themeColor)` và `updateLinks(uid, links)` nếu cần (hoặc gộp vào `updateProfile`).
-- [ ] Đảm bảo backward compatibility: các profile cũ không có `themeColor`/`links` vẫn hoạt động bình thường (default values).
+- [x] Mở rộng `UserProfileRepository.updateProfile()` để nhận tham số `themeColor` và `links`.
+- [x] Thêm method `updateThemeColor(uid, themeColor)` và `updateLinks(uid, links)` nếu cần (hoặc gộp vào `updateProfile`).
+- [x] Đảm bảo backward compatibility: các profile cũ không có `themeColor`/`links` vẫn hoạt động bình thường (default values).
 
 #### Phase 3 – UI: Profile Screen (Chỉnh sửa)
-- [ ] Thêm section "Tùy biến" trong `ProfileScreen` với:
+- [x] Thêm section "Tùy biến" trong `ProfileScreen` với:
   - Color picker hoặc palette để chọn `themeColor` (hiển thị preview màu).
   - Form để thêm/sửa/xóa links (tối đa 5 links, mỗi link có label và URL).
   - Validation URL format trước khi lưu.
-- [ ] Hiển thị preview theme color trên avatar ring hoặc accent color trong UI.
+- [x] Hiển thị preview theme color trên avatar ring hoặc accent color trong UI.
 - [ ] SnackBar xác nhận sau khi lưu theme/links.
 
 #### Phase 4 – UI: Public Profile Page (Hiển thị)
-- [ ] Áp dụng `themeColor` vào UI elements:
+- [x] Áp dụng `themeColor` vào UI elements:
   - Avatar ring/border (nếu có).
   - Follow button background/accent.
   - AppBar hoặc header accent (optional).
-- [ ] Hiển thị section "Links" dưới bio với:
+- [x] Hiển thị section "Links" dưới bio với:
   - List các links dạng button/card (icon + label).
   - Tap để mở URL trong browser (sử dụng `url_launcher` hoặc `launchUrl`).
   - Icon phù hợp theo loại link (website, Instagram, Facebook, Twitter, etc.) nếu có thể detect.
-- [ ] Fallback: Nếu không có `themeColor`, dùng màu mặc định của app.
+- [x] Fallback: Nếu không có `themeColor`, dùng màu mặc định của app.
 
 #### Phase 5 – QA & Polish
-- [ ] Test các trường hợp: profile cũ không có theme/links, profile mới có đầy đủ, update từng phần.
-- [ ] Đảm bảo validation URL hoạt động đúng (http/https, invalid URL).
-- [ ] Kiểm tra UI responsive trên các kích thước màn hình.
-- [ ] (Optional) Thêm preset colors cho user chọn nhanh thay vì color picker tự do.
+- [x] Test các trường hợp: profile cũ không có theme/links, profile mới có đầy đủ, update từng phần.
+- [x] Đảm bảo validation URL hoạt động đúng (http/https, invalid URL).
+- [x] Kiểm tra UI responsive trên các kích thước màn hình.
+- [x] (Optional) Thêm preset colors cho user chọn nhanh thay vì color picker tự do.
 
 **Files dự kiến:**
 - `lib/features/profile/user_profile_repository.dart` (thêm fields và methods)
 - `lib/features/profile/profile_screen.dart` (UI chỉnh sửa theme/links)
 - `lib/features/profile/public_profile_page.dart` (hiển thị theme/links)
 - `firebase/firestore.rules` (cho phép update themeColor và links)
+
+---
+
+### 19. Hashtag & Topic System
+**Mô tả:** Cho phép gắn hashtag vào bài viết và duyệt nội dung theo chủ đề.
+
+#### Phase 1 – Data & Rules
+- [ ] Tạo utility function `extractHashtags(String caption)` sử dụng regex để tìm tất cả hashtag (pattern: `#[\w]+`).
+- [ ] Bổ sung field `hashtags` (list<string>, normalized lowercase) vào model `Post` và document `posts`.
+- [ ] Cập nhật `toMap()` và `fromDoc()` trong model `Post` để serialize/deserialize field `hashtags`.
+- [ ] (Optional) Tạo collection `hashtags/{tag}` lưu metadata:
+  - `totalPosts` (int): số bài viết sử dụng hashtag này
+  - `lastUpdated` (timestamp): thời gian cập nhật gần nhất
+  - `createdAt` (timestamp): thời gian hashtag được tạo lần đầu
+- [ ] Cập nhật Firestore rules để cho phép read/write `hashtags` field trong posts (đã có sẵn trong rule posts).
+- [ ] (Optional) Tạo composite index cho query `posts` theo `hashtags` array-contains và `createdAt` DESC.
+
+#### Phase 2 – Repository & Service
+- [ ] Mở rộng `PostRepository`:
+  - Thêm method `extractHashtagsFromCaption(String caption)` → `List<String>` (normalize lowercase, loại bỏ trùng lặp).
+  - Cập nhật `createPost()` để tự động trích xuất và lưu `hashtags` khi tạo bài viết.
+  - Thêm method `watchPostsByHashtag(String tag, {int limit = 20})` → `Stream<List<Post>>` (query `where('hashtags', arrayContains: tag)`).
+  - Thêm method `fetchPostsByHashtag(String tag, {int limit = 20, DocumentSnapshot? lastDoc})` → `Future<List<Post>>` (pagination).
+  - Thêm method `fetchTrendingHashtags({int limit = 10})` → `Future<List<String>>` (dựa trên `hashtags` collection hoặc aggregate từ posts).
+- [ ] Tạo `HashtagService` (optional) để:
+  - Cập nhật metadata trong `hashtags` collection khi có post mới/xóa post.
+  - Cache trending hashtags để tối ưu performance.
+
+#### Phase 3 – UI: Hashtag Display & Interaction
+- [ ] Tạo widget `PostCaptionWithHashtags`:
+  - Parse caption và highlight hashtag (màu xanh, font weight bold).
+  - Mỗi hashtag là `TextSpan` tap-able, khi tap → navigate đến `HashtagPage`.
+  - Xử lý trường hợp caption có nhiều hashtag, hashtag ở giữa câu.
+- [ ] Cập nhật `PostFeedPage` và `PostPermalinkPage`:
+  - Thay thế `Text` caption bằng `PostCaptionWithHashtags`.
+  - Đảm bảo hiển thị đúng format khi có hashtag.
+
+#### Phase 4 – UI: Hashtag Page & Search
+- [ ] Tạo `HashtagPage`:
+  - AppBar hiển thị hashtag (ví dụ: "#travel").
+  - TabBar với 2 tabs: "Mới nhất" (sort `createdAt DESC`) và "Nổi bật" (sort theo `likeCount + commentCount DESC`).
+  - List posts sử dụng `PostCard` widget sẵn có.
+  - Infinite scroll với pagination.
+  - Empty state khi không có bài viết.
+- [ ] Tích hợp vào `SearchPage`:
+  - Thêm tab "Hashtag" (hoặc filter trong tab "Bài viết").
+  - Hiển thị gợi ý hashtag khi user nhập từ khóa bắt đầu bằng `#`.
+  - Tap hashtag → navigate đến `HashtagPage`.
+
+#### Phase 5 – UI: Hashtag Autocomplete
+- [ ] Trong màn hình tạo bài viết (`CreatePostPage`):
+  - Khi user nhập caption, detect khi gõ `#` → hiển thị dropdown gợi ý hashtag.
+  - Gợi ý dựa trên trending hashtags hoặc hashtags phổ biến (query `hashtags` collection).
+  - User có thể chọn từ dropdown hoặc tiếp tục gõ tự do.
+  - Debounce input để tránh query quá nhiều.
+
+#### Phase 6 – QA & Polish
+- [ ] Test các trường hợp:
+  - Caption không có hashtag → `hashtags` = `[]`.
+  - Caption có nhiều hashtag → parse đúng tất cả.
+  - Hashtag trùng lặp → normalize và loại bỏ duplicate.
+  - Hashtag có ký tự đặc biệt → sanitize (chỉ cho phép chữ, số, underscore).
+  - Hashtag dài quá → giới hạn độ dài (ví dụ: tối đa 50 ký tự).
+- [ ] Đảm bảo XSS/sanitization:
+  - Không cho hashtag chứa HTML tags hoặc script.
+  - Validate format hashtag trước khi lưu.
+- [ ] Performance:
+  - Giới hạn số lượng hashtag mỗi post (ví dụ: tối đa 10 hashtags).
+  - Cache trending hashtags để giảm query Firestore.
+- [ ] UX improvements:
+  - Hiển thị số lượng bài viết cho mỗi hashtag trong `HashtagPage`.
+  - (Optional) Hiển thị hashtag suggestions dựa trên caption đang gõ (AI/ML nếu có).
+
+**Files dự kiến:**
+- `lib/features/posts/models/post.dart` (thêm field `hashtags`)
+- `lib/features/posts/repositories/post_repository.dart` (parse & lưu hashtags, query theo hashtag)
+- `lib/features/posts/services/hashtag_service.dart` (optional - metadata management)
+- `lib/features/posts/pages/hashtag_page.dart` (màn hình hiển thị posts theo hashtag)
+- `lib/features/posts/widgets/post_caption_with_hashtags.dart` (widget hiển thị caption với hashtag tap-able)
+- `lib/features/posts/pages/create_post_page.dart` (thêm autocomplete hashtag)
+- `lib/features/search/pages/search_page.dart` (tích hợp tìm kiếm hashtag)
+- `lib/features/posts/pages/post_feed_page.dart` (sử dụng `PostCaptionWithHashtags`)
+- `lib/features/posts/pages/post_permalink_page.dart` (sử dụng `PostCaptionWithHashtags`)
+- `firebase/firestore.rules` (nếu cần validate thêm cho field `hashtags`)
+
+---
+
+### 20. Pinned Posts & Profile Highlights
+**Mô tả:** Cho phép người dùng ghim bài viết lên đầu profile và lưu stories thành highlights.
+
+#### Phase 1 – Data & Rules
+- [ ] Thêm field `pinnedPostIds` (list<string>, tối đa 3) vào `user_profiles`.
+- [ ] Thêm collection `story_highlights/{uid}/albums/{albumId}` (name, coverStoryId, createdAt).
+- [ ] Firestore rules: chỉ owner được update `pinnedPostIds` và albums highlights của mình.
+
+#### Phase 2 – Repository & Service
+- [ ] Mở rộng `UserProfileRepository` với hàm update pinned posts.
+- [ ] Tạo `StoryHighlightRepository` để quản lý albums: tạo/sửa/xóa album, gắn story vào album.
+
+#### Phase 3 – UI & UX
+- [ ] Trên `ProfileScreen`: UI chọn bài viết để ghim (tối đa 3), hiển thị preview.
+- [ ] Trên `PublicProfilePage`: hiển thị pinned posts phía trên grid bài viết.
+- [ ] Trên phần stories: UI tạo highlight album từ stories đã hết hạn (chọn tên, cover).
+- [ ] Trên profile: hiển thị hàng “Highlights” (avatar nhỏ từng album, tap mở story viewer).
+
+#### Phase 4 – QA
+- [ ] Đảm bảo khi xóa post thì tự động gỡ khỏi `pinnedPostIds`.
+- [ ] Test giới hạn 3 bài ghim, hành vi khi thêm/bớt/đổi thứ tự.
+
+**Files dự kiến:**
+- `lib/features/profile/user_profile_repository.dart`
+- `lib/features/profile/profile_screen.dart`
+- `lib/features/profile/public_profile_page.dart`
+- `lib/features/stories/repositories/story_highlight_repository.dart`
+- `lib/features/stories/widgets/story_highlight_row.dart`
+- `firebase/firestore.rules`
+
+---
+
+### 21. Advanced Notifications & Digest
+**Mô tả:** Nâng cấp hệ thống thông báo, gom nhóm và tạo báo cáo tổng hợp ngày/tuần.
+
+#### Phase 1 – Data & Rules
+- [ ] Bổ sung field `groupKey` và `count` vào notification (để group “N người đã thích bài viết…”).
+- [ ] Bổ sung collection `notification_digests/{uid}/items/{digestId}` lưu tổng hợp hằng ngày/tuần.
+- [ ] Firestore rules: chỉ owner được đọc/ghi digests của mình.
+
+#### Phase 2 – Service Logic
+- [ ] Cập nhật `NotificationService`:
+  - Khi tạo notification mới, kiểm tra có notification cùng `groupKey` trong khoảng thời gian gần đây để group.
+  - Tăng `count` thay vì tạo document mới nếu phù hợp.
+- [ ] Tạo `NotificationDigestService`:
+  - Gom dữ liệu like/follow/comment/message theo ngày/tuần.
+  - Tạo digest document định kỳ (initial version có thể chạy khi user mở app).
+
+#### Phase 3 – UI & UX
+- [ ] Trong Notification Center: hiển thị dạng group (“5 người đã thích bài viết X”).
+- [ ] Tạo tab hoặc màn mới “Tổng kết” hiển thị digest (ví dụ: “Tuần này bạn có 30 lượt thích, 5 người theo dõi mới…”).
+
+#### Phase 4 – QA
+- [ ] Test logic group: spam like nhiều lần vẫn gom gọn, không tạo quá nhiều row.
+- [ ] Test hiển thị digest với nhiều trường hợp: ít tương tác, nhiều tương tác.
+
+**Files dự kiến:**
+- `lib/features/notifications/models/notification.dart` (bổ sung group fields)
+- `lib/features/notifications/services/notification_service.dart`
+- `lib/features/notifications/services/notification_digest_service.dart`
+- `lib/features/notifications/pages/notification_center_page.dart`
+- `lib/features/notifications/pages/notification_digest_page.dart`
+- `firebase/firestore.rules`
+
+---
+
+### 22. In-App Security & Privacy Nâng Cao
+**Mô tả:** Bảo mật nâng cao và cài đặt riêng tư chi tiết.
+
+#### Phase 1 – 2FA (Two-Factor Authentication)
+- [ ] Thiết kế luồng 2FA qua email/OTP (khi đăng nhập mới, thiết bị mới).
+- [ ] Tạo collection `two_factor_tokens/{uid}/items/{tokenId}` (code, expiresAt, used).
+- [ ] UI: màn nhập OTP sau khi đăng nhập thành công bước 1.
+
+#### Phase 2 – Device Management
+- [ ] Tạo collection `devices/{uid}/sessions/{sessionId}` (deviceInfo, lastActiveAt, ip nếu có).
+- [ ] UI: trang “Thiết bị & Phiên đăng nhập” cho phép:
+  - Xem danh sách thiết bị.
+  - Đăng xuất từng thiết bị.
+  - Đăng xuất tất cả thiết bị khác.
+
+#### Phase 3 – Privacy Settings
+- [ ] Thêm các cài đặt:
+  - Ẩn trạng thái online (`showOnlineStatus`).
+  - Ẩn `lastSeen` với người lạ hoặc tất cả (`lastSeenVisibility`).
+  - Quyền nhắn tin: mọi người / chỉ người theo dõi (`messagePermission`).
+- [ ] UI: trang “Quyền riêng tư” trong settings/profile.
+- [ ] Tích hợp vào logic chat/search: chặn send message / hiển thị trạng thái theo cài đặt.
+
+#### Phase 4 – QA
+- [ ] Test đăng nhập từ nhiều thiết bị, đăng xuất từ xa.
+- [ ] Test quyền nhắn tin giữa các loại tài khoản khác nhau (public/private, follow/not follow).
+
+**Files dự kiến:**
+- `lib/features/auth/pages/two_factor_page.dart`
+- `lib/features/auth/services/two_factor_service.dart`
+- `lib/features/auth/device_session_repository.dart`
+- `lib/features/settings/pages/privacy_settings_page.dart`
+- `lib/features/profile/user_profile_repository.dart` (thêm fields privacy)
+- `lib/features/chat/repositories/chat_repository.dart` (check messagePermission)
+- `firebase/firestore.rules`
+
+---
+
+### 23. Post Scheduling & Drafts
+**Mô tả:** Lưu bài viết dạng nháp và hẹn giờ đăng trong tương lai.
+
+#### Phase 1 – Data & Rules
+- [ ] Thêm collection `post_drafts/{uid}/items/{draftId}` (media, caption, createdAt, updatedAt).
+- [ ] Bổ sung field `scheduledAt` và `status` (scheduled/published/cancelled) trong `posts`.
+- [ ] Firestore rules: chỉ owner đọc/ghi draft & scheduled posts của mình.
+
+#### Phase 2 – Repository & Service
+- [ ] Tạo `DraftPostRepository` để CRUD draft.
+- [ ] Mở rộng `PostRepository`:
+  - Tạo post với `scheduledAt` trong tương lai (status `scheduled`).
+  - Cập nhật status sang `published` khi đến giờ (tạm thời: xử lý client-side khi app mở).
+
+#### Phase 3 – UI & UX
+- [ ] Trên màn tạo bài viết:
+  - Nút “Lưu nháp”.
+  - Tùy chọn “Đăng ngay” hoặc “Hẹn giờ đăng”.
+- [ ] Màn “Bài nháp & Bài hẹn giờ”:
+  - Danh sách draft có thể sửa/xóa.
+  - Danh sách bài đã schedule, cho phép đổi giờ hoặc huỷ schedule.
+
+#### Phase 4 – QA
+- [ ] Test các trường hợp: thoát app giữa chừng, mở lại draft, chỉnh sửa rồi đăng.
+- [ ] Test timezone và hiển thị thời gian chính xác.
+
+**Files dự kiến:**
+- `lib/features/posts/repositories/draft_post_repository.dart`
+- `lib/features/posts/pages/draft_posts_page.dart`
+- `lib/features/posts/pages/create_post_page.dart` (bổ sung lựa chọn schedule/draft)
+- `lib/features/posts/repositories/post_repository.dart`
+- `firebase/firestore.rules`
+
+---
+
+### 24. Share & Deep-linking Nâng Cao
+**Mô tả:** Chia sẻ bài viết/profiles ra ngoài app và hỗ trợ deep link vào trong app.
+
+#### Phase 1 – Deep Link Design
+- [ ] Chuẩn hoá format deep link:
+  - Bài viết: `kmessapp://posts/{postId}`
+  - Profile: `kmessapp://user/{uid}`
+- [ ] Cấu hình deep link trên Android/iOS (intent filters, universal links nếu cần).
+
+#### Phase 2 – Implementation
+- [ ] Tạo `DeepLinkService` để phân tích URL và điều hướng tới `PostPermalinkPage` hoặc `PublicProfilePage`.
+- [ ] Cập nhật nơi hiển thị link (Saved Posts, share menu) sử dụng format đã chuẩn hóa.
+
+#### Phase 3 – Share Out
+- [ ] Tích hợp package share (vd: `share_plus`) để share link bài viết/profile ra ngoài (Messenger, Zalo,…).
+- [ ] UI: nút “Chia sẻ” trong post menu và profile menu.
+
+#### Phase 4 – QA
+- [ ] Test mở deep link từ trạng thái app khác nhau: app chưa mở / đang nền / đang mở.
+- [ ] Test link lỗi, bài viết/profile đã bị xóa → hiển thị màn thông báo phù hợp.
+
+**Files dự kiến:**
+- `lib/features/deeplink/deep_link_service.dart`
+- `lib/features/posts/pages/post_permalink_page.dart` (mở rộng)
+- `lib/features/profile/public_profile_page.dart` (mở rộng nhận từ deep link)
+- Android/iOS native config cho deep links
+
+---
+
+### 25. Bộ lọc & Sort nâng cao cho Feed/Search
+**Mô tả:** Cho phép người dùng lọc và sắp xếp nội dung linh hoạt hơn.
+
+#### Phase 1 – Feed Filters
+- [ ] Trong post feed: bộ lọc theo loại media (tất cả / chỉ ảnh / chỉ video).
+- [ ] Bộ lọc theo khoảng thời gian (hôm nay / tuần này / tháng này).
+- [ ] Sort theo: mới nhất, nhiều like nhất, nhiều comment nhất.
+
+#### Phase 2 – Search Filters
+- [ ] Trong `SearchPage`, tab Users:
+  - Filter theo trạng thái follow: đang follow / chưa follow / follow request.
+  - Filter theo quyền riêng tư: public / private.
+- [ ] Trong tab Posts:
+  - Filter theo loại media (image/video).
+  - (Optional) Filter theo hashtag nếu đã có hệ thống hashtag.
+
+#### Phase 3 – UX
+- [ ] Thiết kế bottom sheet/filter bar để chọn filter & sort.
+- [ ] Hiển thị chip/label các filter đang áp dụng.
+
+#### Phase 4 – QA
+- [ ] Test kết hợp nhiều filter và sort, tránh query quá nặng (giới hạn page size).
+- [ ] Đảm bảo tôn trọng Firestore rules (không lộ nội dung private).
+
+**Files dự kiến:**
+- `lib/features/posts/repositories/post_repository.dart` (bổ sung query theo filter)
+- `lib/features/posts/pages/post_feed_page.dart` (UI filter & sort)
+- `lib/features/search/pages/search_page.dart` (bổ sung filter UI & logic)
+
+---
+
+### 26. Voice/Video Call (Real-time)
+**Mô tả:** Cuộc gọi thoại / video 1-1 trực tiếp giữa người dùng.
+
+#### Phase 1 – Tech & Data Design
+- [ ] Chọn giải pháp: WebRTC thuần hoặc tích hợp dịch vụ bên thứ ba (Agora, Twilio,…).
+- [ ] Thiết kế collection `calls/{callId}` (callerUid, calleeUid, type, status, startedAt, endedAt).
+- [ ] Firestore rules: chỉ caller/callee được đọc call của mình.
+
+#### Phase 2 – Signaling & Call Flow
+- [ ] Tạo `CallService`:
+  - Tạo cuộc gọi mới, gửi “ringing” tới callee (notification + realtime).
+  - Cập nhật trạng thái: ringing → accepted/rejected/missed/ended.
+- [ ] Tích hợp signaling (qua Firestore hoặc RTDB) cho WebRTC/SDK.
+
+#### Phase 3 – UI & UX
+- [ ] Trong `ChatDetailPage`: thêm icon gọi thoại & video.
+- [ ] Màn hình “Đang gọi” với nút accept/reject.
+- [ ] Màn hình trong cuộc gọi: hiển thị video (nếu video call), mute mic, tắt camera, kết thúc.
+- [ ] Log lịch sử cuộc gọi hiển thị trong chat (message type `call_log`).
+
+#### Phase 4 – QA & Network
+- [ ] Test trên mạng yếu, chuyển mạng, mất kết nối tạm thời.
+- [ ] Test các edge case: callee không online, reject call, missed call.
+
+**Files dự kiến:**
+- `lib/features/call/models/call.dart`
+- `lib/features/call/services/call_service.dart`
+- `lib/features/call/pages/voice_call_page.dart`
+- `lib/features/call/pages/video_call_page.dart`
+- `lib/features/chat/pages/chat_detail_page.dart` (thêm nút call)
+- `firebase/firestore.rules`
 
 ## 📝 Lưu Ý
 

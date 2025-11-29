@@ -61,3 +61,38 @@ firebase deploy --only firestore:rules
 > - Truy vấn collection group `follow_requests` (lọc theo `fromUid`) cũng cần index.  
 > - Bảng tin sử dụng `posts` (orderBy `createdAt`) và có thể yêu cầu index khi kết hợp bộ lọc nâng cao.  
 > Khi gặp lỗi `FAILED_PRECONDITION`, sử dụng liên kết được hiển thị trong ứng dụng để tạo index trên Firebase Console, đợi vài phút rồi thử lại.
+
+----Models (Mô hình dữ liệu)----
+Mục đích: Định nghĩa cấu trúc dữ liệu (data classes) cho các entity trong ứng dụng
+Ví dụ: Post, Message, Story, Notification
+Chức năng:
+Chứa các class Dart đại diện cho dữ liệu
+Chuyển đổi dữ liệu từ Firestore/API sang object Dart (factory methods như fromDoc, fromMap)
+Định nghĩa các thuộc tính và kiểu dữ liệu
+
+----Pages (Giao diện màn hình)----
+Mục đích: Chứa các màn hình UI (StatefulWidget/StatelessWidget)
+Ví dụ: PostFeedPage, ChatDetailPage, StoryViewerPage
+Chức năng:
+Xây dựng giao diện người dùng
+Xử lý tương tác (tap, scroll, input)
+Quản lý state của màn hình
+Gọi services/repositories để lấy dữ liệu
+
+----Repositories (Tầng truy cập dữ liệu)----
+Mục đích: Lớp trung gian giữa UI và nguồn dữ liệu (Firestore, API)
+Ví dụ: PostRepository, ChatRepository, StoryRepository
+Chức năng:
+Thực hiện các thao tác CRUD với database
+Đọc/ghi dữ liệu từ Firestore
+Xử lý query, filter, pagination
+Trả về dữ liệu dạng raw (DocumentSnapshot, QuerySnapshot)
+
+---Services (Tầng xử lý nghiệp vụ)---
+Mục đích: Xử lý logic nghiệp vụ phức tạp, kết hợp nhiều repositories
+Ví dụ: PostService, ConversationService, NotificationService
+Chức năng:
+Kết hợp nhiều repositories để thực hiện một tác vụ
+Xử lý upload file (ảnh, video) lên Cloudinary/Firebase Storage
+Xử lý business logic (ví dụ: tạo post → upload media → lưu vào Firestore → gửi notification)
+Chuyển đổi dữ liệu từ repository sang model để UI sử dụng

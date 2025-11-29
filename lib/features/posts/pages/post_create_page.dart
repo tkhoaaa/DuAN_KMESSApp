@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../models/post_media.dart';
 import '../services/post_service.dart';
+import '../widgets/hashtag_autocomplete_field.dart';
 
 class PostCreatePage extends StatefulWidget {
   const PostCreatePage({super.key});
@@ -177,14 +178,14 @@ class _PostCreatePageState extends State<PostCreatePage> {
               ],
             ),
             const SizedBox(height: 16),
-            TextField(
+            HashtagAutocompleteField(
               controller: _captionController,
               minLines: 3,
               maxLines: 6,
               decoration: const InputDecoration(
                 labelText: 'Caption',
                 border: OutlineInputBorder(),
-                hintText: 'Viết chú thích cho bài đăng...',
+                hintText: 'Viết chú thích cho bài đăng... (Gõ # để thêm hashtag)',
               ),
             ),
           ],
