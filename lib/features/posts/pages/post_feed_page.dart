@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
@@ -37,18 +39,50 @@ class _PostFeedPageState extends State<PostFeedPage> {
   bool _hasMore = true;
   bool _isLoading = false;
   bool _initialLoading = true;
+  StreamSubscription<List<Post>>? _publishedPostsSubscription;
+  Set<String> _knownPostIds = {}; // Track posts đã load để tránh duplicate
 
   @override
   void initState() {
     super.initState();
     _loadInitial();
     _scrollController.addListener(_onScroll);
+    // Listen cho posts mới được publish
+    _listenForNewPublishedPosts();
   }
 
   @override
   void dispose() {
+    _publishedPostsSubscription?.cancel();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  /// Listen cho posts mới được publish (realtime)
+  void _listenForNewPublishedPosts() {
+    // Chỉ listen top 5 posts mới nhất để detect posts mới được publish
+    _publishedPostsSubscription = _postService.watchPublishedPosts(limit: 5).listen(
+      (newPosts) {
+        if (!mounted) return;
+        
+        // Tìm posts mới (chưa có trong _knownPostIds)
+        final newPostIds = newPosts
+            .where((post) => !_knownPostIds.contains(post.id))
+            .map((post) => post.id)
+            .toList();
+        
+        if (newPostIds.isNotEmpty) {
+          // Reload feed để hiển thị posts mới
+          _loadInitial();
+        }
+        
+        // Update known post IDs
+        _knownPostIds.addAll(newPosts.map((p) => p.id));
+      },
+      onError: (error) {
+        debugPrint('Error listening for published posts: $error');
+      },
+    );
   }
 
   void _onScroll() {
@@ -66,6 +100,7 @@ class _PostFeedPageState extends State<PostFeedPage> {
       _entries.clear();
       _lastDoc = null;
       _hasMore = true;
+      _knownPostIds.clear(); // Reset known post IDs khi reload
     });
     await _loadMore(reset: true);
     setState(() {
@@ -87,6 +122,8 @@ class _PostFeedPageState extends State<PostFeedPage> {
         _entries.addAll(result.entries);
         _lastDoc = result.lastDoc;
         _hasMore = result.hasMore;
+        // Update known post IDs
+        _knownPostIds.addAll(result.entries.map((e) => e.doc.id));
       });
     } catch (e) {
       if (!mounted) return;

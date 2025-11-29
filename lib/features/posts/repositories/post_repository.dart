@@ -55,12 +55,18 @@ class PostRepository {
     required String authorUid,
     required List<Map<String, dynamic>> media,
     String? caption,
+    DateTime? scheduledAt,
   }) async {
     final doc = _posts.doc();
     final captionText = caption ?? '';
     final hashtags = extractHashtagsFromCaption(captionText);
     
-    await doc.set({
+    // Xác định status dựa trên scheduledAt
+    final now = DateTime.now();
+    final isScheduled = scheduledAt != null && scheduledAt.isAfter(now);
+    final status = isScheduled ? PostStatus.scheduled : PostStatus.published;
+    
+    final data = <String, dynamic>{
       'authorUid': authorUid,
       'media': media,
       'caption': captionText,
@@ -69,27 +75,158 @@ class PostRepository {
       'createdAt': FieldValue.serverTimestamp(),
       'likeCount': 0,
       'commentCount': 0,
-    });
+      'status': status.name,
+    };
+    
+    if (isScheduled) {
+      data['scheduledAt'] = Timestamp.fromDate(scheduledAt);
+    }
+    
+    await doc.set(data);
 
-    await _firestore.collection('user_profiles').doc(authorUid).set({
-      'postsCount': FieldValue.increment(1),
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    // Chỉ increment postsCount nếu post được publish ngay
+    if (status == PostStatus.published) {
+      await _firestore.collection('user_profiles').doc(authorUid).set({
+        'postsCount': FieldValue.increment(1),
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    }
 
     return doc.id;
+  }
+
+  /// Fetch scheduled posts của user
+  Future<List<Post>> fetchScheduledPosts({
+    required String authorUid,
+    int limit = 20,
+  }) async {
+    try {
+      final snapshot = await _posts
+          .where('authorUid', isEqualTo: authorUid)
+          .where('status', isEqualTo: PostStatus.scheduled.name)
+          .orderBy('scheduledAt', descending: false)
+          .limit(limit)
+          .get();
+      
+      // Filter out posts without scheduledAt (shouldn't happen but just in case)
+      final posts = snapshot.docs
+          .map((doc) => Post.fromDoc(doc))
+          .where((post) => post.scheduledAt != null)
+          .toList();
+      
+      return posts;
+    } catch (e) {
+      // Fallback: Query không có orderBy nếu index chưa sẵn sàng
+      print('Error fetching scheduled posts with orderBy: $e');
+      try {
+        final snapshot = await _posts
+            .where('authorUid', isEqualTo: authorUid)
+            .where('status', isEqualTo: PostStatus.scheduled.name)
+            .limit(limit)
+            .get();
+        
+        final posts = snapshot.docs
+            .map((doc) => Post.fromDoc(doc))
+            .where((post) => post.scheduledAt != null)
+            .toList();
+        
+        // Sort client-side
+        posts.sort((a, b) {
+          if (a.scheduledAt == null) return 1;
+          if (b.scheduledAt == null) return -1;
+          return a.scheduledAt!.compareTo(b.scheduledAt!);
+        });
+        
+        return posts;
+      } catch (fallbackError) {
+        print('Fallback query also failed: $fallbackError');
+        rethrow;
+      }
+    }
+  }
+
+  /// Publish scheduled post (chuyển status từ scheduled sang published)
+  Future<void> publishScheduledPost({
+    required String postId,
+    required String authorUid,
+  }) async {
+    await _firestore.runTransaction((txn) async {
+      final postRef = _posts.doc(postId);
+      final postSnap = await txn.get(postRef);
+      
+      if (!postSnap.exists) {
+        throw StateError('Post not found');
+      }
+      
+      final data = postSnap.data()!;
+      if (data['status'] != PostStatus.scheduled.name) {
+        throw StateError('Post is not scheduled');
+      }
+      
+      // Update status và xóa scheduledAt
+      txn.update(postRef, {
+        'status': PostStatus.published.name,
+        'scheduledAt': FieldValue.delete(),
+      });
+      
+      // Increment postsCount
+      final profileRef = _firestore.collection('user_profiles').doc(authorUid);
+      txn.set(profileRef, {
+        'postsCount': FieldValue.increment(1),
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    });
+  }
+
+  /// Cancel scheduled post (chuyển status sang cancelled)
+  Future<void> cancelScheduledPost(String postId) async {
+    await _posts.doc(postId).update({
+      'status': PostStatus.cancelled.name,
+    });
+  }
+
+  /// Update scheduled time của post
+  Future<void> updateScheduledTime({
+    required String postId,
+    required DateTime newScheduledAt,
+  }) async {
+    final now = DateTime.now();
+    if (newScheduledAt.isBefore(now)) {
+      throw ArgumentError('Scheduled time must be in the future');
+    }
+    
+    await _posts.doc(postId).update({
+      'scheduledAt': Timestamp.fromDate(newScheduledAt),
+    });
   }
 
   Future<PostPageResult> fetchPosts({
     DocumentSnapshot<Map<String, dynamic>>? startAfter,
     int limit = 10,
+    bool includeScheduled = false,
   }) async {
-    Query<Map<String, dynamic>> query =
-        _posts.orderBy('createdAt', descending: true).limit(limit);
+    // Query posts với status = published hoặc không có status (backward compatibility)
+    // Firestore không hỗ trợ OR query trực tiếp, nên ta cần query riêng và merge
+    Query<Map<String, dynamic>> query = _posts
+        .where('status', isEqualTo: PostStatus.published.name)
+        .orderBy('createdAt', descending: true)
+        .limit(limit * 2); // Lấy nhiều hơn để filter client-side
+    
     if (startAfter != null) {
       query = query.startAfterDocument(startAfter);
     }
+    
     final snap = await query.get();
-    final docs = snap.docs;
+    
+    // Filter client-side để bao gồm posts không có status (backward compatibility)
+    final docs = snap.docs.where((doc) {
+      final data = doc.data();
+      final statusStr = data['status'] as String?;
+      // Nếu không có status hoặc status = published, thì include
+      if (statusStr == null) return true;
+      return statusStr == PostStatus.published.name;
+    }).take(limit).toList();
+    
     return PostPageResult(
       docs: docs,
       lastDoc: docs.isNotEmpty ? docs.last : startAfter,
@@ -111,6 +248,21 @@ class PostRepository {
         .snapshots()
         .where((snap) => snap.exists)
         .map(Post.fromDoc);
+  }
+
+  /// Stream để listen posts mới được publish (status thay đổi từ scheduled sang published)
+  /// Chỉ trả về posts có status = published
+  Stream<List<Post>> watchPublishedPosts({
+    int limit = 10,
+  }) {
+    return _posts
+        .where('status', isEqualTo: PostStatus.published.name)
+        .orderBy('createdAt', descending: true)
+        .limit(limit)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => Post.fromDoc(doc))
+            .toList());
   }
 
   Stream<bool> watchUserLike({

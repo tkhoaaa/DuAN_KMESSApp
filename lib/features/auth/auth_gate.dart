@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'auth_repository.dart';
 import 'email_verification_screen.dart';
 import 'login_screen.dart';
@@ -10,6 +12,7 @@ import '../profile/profile_screen.dart';
 import '../contacts/pages/contacts_page.dart';
 import '../chat/pages/conversations_page.dart';
 import '../posts/pages/post_feed_page.dart';
+import '../posts/services/post_scheduling_service.dart';
 import '../search/pages/search_page.dart';
 
 class AuthGate extends StatelessWidget {
@@ -64,6 +67,9 @@ class _SignedInHome extends StatefulWidget {
 }
 
 class _SignedInHomeState extends State<_SignedInHome> {
+  final PostSchedulingService _schedulingService = PostSchedulingService();
+  Timer? _scheduledPostsTimer;
+
   @override
   void initState() {
     super.initState();
@@ -77,11 +83,36 @@ class _SignedInHomeState extends State<_SignedInHome> {
         photoUrl: user.photoURL,
       );
       userProfileRepository.setPresence(user.uid, true);
+      // Check và publish scheduled posts khi app mở
+      _checkScheduledPosts();
+      // Check định kỳ mỗi phút để auto-publish scheduled posts
+      _scheduledPostsTimer = Timer.periodic(
+        const Duration(minutes: 1),
+        (_) => _checkScheduledPosts(),
+      );
+    }
+  }
+
+  Future<void> _checkScheduledPosts() async {
+    try {
+      final publishedCount = await _schedulingService.checkAndPublishScheduledPosts();
+      if (publishedCount > 0 && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Đã đăng tự động $publishedCount bài viết đã hẹn giờ'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      // Silently fail, không làm gián đoạn app
+      debugPrint('Error checking scheduled posts: $e');
     }
   }
 
   @override
   void dispose() {
+    _scheduledPostsTimer?.cancel();
     final user = authRepository.currentUser();
     if (user != null) {
       userProfileRepository.setPresence(user.uid, false);

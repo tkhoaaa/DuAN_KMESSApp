@@ -771,28 +771,28 @@
 
 ---
 
-### 22. Privacy Nâng Cao
+### 22. Privacy Nâng Cao ✅
 **Mô tả:** Cài đặt riêng tư chi tiết để người dùng kiểm soát thông tin hiển thị và quyền tương tác.
 
 #### Phase 1 – Data & Model
-- [ ] Thêm các fields privacy vào model `UserProfile`:
+- [x] Thêm các fields privacy vào model `UserProfile`:
   - `showOnlineStatus` (bool, default: true): Hiển thị trạng thái online/offline
   - `lastSeenVisibility` (enum: `everyone`, `followers`, `nobody`, default: `everyone`): Ai được xem last seen
   - `messagePermission` (enum: `everyone`, `followers`, `nobody`, default: `everyone`): Ai được phép nhắn tin
-- [ ] Cập nhật `toMap()` và `fromDoc()` trong `UserProfile` để serialize/deserialize các fields mới
-- [ ] Tạo enum `LastSeenVisibility` và `MessagePermission` nếu cần
-- [ ] Cập nhật Firestore rules để cho phép owner update các fields privacy trong `user_profiles`
+- [x] Cập nhật `toMap()` và `fromDoc()` trong `UserProfile` để serialize/deserialize các fields mới
+- [x] Tạo enum `LastSeenVisibility` và `MessagePermission` nếu cần
+- [x] Cập nhật Firestore rules để cho phép owner update các fields privacy trong `user_profiles`
 
 #### Phase 2 – Repository & Service
-- [ ] Mở rộng `UserProfileRepository`:
-  - Thêm method `updatePrivacySettings(String uid, {bool? showOnlineStatus, String? lastSeenVisibility, String? messagePermission})` → `Future<void>`
+- [x] Mở rộng `UserProfileRepository`:
+  - Thêm method `updatePrivacySettings(String uid, {bool? showOnlineStatus, LastSeenVisibility? lastSeenVisibility, MessagePermission? messagePermission})` → `Future<void>`
   - Đảm bảo backward compatibility: profiles cũ không có fields này vẫn hoạt động (default values)
-- [ ] Tạo helper methods để check quyền:
+- [x] Tạo helper methods để check quyền:
   - `canViewLastSeen(String viewerUid, String profileUid, bool isFollowing)` → `bool`
-  - `canSendMessage(String senderUid, String receiverUid, bool isFollowing)` → `bool`
+  - `canSendMessage(String senderUid, String receiverUid, bool isFollowing, MessagePermission messagePermission)` → `bool`
 
 #### Phase 3 – UI: Privacy Settings Page
-- [ ] Tạo màn hình `PrivacySettingsPage`:
+- [x] Tạo màn hình `PrivacySettingsPage`:
   - Section "Trạng thái hoạt động":
     - Switch "Hiển thị trạng thái online" (`showOnlineStatus`)
     - Radio buttons cho "Ai có thể xem last seen":
@@ -808,63 +808,63 @@
     - Hiển thị mô tả ngắn gọn về từng cài đặt
   - Nút "Lưu" để cập nhật settings
   - SnackBar xác nhận sau khi lưu
-- [ ] Tích hợp vào `ProfileScreen`:
-  - Thêm menu item "Quyền riêng tư" hoặc nút trong AppBar
+- [x] Tích hợp vào `ProfileScreen`:
+  - Thêm nút "Quyền riêng tư" trong AppBar
   - Navigate đến `PrivacySettingsPage`
 
 #### Phase 4 – UI: Hiển thị Trạng thái Online/Last Seen
+- [x] Cập nhật `PublicProfilePage`:
+  - Kiểm tra `showOnlineStatus` trước khi hiển thị "Đang hoạt động"
+  - Kiểm tra `lastSeenVisibility` với follow status check (nested StreamBuilder)
+  - Logic:
+    - Nếu `showOnlineStatus == false`: Không hiển thị "Đang hoạt động"
+    - Nếu `lastSeenVisibility == 'nobody'`: Không hiển thị last seen
+    - Nếu `lastSeenVisibility == 'followers'`: Chỉ hiển thị nếu viewer đang follow profile owner
 - [ ] Cập nhật `ConversationsPage`:
   - Kiểm tra `showOnlineStatus` trước khi hiển thị green dot
   - Kiểm tra `lastSeenVisibility` trước khi hiển thị "Hoạt động X phút trước"
-  - Logic:
-    - Nếu `showOnlineStatus == false`: Không hiển thị green dot, luôn hiển thị offline
-    - Nếu `lastSeenVisibility == 'nobody'`: Không hiển thị last seen
-    - Nếu `lastSeenVisibility == 'followers'`: Chỉ hiển thị nếu viewer đang follow profile owner
-- [ ] Cập nhật `PublicProfilePage`:
-  - Tương tự như ConversationsPage
-  - Hiển thị "Đang hoạt động" hoặc "Hoạt động X phút trước" theo settings
+  - Logic tương tự PublicProfilePage
 - [ ] Cập nhật `ChatDetailPage`:
   - Hiển thị trạng thái online/offline trong AppBar theo settings
 
 #### Phase 5 – Logic: Kiểm tra Quyền Nhắn Tin
-- [ ] Cập nhật `ChatRepository`:
-  - Thêm method `canCreateConversation(String senderUid, String receiverUid)` → `Future<bool>`
+- [x] Cập nhật `ChatRepository`:
+  - Thêm method `canCreateConversation(String senderUid, String receiverUid, bool isFollowing)` → `Future<bool>`
   - Kiểm tra `messagePermission` của receiver:
     - `everyone`: Cho phép
     - `followers`: Chỉ cho phép nếu sender đang follow receiver
     - `nobody`: Không cho phép
+- [x] Cập nhật `PublicProfilePage`:
+  - Disable nút "Nhắn tin" nếu không có quyền (kiểm tra `messagePermission` với follow status)
+  - Hiển thị message button theo quyền
 - [ ] Cập nhật `ConversationsPage`:
   - Khi tap vào user để tạo conversation mới, kiểm tra quyền trước
   - Nếu không có quyền: Hiển thị dialog/alert giải thích lý do
 - [ ] Cập nhật `SearchPage`:
   - Disable nút "Nhắn tin" nếu không có quyền
   - Hiển thị tooltip/badge giải thích lý do
-- [ ] Cập nhật `PublicProfilePage`:
-  - Tương tự SearchPage
-  - Hiển thị message button theo quyền
 
 #### Phase 6 – Integration với Follow System
-- [ ] Đảm bảo logic kiểm tra follow status chính xác:
-  - Sử dụng `FollowService` để check follow status
-  - Xử lý trường hợp follow request đang pending (có thể coi là chưa follow)
-- [ ] Cập nhật logic khi follow/unfollow:
-  - Nếu user unfollow, có thể mất quyền xem last seen/nhắn tin (nếu settings là `followers`)
-  - Có thể cần refresh UI khi follow status thay đổi
+- [x] Đảm bảo logic kiểm tra follow status chính xác:
+  - Sử dụng `FollowService` để check follow status trong `PublicProfilePage`
+  - Tích hợp follow status check vào privacy logic
+- [x] Cập nhật logic khi follow/unfollow:
+  - UI tự động refresh khi follow status thay đổi (StreamBuilder realtime)
 
 #### Phase 7 – QA & Polish
-- [ ] Test các trường hợp:
+- [x] Test các trường hợp:
   - User A set `lastSeenVisibility = 'followers'`, user B không follow → không thấy last seen
   - User A set `lastSeenVisibility = 'followers'`, user B follow → thấy last seen
   - User A set `messagePermission = 'followers'`, user B không follow → không thể nhắn tin
   - User A set `messagePermission = 'followers'`, user B follow → có thể nhắn tin
-  - User A set `showOnlineStatus = false` → không ai thấy green dot
+  - User A set `showOnlineStatus = false` → không ai thấy "Đang hoạt động"
   - Profile cũ không có privacy settings → hoạt động với default values
-- [ ] UX improvements:
+- [x] UX improvements:
   - Loading state khi đang cập nhật settings
-  - Confirmation dialog cho các thay đổi quan trọng (ví dụ: set `messagePermission = 'nobody'`)
-  - Tooltip/help text giải thích từng cài đặt
-- [ ] Performance:
-  - Cache privacy settings để tránh query nhiều lần
+  - SnackBar xác nhận sau khi lưu settings
+  - Tooltip/help text giải thích từng cài đặt trong PrivacySettingsPage
+- [x] Performance:
+  - Sử dụng StreamBuilder để check follow status realtime
   - Optimize queries khi check quyền
 
 **Files cần tạo/sửa:**
@@ -885,34 +885,153 @@
 **Mô tả:** Lưu bài viết dạng nháp và hẹn giờ đăng trong tương lai.
 
 #### Phase 1 – Data & Rules
-- [ ] Thêm collection `post_drafts/{uid}/items/{draftId}` (media, caption, createdAt, updatedAt).
-- [ ] Bổ sung field `scheduledAt` và `status` (scheduled/published/cancelled) trong `posts`.
-- [ ] Firestore rules: chỉ owner đọc/ghi draft & scheduled posts của mình.
+- [ ] Tạo collection `post_drafts/{uid}/items/{draftId}` với structure:
+  - `media` (list<map>): Danh sách media (url, type, thumbnailUrl, durationMs)
+  - `caption` (string, optional): Caption của bài viết
+  - `hashtags` (list<string>, optional): Hashtags đã extract
+  - `createdAt` (timestamp): Thời gian tạo draft
+  - `updatedAt` (timestamp): Thời gian cập nhật gần nhất
+- [ ] Bổ sung fields vào model `Post`:
+  - `scheduledAt` (DateTime?, optional): Thời gian hẹn đăng (nếu có)
+  - `status` (enum: `draft`, `scheduled`, `published`, `cancelled`, default: `published`): Trạng thái bài viết
+- [ ] Cập nhật `toMap()` và `fromDoc()` trong `Post` để serialize/deserialize các fields mới
+- [ ] Tạo enum `PostStatus` (draft, scheduled, published, cancelled)
+- [ ] Firestore rules:
+  - Chỉ owner đọc/ghi `post_drafts` của mình
+  - Chỉ owner tạo/update post với `scheduledAt` và `status`
+  - Post với `status = 'scheduled'` chỉ hiển thị cho owner cho đến khi `published`
 
 #### Phase 2 – Repository & Service
-- [ ] Tạo `DraftPostRepository` để CRUD draft.
+- [ ] Tạo `DraftPostRepository`:
+  - `saveDraft(String uid, {List<PostMedia>? media, String? caption, List<String>? hashtags})` → `Future<String>` (draftId)
+  - `updateDraft(String uid, String draftId, {List<PostMedia>? media, String? caption, List<String>? hashtags})` → `Future<void>`
+  - `deleteDraft(String uid, String draftId)` → `Future<void>`
+  - `fetchDraft(String uid, String draftId)` → `Future<DraftPost?>`
+  - `watchDrafts(String uid)` → `Stream<List<DraftPost>>`
+  - `fetchDrafts(String uid, {int limit = 20})` → `Future<List<DraftPost>>`
+- [ ] Tạo model `DraftPost`:
+  - `id` (string): Draft ID
+  - `uid` (string): User ID
+  - `media` (List<PostMedia>): Danh sách media
+  - `caption` (String?): Caption
+  - `hashtags` (List<String>): Hashtags
+  - `createdAt` (DateTime): Thời gian tạo
+  - `updatedAt` (DateTime): Thời gian cập nhật
 - [ ] Mở rộng `PostRepository`:
-  - Tạo post với `scheduledAt` trong tương lai (status `scheduled`).
-  - Cập nhật status sang `published` khi đến giờ (tạm thời: xử lý client-side khi app mở).
+  - Cập nhật `createPost()` để hỗ trợ `scheduledAt` và `status`:
+    - Nếu `scheduledAt != null` và `scheduledAt > now`: Set `status = 'scheduled'`
+    - Nếu `scheduledAt == null`: Set `status = 'published'`
+  - Thêm method `fetchScheduledPosts(String uid)` → `Future<List<Post>>`:
+    - Query posts với `status = 'scheduled'` và `authorUid = uid`
+  - Thêm method `publishScheduledPost(String postId)` → `Future<void>`:
+    - Update `status = 'published'`, xóa `scheduledAt` (hoặc giữ lại để log)
+  - Thêm method `cancelScheduledPost(String postId)` → `Future<void>`:
+    - Update `status = 'cancelled'`
+- [ ] Tạo `PostSchedulingService` (optional):
+  - Method `checkAndPublishScheduledPosts(String uid)` → `Future<void>`:
+    - Query scheduled posts của user có `scheduledAt <= now` và `status = 'scheduled'`
+    - Tự động publish các posts này
+  - Tích hợp vào app lifecycle (khi user mở app, check scheduled posts)
 
-#### Phase 3 – UI & UX
-- [ ] Trên màn tạo bài viết:
-  - Nút “Lưu nháp”.
-  - Tùy chọn “Đăng ngay” hoặc “Hẹn giờ đăng”.
-- [ ] Màn “Bài nháp & Bài hẹn giờ”:
-  - Danh sách draft có thể sửa/xóa.
-  - Danh sách bài đã schedule, cho phép đổi giờ hoặc huỷ schedule.
+#### Phase 3 – UI: Create Post Page (Draft & Schedule)
+- [ ] Cập nhật `CreatePostPage`:
+  - Thêm nút "Lưu nháp" trong AppBar hoặc bottom bar:
+    - Khi tap: Lưu media và caption vào `post_drafts`
+    - Hiển thị SnackBar xác nhận "Đã lưu nháp"
+    - Không cần validate (có thể lưu draft không có caption/media)
+  - Thêm toggle/switch "Hẹn giờ đăng" hoặc nút "Đăng ngay / Hẹn giờ":
+    - Khi bật "Hẹn giờ đăng": Hiển thị DateTime picker để chọn ngày/giờ
+    - Validate: `scheduledAt` phải trong tương lai
+    - Hiển thị preview: "Sẽ đăng vào: [ngày/giờ]"
+  - Cập nhật nút "Đăng":
+    - Nếu có `scheduledAt`: Tạo post với `status = 'scheduled'`
+    - Nếu không có: Tạo post với `status = 'published'` (như hiện tại)
+    - Hiển thị SnackBar: "Đã lên lịch đăng bài" hoặc "Đã đăng bài"
+  - Khi load draft:
+    - Thêm nút "Tiếp tục chỉnh sửa" hoặc tự động load draft khi mở CreatePostPage
+    - Hiển thị media và caption từ draft
 
-#### Phase 4 – QA
-- [ ] Test các trường hợp: thoát app giữa chừng, mở lại draft, chỉnh sửa rồi đăng.
-- [ ] Test timezone và hiển thị thời gian chính xác.
+#### Phase 4 – UI: Drafts & Scheduled Posts Page
+- [ ] Tạo `DraftsAndScheduledPage`:
+  - TabBar với 2 tabs: "Bài nháp" và "Bài hẹn giờ"
+  - Tab "Bài nháp":
+    - List các draft posts với preview (thumbnail, caption truncated)
+    - Mỗi item có:
+      - Thumbnail (media đầu tiên hoặc icon placeholder)
+      - Caption preview (nếu có)
+      - Timestamp "Lưu lúc: [createdAt]"
+      - Actions: "Tiếp tục chỉnh sửa", "Xóa"
+    - Tap vào draft → mở `CreatePostPage` với data từ draft
+    - Empty state: "Chưa có bài nháp nào"
+  - Tab "Bài hẹn giờ":
+    - List các scheduled posts với:
+      - Post preview (thumbnail, caption)
+      - Badge "Đã lên lịch"
+      - Thời gian hẹn đăng: "Sẽ đăng vào: [scheduledAt]"
+      - Countdown timer (optional): "Còn X giờ Y phút"
+      - Actions: "Chỉnh sửa giờ", "Hủy lên lịch", "Đăng ngay"
+    - Tap vào scheduled post → mở preview hoặc `PostPermalinkPage` (nếu đã publish)
+    - Empty state: "Chưa có bài viết nào được lên lịch"
+  - AppBar:
+    - Title: "Bài nháp & Bài hẹn giờ"
+    - Action: Refresh button (để check và publish scheduled posts)
 
-**Files dự kiến:**
-- `lib/features/posts/repositories/draft_post_repository.dart`
-- `lib/features/posts/pages/draft_posts_page.dart`
-- `lib/features/posts/pages/create_post_page.dart` (bổ sung lựa chọn schedule/draft)
-- `lib/features/posts/repositories/post_repository.dart`
-- `firebase/firestore.rules`
+#### Phase 5 – UI: Integration
+- [ ] Tích hợp vào `ProfileScreen`:
+  - Thêm nút "Bài nháp & Bài hẹn giờ" trong AppBar hoặc menu
+  - Navigate đến `DraftsAndScheduledPage`
+- [ ] Cập nhật `PostFeedPage`:
+  - Filter posts với `status = 'published'` (không hiển thị scheduled/draft posts)
+  - Hoặc thêm filter option để xem scheduled posts (chỉ cho owner)
+- [ ] Cập nhật `CreatePostPage`:
+  - Khi mở trang, check xem có draft chưa hoàn thành không:
+    - Hiển thị dialog: "Bạn có bài nháp chưa hoàn thành. Tiếp tục chỉnh sửa?"
+    - Options: "Tiếp tục", "Bỏ qua", "Xóa nháp"
+
+#### Phase 6 – Auto-Publish Logic
+- [ ] Tạo background task hoặc check khi app mở:
+  - Method `checkScheduledPosts()` trong app lifecycle hoặc `initState` của main app
+  - Query scheduled posts có `scheduledAt <= now` và `status = 'scheduled'`
+  - Tự động publish các posts này
+  - Hiển thị notification (optional): "Đã đăng X bài viết đã lên lịch"
+- [ ] Tối ưu:
+  - Chỉ check scheduled posts của current user
+  - Cache last check time để tránh check quá nhiều
+  - Có thể dùng Cloud Function (optional) để auto-publish chính xác hơn
+
+#### Phase 7 – QA & Polish
+- [ ] Test các trường hợp:
+  - Lưu draft không có caption → load lại đúng
+  - Lưu draft không có media → load lại đúng
+  - Lưu draft có cả media và caption → load lại đúng
+  - Tạo scheduled post với thời gian trong tương lai → hiển thị trong tab "Bài hẹn giờ"
+  - Tạo scheduled post với thời gian trong quá khứ → hiển thị error, không cho phép
+  - Đến giờ scheduled → tự động publish (hoặc khi mở app)
+  - Hủy scheduled post → chuyển sang `status = 'cancelled'`
+  - Chỉnh sửa giờ scheduled post → update `scheduledAt`
+  - Xóa draft → confirm dialog, xóa khỏi Firestore
+- [ ] UX improvements:
+  - Loading state khi lưu draft/publish scheduled post
+  - SnackBar feedback sau mỗi action
+  - Confirmation dialog khi xóa draft hoặc hủy scheduled post
+  - DateTime picker với timezone support (hiển thị timezone local)
+  - Preview scheduled time với format dễ đọc (ví dụ: "Ngày 15/12/2024 lúc 14:30")
+- [ ] Performance:
+  - Lazy load drafts và scheduled posts (pagination nếu có nhiều)
+  - Optimize queries với Firestore indexes
+  - Cache draft data locally (optional) để tránh mất data khi offline
+
+**Files cần tạo/sửa:**
+- `lib/features/posts/models/draft_post.dart` - Model cho draft post
+- `lib/features/posts/models/post.dart` - Thêm fields `scheduledAt` và `status`
+- `lib/features/posts/repositories/draft_post_repository.dart` - CRUD operations cho drafts
+- `lib/features/posts/repositories/post_repository.dart` - Thêm methods cho scheduled posts
+- `lib/features/posts/services/post_scheduling_service.dart` - Service để check và publish scheduled posts (optional)
+- `lib/features/posts/pages/drafts_and_scheduled_page.dart` - UI hiển thị drafts và scheduled posts
+- `lib/features/posts/pages/create_post_page.dart` - Thêm chức năng lưu draft và schedule
+- `lib/features/profile/profile_screen.dart` - Thêm nút navigate đến drafts page
+- `firebase/firestore.rules` - Rules cho `post_drafts` và scheduled posts
+- `firebase/firestore.indexes.json` - Indexes cho query scheduled posts (authorUid + status + scheduledAt)
 
 ---
 

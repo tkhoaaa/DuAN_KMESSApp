@@ -16,7 +16,9 @@ import '../../../services/cloudinary_service.dart';
 import '../models/post.dart';
 import '../models/post_comment.dart';
 import '../models/post_media.dart';
+import '../models/draft_post.dart';
 import '../repositories/post_repository.dart';
+import '../repositories/draft_post_repository.dart';
 
 class PostMediaUpload {
   PostMediaUpload({
@@ -75,6 +77,7 @@ class PostService {
         _storage = storage ?? FirebaseStorage.instance;
 
   final PostRepository _repository;
+  final DraftPostRepository _draftRepository = DraftPostRepository();
   final UserProfileRepository _profiles;
   final NotificationService _notificationService = NotificationService();
   final FirebaseStorage _storage;
@@ -105,9 +108,15 @@ class PostService {
     );
   }
 
+  /// Stream để listen posts mới được publish (realtime)
+  Stream<List<Post>> watchPublishedPosts({int limit = 10}) {
+    return _repository.watchPublishedPosts(limit: limit);
+  }
+
   Future<void> createPost({
     required List<PostMediaUpload> media,
     String? caption,
+    DateTime? scheduledAt,
   }) async {
     final currentUid = authRepository.currentUser()?.uid;
     if (currentUid == null) {
@@ -292,7 +301,87 @@ class PostService {
       authorUid: currentUid,
       media: uploads,
       caption: caption,
+      scheduledAt: scheduledAt,
     );
+  }
+
+  /// Lưu draft post (không upload media, chỉ lưu metadata)
+  Future<String> saveDraft({
+    List<PostMediaUpload>? media,
+    String? caption,
+  }) async {
+    final currentUid = authRepository.currentUser()?.uid;
+    if (currentUid == null) {
+      throw StateError('Bạn cần đăng nhập.');
+    }
+
+    // Convert PostMediaUpload thành PostMedia (chỉ lưu local path, không upload)
+    // Lưu ý: Draft không upload media, chỉ lưu metadata
+    // Khi publish từ draft, sẽ upload media lúc đó
+    final mediaList = <PostMedia>[];
+    if (media != null) {
+      for (final entry in media) {
+        // Lưu local path hoặc URL tạm thời
+        // Khi publish, sẽ upload media
+        mediaList.add(PostMedia(
+          url: entry.file.path, // Local path hoặc temp URL
+          type: entry.type,
+        ));
+      }
+    }
+
+    return await _draftRepository.saveDraft(
+      uid: currentUid,
+      media: mediaList,
+      caption: caption,
+    );
+  }
+
+  /// Cập nhật draft
+  Future<void> updateDraft({
+    required String draftId,
+    List<PostMediaUpload>? media,
+    String? caption,
+  }) async {
+    final currentUid = authRepository.currentUser()?.uid;
+    if (currentUid == null) {
+      throw StateError('Bạn cần đăng nhập.');
+    }
+
+    final mediaList = <PostMedia>[];
+    if (media != null) {
+      for (final entry in media) {
+        mediaList.add(PostMedia(
+          url: entry.file.path,
+          type: entry.type,
+        ));
+      }
+    }
+
+    await _draftRepository.updateDraft(
+      uid: currentUid,
+      draftId: draftId,
+      media: mediaList,
+      caption: caption,
+    );
+  }
+
+  /// Lấy draft
+  Future<DraftPost?> fetchDraft(String draftId) async {
+    final currentUid = authRepository.currentUser()?.uid;
+    if (currentUid == null) {
+      throw StateError('Bạn cần đăng nhập.');
+    }
+    return await _draftRepository.fetchDraft(uid: currentUid, draftId: draftId);
+  }
+
+  /// Xóa draft
+  Future<void> deleteDraft(String draftId) async {
+    final currentUid = authRepository.currentUser()?.uid;
+    if (currentUid == null) {
+      throw StateError('Bạn cần đăng nhập.');
+    }
+    await _draftRepository.deleteDraft(uid: currentUid, draftId: draftId);
   }
 
   Future<void> toggleLike({

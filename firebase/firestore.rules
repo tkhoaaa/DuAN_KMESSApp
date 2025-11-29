@@ -139,33 +139,47 @@ service cloud.firestore {
       }
     }
 
+    // Post drafts collection
+    match /post_drafts/{uid}/items/{draftId} {
+      allow read, write: if isSignedIn() && isOwner(uid);
+    }
+
     // Posts collection
     match /posts/{postId} {
       allow read: if isSignedIn();
 
       allow create: if isSignedIn()
         && request.resource.data.authorUid == request.auth.uid
-        && request.resource.data.keys().hasOnly([
-          'authorUid',
-          'media',
-          'caption',
-          'captionLower',
-          'hashtags',
-          'createdAt',
-          'likeCount',
-          'commentCount'
-        ])
         && request.resource.data.media is list
+        && request.resource.data.caption is string
         && (request.resource.data.captionLower == null || request.resource.data.captionLower is string)
-        && (request.resource.data.hashtags == null || request.resource.data.hashtags is list);
+        && (request.resource.data.hashtags == null || request.resource.data.hashtags is list)
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.likeCount is int
+        && request.resource.data.commentCount is int
+        && request.resource.data.status is string
+        && (request.resource.data.status == 'published' || request.resource.data.status == 'scheduled')
+        && (request.resource.data.status == 'published' ? !('scheduledAt' in request.resource.data) : request.resource.data.scheduledAt is timestamp);
 
-      // Cho phép owner update/delete hoặc chỉ update likeCount/commentCount
+      // Cho phép owner update/delete hoặc chỉ update likeCount/commentCount hoặc status/scheduledAt
       allow update: if isPostOwner() || (
-        isSignedIn() && 
-        request.resource.data.diff(resource.data).affectedKeys().hasAny(['likeCount', 'commentCount']) &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likeCount', 'commentCount']) &&
-        (!('likeCount' in request.resource.data.diff(resource.data).affectedKeys()) || request.resource.data.likeCount is int) &&
-        (!('commentCount' in request.resource.data.diff(resource.data).affectedKeys()) || request.resource.data.commentCount is int)
+        isSignedIn() && (
+          // Update likeCount/commentCount
+          (
+            request.resource.data.diff(resource.data).affectedKeys().hasAny(['likeCount', 'commentCount']) &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likeCount', 'commentCount']) &&
+            (!('likeCount' in request.resource.data.diff(resource.data).affectedKeys()) || request.resource.data.likeCount is int) &&
+            (!('commentCount' in request.resource.data.diff(resource.data).affectedKeys()) || request.resource.data.commentCount is int)
+          ) ||
+          // Update status/scheduledAt (chỉ owner)
+          (
+            isPostOwner() &&
+            request.resource.data.diff(resource.data).affectedKeys().hasAny(['status', 'scheduledAt']) &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'scheduledAt']) &&
+            (request.resource.data.status == null || request.resource.data.status is string) &&
+            (request.resource.data.scheduledAt == null || request.resource.data.scheduledAt is timestamp)
+          )
+        )
       );
       allow delete: if isPostOwner();
 

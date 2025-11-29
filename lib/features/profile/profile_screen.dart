@@ -11,6 +11,7 @@ import '../follow/services/follow_service.dart';
 import '../../services/cloudinary_service.dart';
 import '../saved_posts/pages/saved_posts_page.dart';
 import '../settings/pages/privacy_settings_page.dart';
+import '../posts/pages/drafts_and_scheduled_page.dart';
 import 'pages/manage_pinned_posts_page.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -211,6 +212,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
               Navigator.of(context).push(
                 MaterialPageRoute(
                   builder: (_) => PrivacySettingsPage(),
+                ),
+              );
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.drafts),
+            tooltip: 'Bài nháp & Bài hẹn giờ',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const DraftsAndScheduledPage(),
                 ),
               );
             },
