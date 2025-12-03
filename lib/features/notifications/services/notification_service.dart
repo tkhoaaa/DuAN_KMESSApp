@@ -1,3 +1,4 @@
+import '../../call/models/call.dart';
 import '../models/notification.dart';
 import '../repositories/notification_repository.dart';
 
@@ -24,8 +25,9 @@ class NotificationService {
         return 'follow_$toUid';
       case NotificationType.comment:
       case NotificationType.message:
-        // Comments và messages không group
-        throw ArgumentError('Comments and messages should not be grouped');
+      case NotificationType.call:
+        // Comments, messages và calls không group
+        throw ArgumentError('Comments, messages and calls should not be grouped');
     }
   }
 
@@ -188,6 +190,30 @@ class NotificationService {
   /// Đếm số lượng notifications chưa đọc
   Stream<int> watchUnreadCount(String uid) {
     return _repository.watchUnreadCount(uid);
+  }
+
+  /// Tạo notification khi có incoming call
+  Future<void> createCallNotification({
+    required String callId,
+    required String callerUid,
+    required String calleeUid,
+    required CallType callType,
+  }) async {
+    // Không tạo notification nếu gọi cho chính mình
+    if (callerUid == calleeUid) return;
+
+    final notification = Notification(
+      id: '',
+      type: NotificationType.call,
+      fromUid: callerUid,
+      toUid: calleeUid,
+      callId: callId,
+      read: false,
+      createdAt: DateTime.now(),
+      text: callType == CallType.voice ? 'Cuộc gọi thoại' : 'Cuộc gọi video',
+    );
+
+    await _repository.createNotification(notification);
   }
 }
 

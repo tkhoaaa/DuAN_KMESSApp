@@ -12,6 +12,7 @@ import '../../services/cloudinary_service.dart';
 import '../saved_posts/pages/saved_posts_page.dart';
 import '../settings/pages/privacy_settings_page.dart';
 import '../posts/pages/drafts_and_scheduled_page.dart';
+import '../call/pages/call_history_page.dart';
 import 'pages/manage_pinned_posts_page.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -223,6 +224,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
               Navigator.of(context).push(
                 MaterialPageRoute(
                   builder: (_) => const DraftsAndScheduledPage(),
+                ),
+              );
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.history),
+            tooltip: 'Lịch sử cuộc gọi',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const CallHistoryPage(),
                 ),
               );
             },

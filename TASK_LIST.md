@@ -1203,38 +1203,38 @@
 **Mô tả:** Cho phép người dùng lọc và sắp xếp nội dung linh hoạt hơn.
 
 #### Phase 1 – Data & Model Design
-- [ ] Tạo enum `PostMediaFilter` (all, images, videos):
+- [x] Tạo enum `PostMediaFilter` (all, images, videos):
   - `all`: Hiển thị tất cả posts
   - `images`: Chỉ hiển thị posts có ít nhất 1 ảnh
   - `videos`: Chỉ hiển thị posts có ít nhất 1 video
-- [ ] Tạo enum `TimeFilter` (all, today, thisWeek, thisMonth):
+- [x] Tạo enum `TimeFilter` (all, today, thisWeek, thisMonth):
   - `all`: Tất cả thời gian
   - `today`: Chỉ posts trong ngày hôm nay
   - `thisWeek`: Chỉ posts trong tuần này
   - `thisMonth`: Chỉ posts trong tháng này
-- [ ] Tạo enum `PostSortOption` (newest, mostLiked, mostCommented):
+- [x] Tạo enum `PostSortOption` (newest, mostLiked, mostCommented):
   - `newest`: Sắp xếp theo `createdAt DESC` (mặc định)
   - `mostLiked`: Sắp xếp theo `likeCount DESC`
   - `mostCommented`: Sắp xếp theo `commentCount DESC`
-- [ ] Tạo model `FeedFilters`:
+- [x] Tạo model `FeedFilters`:
   - `mediaFilter` (PostMediaFilter, default: all)
   - `timeFilter` (TimeFilter, default: all)
   - `sortOption` (PostSortOption, default: newest)
-- [ ] Tạo enum `UserSearchFilter` (all, following, notFollowing, followRequest):
+- [x] Tạo enum `UserSearchFilter` (all, following, notFollowing, followRequest):
   - `all`: Tất cả users
   - `following`: Chỉ users đang follow
   - `notFollowing`: Chỉ users chưa follow
   - `followRequest`: Chỉ users có follow request pending
-- [ ] Tạo enum `PrivacyFilter` (all, public, private):
+- [x] Tạo enum `PrivacyFilter` (all, public, private):
   - `all`: Tất cả (public + private nếu có quyền)
   - `public`: Chỉ public profiles
   - `private`: Chỉ private profiles (nếu có quyền)
-- [ ] Tạo model `UserSearchFilters`:
+- [x] Tạo model `UserSearchFilters`:
   - `followStatus` (UserSearchFilter, default: all)
   - `privacyFilter` (PrivacyFilter, default: all)
 
 #### Phase 2 – Repository & Service Layer
-- [ ] Mở rộng `PostRepository`:
+- [x] Mở rộng `PostRepository`:
   - Thêm method `fetchPostsWithFilters({FeedFilters? filters, int limit = 20, DocumentSnapshot? startAfter})` → `Future<PageResult<Post>>`:
     - Apply media filter: Query posts có media type tương ứng (client-side filter nếu cần)
     - Apply time filter: Query posts trong khoảng thời gian (từ `startDate` đến `endDate`)
@@ -1246,12 +1246,12 @@
   - Tối ưu query:
     - Sử dụng composite indexes cho các query phức tạp
     - Client-side filter cho media type nếu Firestore không hỗ trợ tốt
-- [ ] Mở rộng `UserProfileRepository`:
+- [x] Mở rộng `UserProfileRepository`:
   - Thêm method `searchUsersWithFilters(String query, {UserSearchFilters? filters, int limit = 20})` → `Future<List<UserProfile>>`:
     - Apply follow status filter: Query users theo follow state
     - Apply privacy filter: Query users theo `isPrivate`
     - Combine với search query (displayName, email)
-- [ ] Tạo `FeedFilterService` (optional):
+- [x] Tạo `FeedFilterService` (optional):
   - Method `applyMediaFilter(List<Post> posts, PostMediaFilter filter)` → `List<Post>`:
     - Filter posts theo media type (client-side)
   - Method `applyTimeFilter(List<Post> posts, TimeFilter filter)` → `List<Post>`:
@@ -1260,7 +1260,7 @@
     - Sort posts theo option (client-side fallback)
 
 #### Phase 3 – UI: Feed Filters
-- [ ] Cập nhật `PostFeedPage`:
+- [x] Cập nhật `PostFeedPage`:
   - Thêm AppBar action: Icon filter (hoặc nút "Lọc")
   - Tap → show bottom sheet `FeedFilterBottomSheet`:
     - Section "Loại media":
@@ -1279,13 +1279,13 @@
     - Gọi `fetchPostsWithFilters()` với filters mới
     - Reset pagination khi filters thay đổi
     - Loading state khi đang apply filters
-- [ ] Tạo widget `FeedFilterChips`:
+- [x] Tạo widget `FeedFilterChips`:
   - Hiển thị chips cho các filters đang active
   - Tap chip → remove filter hoặc mở filter sheet
   - Empty state khi không có filters
 
 #### Phase 4 – UI: Search Filters
-- [ ] Cập nhật `SearchPage`:
+- [x] Cập nhật `SearchPage`:
   - Tab "Người dùng":
     - Thêm filter bar phía trên search results:
       - Dropdown "Trạng thái follow": "Tất cả", "Đang follow", "Chưa follow", "Follow request"
@@ -1307,7 +1307,7 @@
     - Apply filter khi user chọn
 
 #### Phase 5 – UI: Filter Bottom Sheet
-- [ ] Tạo `FeedFilterBottomSheet`:
+- [x] Tạo `FeedFilterBottomSheet`:
   - DraggableScrollableSheet với 3 sections:
     - Section 1: Media Filter (Radio buttons)
     - Section 2: Time Filter (Radio buttons)
@@ -1318,25 +1318,25 @@
   - State management:
     - Lưu selected filters trong state
     - Preview filters trước khi apply
-- [ ] Tạo `UserSearchFilterBottomSheet`:
+- [x] Tạo `UserSearchFilterBottomSheet`:
   - Tương tự `FeedFilterBottomSheet` nhưng cho user search filters
   - Sections:
     - Follow Status Filter
     - Privacy Filter
 
 #### Phase 6 – State Management & Persistence
-- [ ] Lưu filters vào local state:
+- [x] Lưu filters vào local state:
   - Sử dụng `StatefulWidget` state hoặc `Provider`/`Riverpod` nếu có
   - Persist filters trong session (không mất khi navigate)
-- [ ] (Optional) Lưu filters vào SharedPreferences:
+- [x] (Optional) Lưu filters vào SharedPreferences:
   - Lưu last used filters để restore khi mở lại app
   - Clear filters khi user logout
-- [ ] Reset filters:
+- [x] Reset filters:
   - Nút "Xóa tất cả" trong filter UI
   - Reset về defaults khi navigate away (optional)
 
 #### Phase 7 – Firestore Indexes & Performance
-- [ ] Tạo composite indexes cho queries phức tạp:
+- [x] Tạo composite indexes cho queries phức tạp:
   - Index cho `posts` collection:
     - `createdAt` + `likeCount` (cho sort mostLiked)
     - `createdAt` + `commentCount` (cho sort mostCommented)
@@ -1344,14 +1344,14 @@
   - Index cho `user_profiles` collection:
     - `displayNameLower` + `isPrivate` (cho search + privacy filter)
   - Thêm vào `firebase/firestore.indexes.json`
-- [ ] Tối ưu queries:
+- [x] Tối ưu queries:
   - Giới hạn số lượng filters kết hợp (tránh query quá phức tạp)
   - Client-side filter cho media type nếu Firestore query không hiệu quả
   - Debounce filter changes để tránh spam queries
   - Cache filter results nếu có thể
 
 #### Phase 8 – QA & Polish
-- [ ] Test các trường hợp:
+- [x] Test các trường hợp:
   - Apply single filter → kết quả đúng
   - Apply multiple filters → kết quả đúng
   - Combine filters với search query → kết quả đúng
@@ -1360,13 +1360,13 @@
   - Realtime updates với filters → cập nhật đúng
   - Filter với empty results → hiển thị empty state
   - Filter với private posts/users → không lộ nội dung private
-- [ ] UX improvements:
+- [x] UX improvements:
   - Loading state khi đang apply filters
   - Smooth transition khi filters thay đổi
   - SnackBar feedback khi apply/reset filters
   - Tooltip giải thích từng filter option
   - Preview số lượng kết quả trước khi apply (optional)
-- [ ] Performance:
+- [x] Performance:
   - Debounce filter changes (300-500ms)
   - Lazy load filter options
   - Optimize queries với indexes
@@ -1388,36 +1388,253 @@
 ---
 
 ### 26. Voice/Video Call (Real-time)
-**Mô tả:** Cuộc gọi thoại / video 1-1 trực tiếp giữa người dùng.
+**Mô tả:** Cuộc gọi thoại / video 1-1 trực tiếp giữa người dùng sử dụng WebRTC.
 
-#### Phase 1 – Tech & Data Design
-- [ ] Chọn giải pháp: WebRTC thuần hoặc tích hợp dịch vụ bên thứ ba (Agora, Twilio,…).
-- [ ] Thiết kế collection `calls/{callId}` (callerUid, calleeUid, type, status, startedAt, endedAt).
-- [ ] Firestore rules: chỉ caller/callee được đọc call của mình.
+**Lưu ý:** Task này sử dụng `flutter_webrtc` package và Firestore làm signaling server (không cần Cloud Functions).
 
-#### Phase 2 – Signaling & Call Flow
+---
+
+#### Phase 1 – Tech Stack & Data Design
+- [ ] Thêm package `flutter_webrtc` vào `pubspec.yaml`:
+  - `flutter_webrtc: ^0.9.x` (hoặc version mới nhất)
+  - `permission_handler: ^11.x` (cho camera/microphone permissions)
+- [ ] Tạo model `Call`:
+  - `id` (string): Call ID (auto-generated)
+  - `callerUid` (string): UID của người gọi
+  - `calleeUid` (string): UID của người nhận
+  - `type` (enum: `voice`, `video`): Loại cuộc gọi
+  - `status` (enum: `ringing`, `accepted`, `rejected`, `missed`, `ended`, `cancelled`): Trạng thái cuộc gọi
+  - `conversationId` (string?, optional): ID conversation liên quan (nếu có)
+  - `startedAt` (DateTime?): Thời gian bắt đầu cuộc gọi (khi accepted)
+  - `endedAt` (DateTime?): Thời gian kết thúc cuộc gọi
+  - `duration` (int?, seconds): Thời lượng cuộc gọi (tính sau khi ended)
+  - `callerOffer` (Map<String, dynamic>?, optional): WebRTC offer từ caller
+  - `calleeAnswer` (Map<String, dynamic>?, optional): WebRTC answer từ callee
+  - `callerCandidates` (List<Map<String, dynamic>>): ICE candidates mà caller tạo ra
+  - `calleeCandidates` (List<Map<String, dynamic>>): ICE candidates mà callee tạo ra
+  - `createdAt` (DateTime): Thời gian tạo call document
+  - `updatedAt` (DateTime): Thời gian cập nhật gần nhất
+- [ ] Thiết kế collection `calls/{callId}` trong Firestore:
+  - Document structure theo model `Call` ở trên
+  - Subcollection `signaling/{signalId}` (optional) cho signaling messages nếu cần
+- [ ] Tạo enum `CallType` (`voice`, `video`) và `CallStatus` (`ringing`, `accepted`, `rejected`, `missed`, `ended`, `cancelled`)
+- [ ] Firestore rules:
+  - Chỉ caller và callee được đọc/ghi call document
+  - Chỉ caller được tạo call document
+  - Chỉ callee được update status từ `ringing` → `accepted`/`rejected`
+  - Chỉ caller/callee được update signaling data (offer, answer, ICE candidates)
+
+#### Phase 2 – Repository & Service Layer
+- [ ] Tạo `CallRepository`:
+  - `createCall(String callerUid, String calleeUid, CallType type, {String? conversationId})` → `Future<String>` (callId):
+    - Tạo call document với `status = 'ringing'`
+    - Tạo notification cho callee
+    - Return callId
+  - `watchCall(String callId)` → `Stream<Call?>`:
+    - Stream call document để realtime updates
+  - `updateCallStatus(String callId, CallStatus status)` → `Future<void>`:
+    - Update status và `updatedAt`
+    - Nếu `status = 'accepted'`: Set `startedAt = now`
+    - Nếu `status = 'ended'` hoặc `'rejected'` hoặc `'missed'`: Set `endedAt = now`, tính `duration`
+  - `updateCallSignaling(String callId, {Map<String, dynamic>? offer, Map<String, dynamic>? answer})` → `Future<void>`:
+    - Update WebRTC signaling data
+  - `endCall(String callId, {CallStatus? status})` → `Future<void>`:
+    - Update status = `status ?? 'ended'`, set `endedAt`, tính `duration`
+  - `fetchCallHistory(String uid, {int limit = 50})` → `Future<List<Call>>`:
+    - Query calls where `callerUid = uid OR calleeUid = uid`
+    - Order by `createdAt DESC`
+    - Limit results
+  - `watchActiveCalls(String uid)` → `Stream<List<Call>>`:
+    - Stream calls với status `ringing` hoặc `accepted` liên quan đến user
 - [ ] Tạo `CallService`:
-  - Tạo cuộc gọi mới, gửi “ringing” tới callee (notification + realtime).
-  - Cập nhật trạng thái: ringing → accepted/rejected/missed/ended.
-- [ ] Tích hợp signaling (qua Firestore hoặc RTDB) cho WebRTC/SDK.
+  - `initiateCall(String calleeUid, CallType type, {String? conversationId})` → `Future<String>` (callId):
+    - Kiểm tra quyền (camera/mic nếu video call)
+    - Kiểm tra callee có online không (optional)
+    - Tạo call document
+    - Tạo notification cho callee
+    - Return callId
+  - `answerCall(String callId)` → `Future<void>`:
+    - Update status = `accepted`
+    - Tạo WebRTC answer
+    - Update signaling data
+  - `rejectCall(String callId)` → `Future<void>`:
+    - Update status = `rejected`
+    - Tạo call log message trong conversation (nếu có)
+  - `endCall(String callId)` → `Future<void>`:
+    - Update status = `ended`, tính duration
+    - Tạo call log message trong conversation (nếu có)
+  - `cancelCall(String callId)` → `Future<void>`:
+    - Update status = `cancelled` (chỉ caller mới cancel được)
+  - `handleMissedCall(String callId)` → `Future<void>`:
+    - Update status = `missed` (tự động sau timeout, ví dụ: 30 giây)
+- [ ] Tích hợp với `NotificationService`:
+  - Tạo notification khi có incoming call
+  - Notification type: `call` với `callId` và `callType`
 
-#### Phase 3 – UI & UX
-- [ ] Trong `ChatDetailPage`: thêm icon gọi thoại & video.
-- [ ] Màn hình “Đang gọi” với nút accept/reject.
-- [ ] Màn hình trong cuộc gọi: hiển thị video (nếu video call), mute mic, tắt camera, kết thúc.
-- [ ] Log lịch sử cuộc gọi hiển thị trong chat (message type `call_log`).
+#### Phase 3 – WebRTC Signaling Implementation
+- [ ] Tạo `WebRTCService`:
+  - `createOffer(RTCPeerConnection peerConnection)` → `Future<RTCSessionDescription>`:
+    - Tạo WebRTC offer
+  - `createAnswer(RTCPeerConnection peerConnection, RTCSessionDescription offer)` → `Future<RTCSessionDescription>`:
+    - Tạo WebRTC answer từ offer
+  - `setRemoteDescription(RTCPeerConnection peerConnection, RTCSessionDescription sdp)` → `Future<void>`
+  - `addIceCandidate(RTCPeerConnection peerConnection, RTCIceCandidate candidate)` → `Future<void>`
+  - `createPeerConnection({required bool isCaller})` → `Future<RTCPeerConnection>`:
+    - Tạo peer connection với STUN/TURN servers
+    - Setup event listeners (onIceCandidate, onTrack, onConnectionStateChange)
+  - `addLocalStream(RTCPeerConnection peerConnection, {required bool hasVideo})` → `Future<void>`:
+    - Get user media (camera/mic)
+    - Add tracks to peer connection
+  - `removeLocalStream(RTCPeerConnection peerConnection)` → `Future<void>`
+  - `disposePeerConnection(RTCPeerConnection peerConnection)` → `Future<void>`
+- [ ] Tạo signaling flow:
+  - Caller: Tạo offer → lưu vào Firestore `callerOffer`
+  - Callee: Listen `callerOffer` → tạo answer → lưu vào Firestore `calleeAnswer`
+  - Caller: Listen `calleeAnswer` → set remote description
+  - Caller: Listen `calleeCandidates` → add ICE candidates từ phía callee
+  - Callee: Listen `callerCandidates` → add ICE candidates từ phía caller
+  - Sử dụng Firestore realtime listeners cho signaling
 
-#### Phase 4 – QA & Network
-- [ ] Test trên mạng yếu, chuyển mạng, mất kết nối tạm thời.
-- [ ] Test các edge case: callee không online, reject call, missed call.
+#### Phase 4 – UI: Call Pages
+- [ ] Tạo `VoiceCallPage`:
+  - AppBar: Hiển thị tên và avatar của đối phương
+  - Body:
+    - Avatar lớn của đối phương (center)
+    - Trạng thái: "Đang gọi...", "Đang kết nối...", "Đã kết nối"
+    - Thời lượng cuộc gọi (khi đã connected)
+    - Bottom actions:
+      - Mute/Unmute mic button
+      - Speaker button (toggle speakerphone)
+      - End call button (màu đỏ)
+  - Handle states:
+    - `ringing` (outgoing): Hiển thị "Đang gọi..." với cancel button
+    - `ringing` (incoming): Hiển thị "Cuộc gọi đến" với accept/reject buttons
+    - `accepted`: Hiển thị "Đã kết nối" với call controls
+    - `ended`/`rejected`/`missed`: Navigate back với message
+- [ ] Tạo `VideoCallPage`:
+  - AppBar: Hiển thị tên đối phương, thời lượng cuộc gọi
+  - Body:
+    - Video view của đối phương (full screen)
+    - Video view của chính mình (picture-in-picture, góc trên phải)
+    - Bottom actions (overlay):
+      - Mute/Unmute mic button
+      - Toggle camera button (on/off)
+      - Switch camera button (front/back)
+      - End call button (màu đỏ)
+  - Handle states tương tự `VoiceCallPage`
+  - Fullscreen mode khi tap vào video
+- [ ] Tạo `IncomingCallDialog` (overlay):
+  - Hiển thị khi có incoming call (khi app đang mở)
+  - Avatar và tên người gọi
+  - Loại cuộc gọi (voice/video icon)
+  - Buttons: "Chấp nhận" (màu xanh), "Từ chối" (màu đỏ)
+  - Auto dismiss sau 30 giây nếu không answer (missed call)
 
-**Files dự kiến:**
-- `lib/features/call/models/call.dart`
-- `lib/features/call/services/call_service.dart`
-- `lib/features/call/pages/voice_call_page.dart`
-- `lib/features/call/pages/video_call_page.dart`
-- `lib/features/chat/pages/chat_detail_page.dart` (thêm nút call)
-- `firebase/firestore.rules`
+#### Phase 5 – UI: Integration với Chat
+- [ ] Cập nhật `ChatDetailPage`:
+  - Thêm AppBar actions:
+    - Icon phone (voice call) → `initiateCall(calleeUid, CallType.voice)`
+    - Icon videocam (video call) → `initiateCall(calleeUid, CallType.video)`
+  - Disable call buttons nếu:
+    - User đang block/blocked
+    - User không có quyền nhắn tin (privacy settings)
+    - User offline (optional warning)
+- [ ] Tạo call log message type:
+  - Mở rộng `ChatMessage` model: Thêm type `call_log`
+  - Fields: `callId`, `callType`, `callStatus`, `duration` (nếu ended)
+  - Hiển thị trong chat:
+    - Icon phone/video
+    - Text: "Cuộc gọi thoại" / "Cuộc gọi video"
+    - Status: "Đã kết nối (X phút)", "Đã từ chối", "Đã nhỡ", "Đã hủy"
+    - Tap → navigate đến call history (optional)
+- [ ] Tự động tạo call log message:
+  - Sau khi call ended/rejected/missed
+  - Lưu vào conversation (nếu có `conversationId`)
+  - Format message theo call status và duration
+
+#### Phase 6 – Permissions & Permissions Handling
+- [ ] Request permissions:
+  - Camera permission (cho video call)
+  - Microphone permission (cho voice và video call)
+  - Sử dụng `permission_handler` package
+- [ ] Handle permission denied:
+  - Hiển thị dialog giải thích lý do cần permission
+  - Nút "Mở cài đặt" → mở app settings
+  - Disable call buttons nếu không có permission
+- [ ] Check permissions trước khi initiate call:
+  - Voice call: Chỉ cần microphone
+  - Video call: Cần cả camera và microphone
+
+#### Phase 7 – Call History & Notifications
+- [ ] Tạo `CallHistoryPage`:
+  - List các cuộc gọi đã thực hiện (caller hoặc callee)
+  - Group by date (Hôm nay, Hôm qua, Tuần này, Tháng này)
+  - Mỗi item hiển thị:
+    - Avatar và tên đối phương
+    - Loại cuộc gọi (voice/video icon)
+    - Trạng thái (đã kết nối, đã từ chối, đã nhỡ)
+    - Thời lượng (nếu đã kết nối)
+    - Thời gian cuộc gọi
+  - Tap vào item → navigate đến conversation (nếu có)
+  - Filter: Tất cả, Chỉ cuộc gọi đến, Chỉ cuộc gọi đi
+- [ ] Tích hợp vào `ProfileScreen` hoặc `SettingsPage`:
+  - Nút "Lịch sử cuộc gọi" → navigate đến `CallHistoryPage`
+- [ ] Push notification cho incoming call:
+  - (Optional) Nếu có Firebase Cloud Messaging
+  - Hiển thị notification với action buttons (Accept/Reject)
+  - Tap notification → mở app và navigate đến call page
+
+#### Phase 8 – Error Handling & Edge Cases
+- [ ] Handle network errors:
+  - Mất kết nối trong cuộc gọi → hiển thị "Mất kết nối", tự động reconnect
+  - Không thể kết nối → hiển thị error, end call
+- [ ] Handle call timeout:
+  - Incoming call không answer sau 30 giây → auto reject (missed call)
+  - Outgoing call không answer sau 60 giây → auto cancel
+- [ ] Handle multiple calls:
+  - Nếu đang có call active, reject incoming call mới
+  - Hiển thị message: "Bạn đang có cuộc gọi khác"
+- [ ] Handle app lifecycle:
+  - Call tiếp tục khi app vào background (foreground service)
+  - Resume call khi app quay lại foreground
+  - End call khi app bị kill (optional)
+
+#### Phase 9 – QA & Polish
+- [ ] Test các trường hợp:
+  - Voice call: Gọi → answer → nói chuyện → end call
+  - Video call: Gọi → answer → hiển thị video → end call
+  - Reject call: Incoming call → reject → tạo call log
+  - Missed call: Incoming call → timeout → missed call log
+  - Cancel call: Outgoing call → cancel → không tạo call log
+  - Network issues: Mất kết nối → reconnect → end call
+  - Permissions: Deny camera/mic → disable call buttons
+  - Multiple devices: Call từ device A, answer từ device B (optional)
+- [ ] UX improvements:
+  - Loading state khi đang kết nối
+  - Smooth transitions giữa các states
+  - Haptic feedback khi tap buttons
+  - Sound effects: Ringtone, call connected, call ended
+  - Vibrate khi có incoming call
+- [ ] Performance:
+  - Optimize WebRTC peer connection setup
+  - Reduce signaling messages (batch ICE candidates)
+  - Cleanup resources khi call ended
+  - Memory management cho video streams
+
+**Files cần tạo/sửa:**
+- `lib/features/call/models/call.dart` - Model cho Call
+- `lib/features/call/repositories/call_repository.dart` - CRUD operations cho calls
+- `lib/features/call/services/call_service.dart` - Business logic cho calls
+- `lib/features/call/services/webrtc_service.dart` - WebRTC signaling và peer connection
+- `lib/features/call/pages/voice_call_page.dart` - UI cho voice call
+- `lib/features/call/pages/video_call_page.dart` - UI cho video call
+- `lib/features/call/pages/incoming_call_dialog.dart` - Dialog cho incoming call
+- `lib/features/call/pages/call_history_page.dart` - UI cho call history
+- `lib/features/chat/pages/chat_detail_page.dart` - Thêm nút call, call log messages
+- `lib/features/chat/models/message.dart` - Thêm type `call_log` cho messages
+- `lib/features/notifications/services/notification_service.dart` - Tạo notification cho incoming call
+- `firebase/firestore.rules` - Rules cho `calls` collection
+- `pubspec.yaml` - Thêm dependencies: `flutter_webrtc`, `permission_handler`
 
 ## 📝 Lưu Ý
 

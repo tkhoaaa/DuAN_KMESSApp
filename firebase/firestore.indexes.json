@@ -56,6 +56,19 @@
             ]
         },
         {
+            "collectionGroup": "candidates",
+            "queryScope": "COLLECTION",
+            "fields": [{
+                    "fieldPath": "owner",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "createdAt",
+                    "order": "ASCENDING"
+                }
+            ]
+        },
+        {
             "collectionGroup": "posts",
             "queryScope": "COLLECTION",
             "fields": [{

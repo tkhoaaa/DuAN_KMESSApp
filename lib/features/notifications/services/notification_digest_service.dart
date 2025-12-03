@@ -157,7 +157,8 @@ class NotificationDigestService {
           followsCount += count;
           break;
         case NotificationType.message:
-          // Bỏ qua messages - không tính vào stats
+        case NotificationType.call:
+          // Bỏ qua messages và calls - không tính vào stats
           break;
       }
     }

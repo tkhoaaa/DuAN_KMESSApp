@@ -351,5 +351,33 @@ service cloud.firestore {
         allow update: if false;
       }
     }
+
+    // Calls collection
+    match /calls/{callId} {
+      // Chỉ caller và callee được đọc
+      allow read: if isSignedIn() && (
+        request.auth.uid == resource.data.callerUid ||
+        request.auth.uid == resource.data.calleeUid
+      );
+
+      // Chỉ caller được tạo call
+      allow create: if isSignedIn()
+        && request.resource.data.callerUid == request.auth.uid
+        && request.resource.data.calleeUid is string
+        && request.resource.data.type is string
+        && request.resource.data.status is string
+        && request.resource.data.status == 'ringing'
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.updatedAt is timestamp;
+
+      // Caller và callee được update (để answer, reject, end, update signaling)
+      allow update: if isSignedIn() && (
+        request.auth.uid == resource.data.callerUid ||
+        request.auth.uid == resource.data.calleeUid
+      );
+
+      // Không cho delete
+      allow delete: if false;
+    }
   }
 }

@@ -17,6 +17,9 @@ import '../posts/services/post_scheduling_service.dart';
 import '../search/pages/search_page.dart';
 import '../share/models/deep_link.dart';
 import '../share/services/deep_link_service.dart';
+import '../call/models/call.dart';
+import '../call/services/call_service.dart';
+import '../call/widgets/incoming_call_dialog.dart';
 
 class AuthGate extends StatelessWidget {
   const AuthGate({super.key});
@@ -71,8 +74,12 @@ class _SignedInHome extends StatefulWidget {
 
 class _SignedInHomeState extends State<_SignedInHome> {
   final PostSchedulingService _schedulingService = PostSchedulingService();
+  final CallService _callService = CallService();
   Timer? _scheduledPostsTimer;
   final MethodChannel _methodChannel = const MethodChannel('app.channel.deeplink');
+  StreamSubscription<List<Call>>? _activeCallsSub;
+  Call? _currentIncomingCall;
+  bool _isShowingDialog = false;
 
   @override
   void initState() {
@@ -94,10 +101,84 @@ class _SignedInHomeState extends State<_SignedInHome> {
         const Duration(minutes: 1),
         (_) => _checkScheduledPosts(),
       );
+      
+      // Listen incoming calls globally
+      _listenIncomingCalls();
     }
     
     // Listen deep links
     _initDeepLinkListener();
+  }
+  
+  void _listenIncomingCalls() {
+    final currentUid = authRepository.currentUser()?.uid;
+    if (currentUid == null) return;
+    
+    _activeCallsSub?.cancel();
+    _activeCallsSub = _callService.watchActiveCalls(currentUid).listen((calls) {
+      if (!mounted) return;
+      
+      // Tìm incoming call đang ringing
+      final incomingCall = calls.firstWhere(
+        (call) =>
+            call.calleeUid == currentUid &&
+            call.status == CallStatus.ringing,
+        orElse: () => Call(
+          id: '',
+          callerUid: '',
+          calleeUid: '',
+          type: CallType.voice,
+          status: CallStatus.ringing,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        ),
+      );
+      
+      // Nếu có incoming call mới và chưa hiển thị dialog
+      if (incomingCall.id.isNotEmpty && 
+          incomingCall.id != _currentIncomingCall?.id &&
+          !_isShowingDialog) {
+        _currentIncomingCall = incomingCall;
+        _showIncomingCallDialog(incomingCall);
+      } else if (incomingCall.id.isEmpty && _currentIncomingCall != null) {
+        // Nếu không còn incoming call, reset
+        _currentIncomingCall = null;
+        _isShowingDialog = false;
+      }
+    });
+  }
+  
+  void _showIncomingCallDialog(Call call) {
+    // Kiểm tra xem dialog đã được hiển thị chưa
+    if (_isShowingDialog) return;
+    
+    final navigator = Navigator.maybeOf(context);
+    if (navigator == null) return;
+    
+    // Sử dụng SchedulerBinding để đảm bảo context sẵn sàng
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _isShowingDialog) return;
+      
+      // Kiểm tra lại xem call vẫn còn ringing không
+      if (_currentIncomingCall?.id != call.id) return;
+      
+      _isShowingDialog = true;
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => IncomingCallDialog(
+          callId: call.id,
+          callerUid: call.callerUid,
+          callType: call.type,
+        ),
+      ).then((_) {
+        // Reset khi dialog đóng
+        _isShowingDialog = false;
+        if (_currentIncomingCall?.id == call.id) {
+          _currentIncomingCall = null;
+        }
+      });
+    });
   }
 
   void _initDeepLinkListener() {
@@ -160,6 +241,7 @@ class _SignedInHomeState extends State<_SignedInHome> {
   @override
   void dispose() {
     _scheduledPostsTimer?.cancel();
+    _activeCallsSub?.cancel();
     final user = authRepository.currentUser();
     if (user != null) {
       userProfileRepository.setPresence(user.uid, false);

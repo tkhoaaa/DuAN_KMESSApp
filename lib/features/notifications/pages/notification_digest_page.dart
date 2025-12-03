@@ -574,6 +574,7 @@ class _NotificationDetailsModalState extends State<_NotificationDetailsModal> {
           return '${notification.count} người đã theo dõi bạn';
         case models.NotificationType.comment:
         case models.NotificationType.message:
+        case models.NotificationType.call:
           break;
       }
     }
@@ -587,6 +588,8 @@ class _NotificationDetailsModalState extends State<_NotificationDetailsModal> {
         return 'Đã theo dõi bạn';
       case models.NotificationType.message:
         return 'Đã gửi tin nhắn';
+      case models.NotificationType.call:
+        return 'Cuộc gọi đến';
     }
   }
 
@@ -803,6 +806,10 @@ class _NotificationDetailsModalState extends State<_NotificationDetailsModal> {
         break;
       case models.NotificationType.comment:
         // Không cần xử lý vì đã xử lý trong _buildPostCommentItem
+        break;
+      case models.NotificationType.call:
+        // Call notifications được xử lý tự động bởi incoming call dialog
+        // Không cần navigation
         break;
     }
   }

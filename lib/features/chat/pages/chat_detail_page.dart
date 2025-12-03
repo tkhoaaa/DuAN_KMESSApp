@@ -13,6 +13,11 @@ import '../../auth/auth_repository.dart';
 import '../../profile/user_profile_repository.dart';
 import '../../../services/cloudinary_service.dart';
 import '../../safety/services/block_service.dart';
+import '../../call/models/call.dart';
+import '../../call/pages/voice_call_page.dart';
+import '../../call/pages/video_call_page.dart';
+import '../../call/services/call_service.dart';
+import '../../call/widgets/incoming_call_dialog.dart';
 import '../models/message.dart';
 import '../models/message_attachment.dart';
 import '../repositories/chat_repository.dart';
@@ -34,6 +39,7 @@ class ChatDetailPage extends StatefulWidget {
 
 class _ChatDetailPageState extends State<ChatDetailPage> {
   late final ChatRepository _chatRepository;
+  late final CallService _callService;
   final AudioRecorder _recorder = AudioRecorder();
   final TextEditingController _controller = TextEditingController();
   final TextEditingController _searchController = TextEditingController();
@@ -56,16 +62,19 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
   bool _notificationsEnabled = true;
   DateTime? _mutedUntil;
   bool _isUpdatingNotifications = false;
+  StreamSubscription<List<Call>>? _activeCallsSub;
 
   @override
   void initState() {
     super.initState();
     _chatRepository = ChatRepository();
+    _callService = CallService();
     _controller.addListener(_onTextChanged);
     // Mark conversation as read khi mở
     _markAsRead();
     _listenBlockStatus();
     _listenNotificationSettings();
+    _listenIncomingCalls();
   }
 
   @override
@@ -137,6 +146,70 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
         _mutedUntil = settings.mutedUntil;
       });
     });
+  }
+
+  void _listenIncomingCalls() {
+    final currentUid = _currentUid;
+    if (currentUid == null) return;
+    _activeCallsSub?.cancel();
+    // Không cần listen ở đây nữa vì đã có global listener trong AuthGate
+    // Giữ lại để tương thích nhưng không hiển thị dialog để tránh duplicate
+  }
+
+  void _showIncomingCallDialog(Call call) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => IncomingCallDialog(
+        callId: call.id,
+        callerUid: call.callerUid,
+        callType: call.type,
+      ),
+    );
+  }
+
+  Future<void> _initiateCall(CallType type) async {
+    final currentUid = _currentUid;
+    if (currentUid == null) return;
+
+    if (_isBlockedByMe || _isBlockedByOther) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Không thể gọi khi bị chặn')),
+      );
+      return;
+    }
+
+    try {
+      final callId = await _callService.initiateCall(
+        calleeUid: widget.otherUid,
+        type: type,
+        conversationId: widget.conversationId,
+      );
+
+      if (mounted) {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => type == CallType.voice
+                ? VoiceCallPage(
+                    callId: callId,
+                    otherUid: widget.otherUid,
+                    isCaller: true,
+                  )
+                : VideoCallPage(
+                    callId: callId,
+                    otherUid: widget.otherUid,
+                    isCaller: true,
+                  ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Lỗi: $e')),
+        );
+      }
+    }
   }
 
   bool get _canSendMessages => !_isBlockedByMe && !_isBlockedByOther;
@@ -376,6 +449,7 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
       );
     }
     _recorder.dispose();
+    _activeCallsSub?.cancel();
     _blockedByMeSub?.cancel();
     _blockedByOtherSub?.cancel();
     _notificationSettingsSub?.cancel();
@@ -840,6 +914,19 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
               ),
         actions: [
           if (!_isSearchMode) ...[
+            // Call buttons (chỉ hiện khi không bị block)
+            if (!_isBlockedByMe && !_isBlockedByOther) ...[
+              IconButton(
+                icon: const Icon(Icons.phone),
+                tooltip: 'Gọi thoại',
+                onPressed: () => _initiateCall(CallType.voice),
+              ),
+              IconButton(
+                icon: const Icon(Icons.videocam),
+                tooltip: 'Gọi video',
+                onPressed: () => _initiateCall(CallType.video),
+              ),
+            ],
             IconButton(
               icon: Icon(
                 _isMuteActive

@@ -90,6 +90,10 @@ class _NotificationCenterPageState extends State<NotificationCenterPage> {
           );
         }
         break;
+      case models.NotificationType.call:
+        // Call notifications được xử lý tự động bởi incoming call dialog
+        // Không cần navigation
+        break;
     }
   }
 
@@ -103,7 +107,8 @@ class _NotificationCenterPageState extends State<NotificationCenterPage> {
           return '${notification.count} người đã theo dõi bạn';
         case models.NotificationType.comment:
         case models.NotificationType.message:
-          // Comments và messages không group, nhưng vẫn check để an toàn
+        case models.NotificationType.call:
+          // Comments, messages và calls không group, nhưng vẫn check để an toàn
           break;
       }
     }
@@ -118,6 +123,8 @@ class _NotificationCenterPageState extends State<NotificationCenterPage> {
         return 'Đã theo dõi bạn';
       case models.NotificationType.message:
         return 'Đã gửi tin nhắn';
+      case models.NotificationType.call:
+        return notification.text ?? 'Cuộc gọi đến';
     }
   }
 
@@ -131,6 +138,8 @@ class _NotificationCenterPageState extends State<NotificationCenterPage> {
         return Icons.person_add;
       case models.NotificationType.message:
         return Icons.chat;
+      case models.NotificationType.call:
+        return Icons.phone;
     }
   }
 
@@ -144,6 +153,8 @@ class _NotificationCenterPageState extends State<NotificationCenterPage> {
         return Colors.green;
       case models.NotificationType.message:
         return Colors.purple;
+      case models.NotificationType.call:
+        return Colors.orange;
     }
   }
 

@@ -5,6 +5,7 @@ enum NotificationType {
   comment,
   follow,
   message,
+  call,
 }
 
 class Notification {
@@ -16,6 +17,7 @@ class Notification {
     this.postId,
     this.commentId,
     this.conversationId,
+    this.callId,
     required this.read,
     required this.createdAt,
     this.text,
@@ -31,6 +33,7 @@ class Notification {
   final String? postId;
   final String? commentId;
   final String? conversationId;
+  final String? callId;
   final bool read;
   final DateTime? createdAt;
   final String? text; // Text của comment hoặc message
@@ -55,6 +58,9 @@ class Notification {
       case 'message':
         type = NotificationType.message;
         break;
+      case 'call':
+        type = NotificationType.call;
+        break;
       default:
         type = NotificationType.like;
     }
@@ -72,6 +78,7 @@ class Notification {
       postId: data['postId'] as String?,
       commentId: data['commentId'] as String?,
       conversationId: data['conversationId'] as String?,
+      callId: data['callId'] as String?,
       read: data['read'] as bool? ?? false,
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
       text: data['text'] as String?,
@@ -96,6 +103,9 @@ class Notification {
       case NotificationType.message:
         typeStr = 'message';
         break;
+      case NotificationType.call:
+        typeStr = 'call';
+        break;
     }
 
     return {
@@ -105,6 +115,7 @@ class Notification {
       if (postId != null) 'postId': postId,
       if (commentId != null) 'commentId': commentId,
       if (conversationId != null) 'conversationId': conversationId,
+      if (callId != null) 'callId': callId,
       'read': read,
       'createdAt': createdAt != null ? Timestamp.fromDate(createdAt!) : FieldValue.serverTimestamp(),
       if (text != null) 'text': text,
