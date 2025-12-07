@@ -63,6 +63,8 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
   DateTime? _mutedUntil;
   bool _isUpdatingNotifications = false;
   StreamSubscription<List<Call>>? _activeCallsSub;
+  bool _isOtherUserBanned = false;
+  StreamSubscription<UserProfile?>? _otherUserProfileSub;
 
   @override
   void initState() {
@@ -75,6 +77,7 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
     _listenBlockStatus();
     _listenNotificationSettings();
     _listenIncomingCalls();
+    _listenOtherUserBanStatus();
   }
 
   @override
@@ -84,6 +87,7 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
         oldWidget.conversationId != widget.conversationId) {
       _listenBlockStatus();
       _listenNotificationSettings();
+      _listenOtherUserBanStatus();
     }
   }
 
@@ -156,6 +160,20 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
     // Giữ lại để tương thích nhưng không hiển thị dialog để tránh duplicate
   }
 
+  void _listenOtherUserBanStatus() {
+    _otherUserProfileSub?.cancel();
+    _otherUserProfileSub = userProfileRepository
+        .watchProfile(widget.otherUid)
+        .listen((profile) {
+      if (!mounted) return;
+      setState(() {
+        _isOtherUserBanned = profile != null &&
+            (profile.banStatus == BanStatus.temporary ||
+                profile.banStatus == BanStatus.permanent);
+      });
+    });
+  }
+
   void _showIncomingCallDialog(Call call) {
     showDialog(
       context: context,
@@ -172,9 +190,13 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
     final currentUid = _currentUid;
     if (currentUid == null) return;
 
-    if (_isBlockedByMe || _isBlockedByOther) {
+    if (_isBlockedByMe || _isBlockedByOther || _isOtherUserBanned) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Không thể gọi khi bị chặn')),
+        SnackBar(
+          content: Text(_isOtherUserBanned
+              ? 'Không thể gọi vì tài khoản đã bị khóa'
+              : 'Không thể gọi khi bị chặn'),
+        ),
       );
       return;
     }
@@ -212,9 +234,13 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
     }
   }
 
-  bool get _canSendMessages => !_isBlockedByMe && !_isBlockedByOther;
+  bool get _canSendMessages =>
+      !_isBlockedByMe && !_isBlockedByOther && !_isOtherUserBanned;
 
   String get _blockedMessage {
+    if (_isOtherUserBanned) {
+      return 'Tài khoản đã bị khóa';
+    }
     if (_isBlockedByMe) {
       return 'Bạn đã chặn người này. Bỏ chặn để tiếp tục theo dõi hoặc nhắn tin.';
     }
@@ -225,7 +251,7 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
   }
 
   void _showBlockedSnack() {
-    if (!_isBlockedByMe && !_isBlockedByOther) return;
+    if (!_isBlockedByMe && !_isBlockedByOther && !_isOtherUserBanned) return;
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(_blockedMessage)),
@@ -453,6 +479,7 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
     _blockedByMeSub?.cancel();
     _blockedByOtherSub?.cancel();
     _notificationSettingsSub?.cancel();
+    _otherUserProfileSub?.cancel();
     super.dispose();
   }
 
@@ -914,8 +941,10 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
               ),
         actions: [
           if (!_isSearchMode) ...[
-            // Call buttons (chỉ hiện khi không bị block)
-            if (!_isBlockedByMe && !_isBlockedByOther) ...[
+            // Call buttons (chỉ hiện khi không bị block và không bị khóa)
+            if (!_isBlockedByMe &&
+                !_isBlockedByOther &&
+                !_isOtherUserBanned) ...[
               IconButton(
                 icon: const Icon(Icons.phone),
                 tooltip: 'Gọi thoại',
@@ -1102,7 +1131,7 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
               ),
             ),
           const Divider(height: 1),
-          if (_isBlockedByMe || _isBlockedByOther)
+          if (_isBlockedByMe || _isBlockedByOther || _isOtherUserBanned)
             Container(
               width: double.infinity,
               color: Theme.of(context).colorScheme.errorContainer,

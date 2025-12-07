@@ -158,6 +158,8 @@ class NotificationDigestService {
           break;
         case NotificationType.message:
         case NotificationType.call:
+        case NotificationType.report:
+        case NotificationType.appeal:
           // Bỏ qua messages và calls - không tính vào stats
           break;
       }

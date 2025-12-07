@@ -6,6 +6,7 @@ import 'login_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../admin/pages/user_ban_screen.dart';
 import '../notifications/pages/notification_center_page.dart';
 import '../notifications/services/notification_service.dart';
 import '../profile/user_profile_repository.dart';
@@ -48,7 +49,7 @@ class AuthGate extends StatelessWidget {
             },
           );
         }
-        return const _SignedInHome();
+        return const _SignedInHomeWithBanCheck();
       },
     );
   }
@@ -63,6 +64,46 @@ bool _needsEmailVerification(User user) {
       providerIds.contains('password') || providerIds.isEmpty;
 
   return hasPasswordProvider;
+}
+
+class _SignedInHomeWithBanCheck extends StatelessWidget {
+  const _SignedInHomeWithBanCheck();
+
+  @override
+  Widget build(BuildContext context) {
+    final user = authRepository.currentUser();
+    if (user == null) {
+      return const _SignedInHome();
+    }
+
+    // Kiểm tra trạng thái ban dựa trên user_profiles (nguồn sự thật duy nhất)
+    return StreamBuilder<UserProfile?>(
+      stream: userProfileRepository.watchProfile(user.uid),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting &&
+            !snapshot.hasData) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        final profile = snapshot.data;
+        if (profile != null) {
+          final now = DateTime.now();
+          final isBanned = profile.banStatus != BanStatus.none &&
+              (profile.banStatus == BanStatus.permanent ||
+                  (profile.banExpiresAt != null &&
+                      now.isBefore(profile.banExpiresAt!)));
+
+          if (isBanned) {
+            return const UserBanScreen();
+          }
+        }
+
+        return const _SignedInHome();
+      },
+    );
+  }
 }
 
 class _SignedInHome extends StatefulWidget {

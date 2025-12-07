@@ -12,6 +12,7 @@ import 'package:video_thumbnail/video_thumbnail.dart';
 import '../../auth/auth_repository.dart';
 import '../../notifications/services/notification_service.dart';
 import '../../profile/user_profile_repository.dart';
+import '../../admin/repositories/ban_repository.dart';
 import '../../../services/cloudinary_service.dart';
 import '../models/post.dart';
 import '../models/post_comment.dart';
@@ -73,15 +74,28 @@ class PostService {
     UserProfileRepository? profileRepository,
     FirebaseStorage? storage,
     FirebaseFirestore? firestore,
+    BanRepository? banRepository,
   })  : _repository = repository ?? PostRepository(firestore: firestore),
         _profiles = profileRepository ?? userProfileRepository,
-        _storage = storage ?? FirebaseStorage.instance;
+        _storage = storage ?? FirebaseStorage.instance,
+        _banRepository = banRepository ?? BanRepository();
 
   final PostRepository _repository;
   final DraftPostRepository _draftRepository = DraftPostRepository();
   final UserProfileRepository _profiles;
   final NotificationService _notificationService = NotificationService();
   final FirebaseStorage _storage;
+  final BanRepository _banRepository;
+
+  Future<void> _ensureUserNotBanned(String uid) async {
+    final ban = await _banRepository.getActiveBan(uid);
+    final isBanned = ban != null && ban.isActive && !ban.isExpired;
+    if (isBanned) {
+      throw StateError(
+        'Tài khoản của bạn đang bị khóa. Vui lòng chờ admin xử lý kháng cáo.',
+      );
+    }
+  }
 
   Future<PostFeedPageResult> fetchFeedPage({
     DocumentSnapshot<Map<String, dynamic>>? startAfter,
@@ -151,6 +165,8 @@ class PostService {
     if (currentUid == null) {
       throw StateError('Bạn cần đăng nhập.');
     }
+
+    await _ensureUserNotBanned(currentUid);
 
     if (media.isEmpty) {
       throw ArgumentError('Cần chọn ít nhất một ảnh hoặc video.');
@@ -344,6 +360,8 @@ class PostService {
       throw StateError('Bạn cần đăng nhập.');
     }
 
+    await _ensureUserNotBanned(currentUid);
+
     // Convert PostMediaUpload thành PostMedia (chỉ lưu local path, không upload)
     // Lưu ý: Draft không upload media, chỉ lưu metadata
     // Khi publish từ draft, sẽ upload media lúc đó
@@ -376,6 +394,8 @@ class PostService {
     if (currentUid == null) {
       throw StateError('Bạn cần đăng nhập.');
     }
+
+    await _ensureUserNotBanned(currentUid);
 
     final mediaList = <PostMedia>[];
     if (media != null) {
@@ -410,6 +430,8 @@ class PostService {
     if (currentUid == null) {
       throw StateError('Bạn cần đăng nhập.');
     }
+
+    await _ensureUserNotBanned(currentUid);
     await _draftRepository.deleteDraft(uid: currentUid, draftId: draftId);
   }
 
@@ -421,6 +443,8 @@ class PostService {
     if (currentUid == null) {
       throw StateError('Bạn cần đăng nhập.');
     }
+
+    await _ensureUserNotBanned(currentUid);
     if (like) {
       // Lấy post để lấy authorUid trước khi like (với timeout và error handling)
       Post post;
@@ -475,6 +499,8 @@ class PostService {
     if (currentUid == null) {
       throw StateError('Bạn cần đăng nhập.');
     }
+
+    await _ensureUserNotBanned(currentUid);
     // Lấy post để lấy authorUid trước khi comment (với timeout và error handling)
     Post post;
     try {
@@ -532,6 +558,8 @@ class PostService {
     if (currentUid == null) {
       throw StateError('Bạn cần đăng nhập.');
     }
+
+    await _ensureUserNotBanned(currentUid);
     // Lấy thông tin post để biết danh sách media trước khi xóa
     try {
       final post = await _repository.watchPost(postId).first;
@@ -568,6 +596,8 @@ class PostService {
     if (currentUid == null) {
       throw StateError('Bạn cần đăng nhập.');
     }
+
+    await _ensureUserNotBanned(currentUid);
     await _repository.deleteComment(
       postId: postId,
       commentId: commentId,

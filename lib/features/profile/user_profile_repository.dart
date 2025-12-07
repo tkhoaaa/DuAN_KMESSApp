@@ -12,6 +12,12 @@ enum MessagePermission {
   nobody,
 }
 
+enum BanStatus {
+  none,
+  temporary,
+  permanent,
+}
+
 class ProfileLink {
   ProfileLink({
     required this.url,
@@ -59,6 +65,10 @@ class UserProfile {
     this.showOnlineStatus = true,
     this.lastSeenVisibility = LastSeenVisibility.everyone,
     this.messagePermission = MessagePermission.everyone,
+    this.banStatus = BanStatus.none,
+    this.banExpiresAt,
+    this.isAdmin = false,
+    this.activeBanId,
   });
 
   final String uid;
@@ -82,6 +92,10 @@ class UserProfile {
   final bool showOnlineStatus; // Hiển thị trạng thái online/offline
   final LastSeenVisibility lastSeenVisibility; // Ai được xem last seen
   final MessagePermission messagePermission; // Ai được phép nhắn tin
+  final BanStatus banStatus; // Trạng thái ban: none / temporary / permanent
+  final DateTime? banExpiresAt; // Thời gian hết hạn ban (null nếu không bị ban hoặc permanent)
+  final bool isAdmin; // Có phải admin không
+  final String? activeBanId; // Ban document hiện tại đang áp dụng
 
   Map<String, dynamic> toMap() {
     return {
@@ -105,6 +119,10 @@ class UserProfile {
       'showOnlineStatus': showOnlineStatus,
       'lastSeenVisibility': lastSeenVisibility.name,
       'messagePermission': messagePermission.name,
+      'banStatus': banStatus.name,
+      if (banExpiresAt != null) 'banExpiresAt': banExpiresAt,
+      'isAdmin': isAdmin,
+      if (activeBanId != null) 'activeBanId': activeBanId,
     };
   }
 
@@ -135,6 +153,12 @@ class UserProfile {
       orElse: () => MessagePermission.everyone,
     );
     
+    final banStatusStr = data['banStatus'] as String? ?? 'none';
+    final banStatus = BanStatus.values.firstWhere(
+      (e) => e.name == banStatusStr,
+      orElse: () => BanStatus.none,
+    );
+    
     return UserProfile(
       uid: doc.id,
       displayName: data['displayName'] as String?,
@@ -157,6 +181,10 @@ class UserProfile {
       showOnlineStatus: (data['showOnlineStatus'] as bool?) ?? true,
       lastSeenVisibility: lastSeenVisibility,
       messagePermission: messagePermission,
+      banStatus: banStatus,
+      banExpiresAt: (data['banExpiresAt'] as Timestamp?)?.toDate(),
+      isAdmin: (data['isAdmin'] as bool?) ?? false,
+      activeBanId: data['activeBanId'] as String?,
     );
   }
 }
@@ -532,6 +560,33 @@ class UserProfileRepository {
         .toList();
     
     return profiles;
+  }
+
+  /// Cập nhật ban status của user (admin only)
+  Future<void> updateBanStatus(
+    String uid, {
+    required BanStatus banStatus,
+    DateTime? banExpiresAt,
+    String? activeBanId,
+  }) async {
+    final data = <String, dynamic>{
+      'banStatus': banStatus.name,
+      'updatedAt': FieldValue.serverTimestamp(),
+    };
+
+    if (banExpiresAt != null) {
+      data['banExpiresAt'] = Timestamp.fromDate(banExpiresAt);
+    } else {
+      data['banExpiresAt'] = FieldValue.delete();
+    }
+
+    if (activeBanId != null) {
+      data['activeBanId'] = activeBanId;
+    } else {
+      data['activeBanId'] = FieldValue.delete();
+    }
+
+    await _collection.doc(uid).update(data);
   }
 }
 

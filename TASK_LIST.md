@@ -1636,6 +1636,402 @@
 - `firebase/firestore.rules` - Rules cho `calls` collection
 - `pubspec.yaml` - Thêm dependencies: `flutter_webrtc`, `permission_handler`
 
+---
+
+### 27. Admin System - Quản Lý Report & Khóa Tài Khoản
+**Mô tả:** Hệ thống admin để quản lý reports, khóa tài khoản vi phạm, và xử lý đơn kháng cáo từ người dùng bị khóa.
+
+#### Ý Tưởng Tổng Quan
+
+**1. Admin Account System:**
+- Admin là user bình thường nhưng có quyền đặc biệt (`isAdmin: true` trong `user_profiles`)
+- Admin có thể đăng nhập như user thường, nhưng sẽ thấy thêm menu/quyền admin
+- Có thể có nhiều admin (multi-admin support)
+
+**2. Report Management Flow:**
+- Khi user report tài khoản khác → tạo document trong `reports` collection
+- Admin nhận notification realtime khi có report mới (type: `report`)
+- Admin click vào notification → navigate đến profile của người bị report để xem xét
+- Admin có thể:
+  - Xem danh sách tất cả reports (filter theo status: pending/resolved/rejected)
+  - Xem chi tiết report (reporter, lý do, thời gian)
+  - Xem profile của người bị report (posts, comments, followers)
+  - Quyết định: Khóa tài khoản hoặc Bỏ qua report
+
+**3. Ban System:**
+- **Ban Types:**
+  - `temporary`: Khóa theo ngày (1 ngày, 3 ngày, 7 ngày, 30 ngày)
+  - `permanent`: Khóa vĩnh viễn
+- **Ban Levels (mức độ vi phạm):**
+  - `warning`: Cảnh báo (chưa khóa, chỉ ghi nhận)
+  - `light`: Vi phạm nhẹ → khóa 1-3 ngày
+  - `medium`: Vi phạm trung bình → khóa 7-30 ngày
+  - `severe`: Vi phạm nghiêm trọng → khóa vĩnh viễn
+- **Ban Effects:**
+  - User bị ban không thể đăng nhập (hiển thị màn hình "Tài khoản bị khóa")
+  - Không thể post, comment, follow, chat
+  - Profile vẫn hiển thị nhưng có badge "Tài khoản bị khóa"
+  - Tự động mở khóa khi hết thời hạn (nếu temporary ban)
+
+**4. Appeal System (Kháng Cáo):**
+- User bị ban có thể gửi đơn kháng cáo từ màn hình "Tài khoản bị khóa"
+- Đơn kháng cáo bao gồm:
+  - Lý do kháng cáo (textarea)
+  - Có thể đính kèm bằng chứng (ảnh, link)
+  - Status: `pending` → `approved` / `rejected`
+- Admin xem danh sách appeals và quyết định:
+  - Approve → Mở khóa tài khoản ngay lập tức
+  - Reject → Giữ nguyên ban, có thể thêm ghi chú
+
+#### Phase 1 – Data Design & Models
+
+**1.1. Admin Model:**
+- Collection: `admins/{uid}` (hoặc field `isAdmin: true` trong `user_profiles`)
+- Fields:
+  - `uid`: Admin user ID
+  - `email`: Admin email (để verify)
+  - `createdAt`: Thời gian được cấp quyền admin
+  - `permissions`: List permissions (optional, mở rộng sau)
+
+**1.2. Report Model (Mở rộng):**
+- Collection: `reports/{reportId}`
+- Fields hiện có: `reporterUid`, `targetType`, `targetId`, `targetOwnerUid`, `reason`, `status`, `createdAt`
+- Fields mới:
+  - `adminNotes`: Ghi chú của admin khi xử lý
+  - `resolvedAt`: Thời gian admin xử lý
+  - `resolvedBy`: Admin UID xử lý
+  - `actionTaken`: `none` / `warning` / `banned` (nếu khóa thì link đến banId)
+  - `banId`: ID của ban document nếu admin quyết định khóa
+
+**1.3. Ban Model:**
+- Collection: `bans/{banId}`
+- Fields:
+  - `uid`: User bị khóa
+  - `banType`: `temporary` / `permanent`
+  - `banLevel`: `warning` / `light` / `medium` / `severe`
+  - `reason`: Lý do khóa (từ report hoặc admin tự nhập)
+  - `reportId`: ID của report dẫn đến ban này (optional)
+  - `bannedAt`: Thời gian khóa
+  - `expiresAt`: Thời gian hết hạn (nếu temporary, null nếu permanent)
+  - `bannedBy`: Admin UID thực hiện khóa
+  - `isActive`: `true` / `false` (có thể mở khóa trước thời hạn)
+  - `appealId`: ID của appeal nếu user đã kháng cáo (optional)
+
+**1.4. Appeal Model:**
+- Collection: `appeals/{appealId}`
+- Fields:
+  - `uid`: User gửi đơn kháng cáo
+  - `banId`: ID của ban đang kháng cáo
+  - `reason`: Lý do kháng cáo (textarea)
+  - `evidence`: List URLs ảnh/bằng chứng (optional)
+  - `status`: `pending` / `approved` / `rejected`
+  - `createdAt`: Thời gian gửi đơn
+  - `reviewedAt`: Thời gian admin xử lý
+  - `reviewedBy`: Admin UID xử lý
+  - `adminNotes`: Ghi chú của admin khi reject/approve
+
+**1.5. UserProfile Extension:**
+- Thêm vào `user_profiles/{uid}`:
+  - `banStatus`: `none` / `temporary` / `permanent`
+  - `banExpiresAt`: Timestamp (null nếu không bị ban hoặc permanent)
+  - `isAdmin`: `true` / `false` (hoặc check trong `admins` collection)
+
+#### Phase 2 – Repository & Service Layer
+
+**2.1. Admin Repository:**
+- `lib/features/admin/repositories/admin_repository.dart`
+- Methods:
+  - `isAdmin(String uid) → Future<bool>`: Kiểm tra user có phải admin không
+  - `watchAdminStatus(String uid) → Stream<bool>`: Stream admin status
+  - `getAllAdmins() → Future<List<String>>`: Lấy danh sách admin UIDs
+
+**2.2. Report Repository (Mở rộng):**
+- `lib/features/safety/repositories/report_repository.dart`
+- Methods mới:
+  - `watchPendingReports() → Stream<List<Report>>`: Stream reports chưa xử lý
+  - `watchReports({ReportStatus? status}) → Stream<List<Report>>`: Stream reports với filter
+  - `updateReportStatus(String reportId, ReportStatus status, {String? adminNotes, String? adminUid, String? banId}) → Future<void>`: Cập nhật status report
+  - `getReport(String reportId) → Future<Report?>`: Lấy chi tiết report
+  - `getReportsByTarget(String targetUid) → Future<List<Report>>`: Lấy tất cả reports về một user
+
+**2.3. Ban Repository:**
+- `lib/features/admin/repositories/ban_repository.dart`
+- Methods:
+  - `createBan({required String uid, required BanType banType, required BanLevel banLevel, required String reason, String? reportId, required String adminUid, DateTime? expiresAt}) → Future<String>`: Tạo ban
+  - `getActiveBan(String uid) → Future<Ban?>`: Lấy ban đang active của user
+  - `watchActiveBan(String uid) → Stream<Ban?>`: Stream ban status
+  - `unbanUser(String banId, String adminUid, {String? reason}) → Future<void>`: Mở khóa tài khoản
+  - `getAllBans({BanType? banType, BanLevel? banLevel}) → Future<List<Ban>>`: Lấy danh sách bans (admin view)
+  - `checkIfBanned(String uid) → Future<bool>`: Kiểm tra user có bị ban không
+
+**2.4. Appeal Repository:**
+- `lib/features/admin/repositories/appeal_repository.dart`
+- Methods:
+  - `createAppeal({required String uid, required String banId, required String reason, List<String>? evidence}) → Future<String>`: Tạo đơn kháng cáo
+  - `watchPendingAppeals() → Stream<List<Appeal>>`: Stream appeals chưa xử lý
+  - `getAppeal(String appealId) → Future<Appeal?>`: Lấy chi tiết appeal
+  - `updateAppealStatus(String appealId, AppealStatus status, {required String adminUid, String? adminNotes}) → Future<void>`: Cập nhật status appeal
+  - `getAppealsByUser(String uid) → Future<List<Appeal>>`: Lấy appeals của một user
+
+**2.5. Admin Service:**
+- `lib/features/admin/services/admin_service.dart`
+- Methods:
+  - `banUser({required String uid, required BanType banType, required BanLevel banLevel, required String reason, String? reportId}) → Future<void>`: Khóa user (tự động update UserProfile, tạo Ban document)
+  - `unbanUser(String banId, {String? reason}) → Future<void>`: Mở khóa user (update Ban, UserProfile)
+  - `resolveReport(String reportId, {required ReportAction action, String? banId, String? adminNotes}) → Future<void>`: Xử lý report (update report status, có thể tạo ban)
+  - `processAppeal(String appealId, {required AppealDecision decision, String? adminNotes}) → Future<void>`: Xử lý appeal (approve → unban, reject → giữ nguyên ban)
+
+#### Phase 3 – Notification System Integration
+
+**3.1. Report Notification:**
+- Khi có report mới → tạo notification cho tất cả admin
+- Notification type: `report` (thêm vào `NotificationType`)
+- Fields:
+  - `type`: `report`
+  - `fromUid`: Reporter UID
+  - `toUid`: Admin UID (hoặc broadcast đến tất cả admin)
+  - `reportId`: ID của report
+  - `targetUid`: UID của người bị report (để navigate đến profile)
+
+**3.2. Appeal Notification:**
+- Khi có appeal mới → tạo notification cho admin
+- Notification type: `appeal`
+- Fields:
+  - `type`: `appeal`
+  - `fromUid`: User bị ban (người kháng cáo)
+  - `toUid`: Admin UID
+  - `appealId`: ID của appeal
+  - `banId`: ID của ban đang kháng cáo
+
+**3.3. Notification Service Extension:**
+- `lib/features/notifications/services/notification_service.dart`
+- Methods mới:
+  - `createReportNotification({required String reportId, required String reporterUid, required String targetUid}) → Future<void>`: Tạo notification cho admin khi có report
+  - `createAppealNotification({required String appealId, required String uid, required String banId}) → Future<void>`: Tạo notification cho admin khi có appeal
+
+#### Phase 4 – UI: Admin Dashboard
+
+**4.1. Admin Home Page:**
+- `lib/features/admin/pages/admin_home_page.dart`
+- Chỉ hiển thị nếu user là admin (check `isAdmin`)
+- Tabs:
+  - **Reports**: Danh sách reports chưa xử lý
+  - **Bans**: Danh sách tài khoản bị khóa
+  - **Appeals**: Danh sách đơn kháng cáo
+- Stats cards: Số reports pending, số bans active, số appeals pending
+
+**4.2. Reports Management Page:**
+- `lib/features/admin/pages/reports_management_page.dart`
+- List reports với filter:
+  - Status: All / Pending / Resolved / Rejected
+  - Target Type: All / User / Post / Comment
+- Mỗi report item hiển thị:
+  - Reporter info (avatar, name)
+  - Target info (user bị report)
+  - Reason
+  - Created time
+  - Status badge
+- Tap vào report → navigate đến `ReportDetailPage`
+
+**4.3. Report Detail Page:**
+- `lib/features/admin/pages/report_detail_page.dart`
+- Hiển thị:
+  - Chi tiết report (reporter, target, reason, time)
+  - Profile preview của người bị report (avatar, name, bio)
+  - Link "Xem Profile" → navigate đến `PublicProfilePage` của target
+  - Danh sách reports khác về cùng user (nếu có)
+  - Actions:
+    - **Bỏ qua**: Mark report as rejected
+    - **Khóa tài khoản**: Mở dialog chọn ban type/level → tạo ban
+    - **Cảnh báo**: Ghi nhận warning (không khóa)
+
+**4.4. Bans Management Page:**
+- `lib/features/admin/pages/bans_management_page.dart`
+- List bans với filter:
+  - Ban Type: All / Temporary / Permanent
+  - Ban Level: All / Light / Medium / Severe
+  - Status: All / Active / Expired
+- Mỗi ban item hiển thị:
+  - User info (avatar, name)
+  - Ban type & level
+  - Reason
+  - Banned date & expires date
+  - Actions: **Mở khóa** (nếu active)
+
+**4.5. Appeals Management Page:**
+- `lib/features/admin/pages/appeals_management_page.dart`
+- List appeals với filter:
+  - Status: All / Pending / Approved / Rejected
+- Mỗi appeal item hiển thị:
+  - User info (avatar, name)
+  - Ban info (type, level, reason)
+  - Appeal reason
+  - Created time
+  - Status badge
+- Tap vào appeal → navigate đến `AppealDetailPage`
+
+**4.6. Appeal Detail Page:**
+- `lib/features/admin/pages/appeal_detail_page.dart`
+- Hiển thị:
+  - User info (người kháng cáo)
+  - Ban details (ban type, level, reason, dates)
+  - Appeal reason & evidence (nếu có)
+  - Actions:
+    - **Chấp nhận**: Approve appeal → unban user → update appeal status
+    - **Từ chối**: Reject appeal → giữ nguyên ban → update appeal status (có thể thêm admin notes)
+
+#### Phase 5 – UI: User Ban Screen & Appeal
+
+**5.1. Ban Screen (Khi User Bị Khóa):**
+- `lib/features/auth/banned_account_screen.dart`
+- Hiển thị khi user đăng nhập nhưng có `banStatus != none`
+- Content:
+  - Icon cảnh báo
+  - Title: "Tài khoản của bạn đã bị khóa"
+  - Ban details:
+    - Ban type (Tạm thời / Vĩnh viễn)
+    - Ban level (Mức độ vi phạm)
+    - Reason (Lý do khóa)
+    - Expires date (nếu temporary)
+  - Actions:
+    - **Gửi đơn kháng cáo**: Navigate đến `AppealPage`
+    - **Đăng xuất**: Sign out
+
+**5.2. Appeal Page (User Gửi Đơn Kháng Cáo):**
+- `lib/features/admin/pages/appeal_page.dart`
+- Form:
+  - Ban info display (read-only)
+  - Textarea: Lý do kháng cáo (required)
+  - File picker: Đính kèm bằng chứng (ảnh, optional)
+  - Submit button: Gửi đơn
+- Sau khi gửi:
+  - Show success message
+  - Hiển thị status: "Đơn kháng cáo đã được gửi, vui lòng chờ phản hồi"
+  - Có thể xem lịch sử appeals của mình
+
+**5.3. Appeal History Page:**
+- `lib/features/admin/pages/appeal_history_page.dart`
+- List appeals của user hiện tại
+- Hiển thị:
+  - Appeal reason
+  - Status (Pending / Approved / Rejected)
+  - Admin notes (nếu có)
+  - Created & reviewed dates
+
+#### Phase 6 – Integration & Guards
+
+**6.1. Auth Gate Integration:**
+- `lib/features/auth/auth_gate.dart`
+- Sau khi user đăng nhập thành công:
+  - Check `banStatus` trong UserProfile
+  - Nếu bị ban → navigate đến `BannedAccountScreen`
+  - Nếu không → tiếp tục flow bình thường
+
+**6.2. Post/Comment Guards:**
+- `lib/features/posts/services/post_service.dart`
+- Trước khi tạo post/comment:
+  - Check `banStatus` → nếu bị ban → throw error "Tài khoản của bạn đã bị khóa"
+  - Disable UI buttons nếu user bị ban
+
+**6.3. Profile Badge:**
+- `lib/features/profile/public_profile_page.dart`
+- Nếu user bị ban → hiển thị badge "Tài khoản bị khóa" trên profile
+- Disable follow/chat buttons
+
+**6.4. Notification Tap Handler:**
+- `lib/features/notifications/pages/notification_center_page.dart`
+- Khi admin tap vào notification type `report`:
+  - Navigate đến `ReportDetailPage` với `reportId`
+  - Hoặc navigate đến `PublicProfilePage` của `targetUid`
+- Khi admin tap vào notification type `appeal`:
+  - Navigate đến `AppealDetailPage` với `appealId`
+
+#### Phase 7 – Firestore Rules & Security
+
+**7.1. Admin Rules:**
+- `firebase/firestore.rules`
+- Rules cho `admins` collection:
+  - Read: Chỉ admin mới đọc được
+  - Write: Chỉ super admin hoặc Cloud Function mới write được
+
+**7.2. Reports Rules:**
+- Update rules cho `reports` collection:
+  - Read: Chỉ admin mới đọc được (ngoài reporter của chính report đó)
+  - Update: Chỉ admin mới update được
+  - Delete: Chỉ admin mới delete được
+
+**7.3. Bans Rules:**
+- Rules cho `bans` collection:
+  - Read: Admin đọc được tất cả, user chỉ đọc được ban của chính mình
+  - Create: Chỉ admin mới create được
+  - Update: Chỉ admin mới update được (để unban)
+
+**7.4. Appeals Rules:**
+- Rules cho `appeals` collection:
+  - Read: Admin đọc được tất cả, user chỉ đọc được appeals của chính mình
+  - Create: User có thể tạo appeal cho ban của mình
+  - Update: Chỉ admin mới update được (để approve/reject)
+
+#### Phase 8 – Auto Unban & Cleanup
+
+**8.1. Auto Unban Logic:**
+- Cloud Function (hoặc client-side check khi app start):
+  - Query `bans` collection với `banType: temporary` và `expiresAt <= now()`
+  - Tự động set `isActive: false` và update `user_profiles.banStatus: none`
+- Hoặc client-side: Check khi user đăng nhập → nếu ban đã hết hạn → auto unban
+
+**8.2. Cleanup Old Data:**
+- (Optional) Cloud Function để cleanup:
+  - Xóa reports đã resolved > 90 ngày
+  - Archive bans đã expired > 1 năm
+
+#### Phase 9 – QA & Edge Cases
+
+**9.1. Test Cases:**
+- Admin nhận notification khi có report mới
+- Admin khóa user → user không thể đăng nhập
+- User bị ban → hiển thị ban screen khi đăng nhập
+- User gửi appeal → admin nhận notification
+- Admin approve appeal → user có thể đăng nhập lại
+- Temporary ban tự động mở khóa khi hết hạn
+- Multiple reports về cùng user → admin có thể xem tổng hợp
+
+**9.2. Edge Cases:**
+- User bị ban nhưng đang online → force logout
+- User gửi nhiều appeals → chỉ hiển thị appeal mới nhất
+- Admin khóa user đang có active call → end call
+- Ban expired nhưng user không đăng nhập → check khi đăng nhập
+
+**Files cần tạo/sửa:**
+- `lib/features/admin/models/admin.dart` - Admin model
+- `lib/features/admin/models/ban.dart` - Ban model
+- `lib/features/admin/models/appeal.dart` - Appeal model
+- `lib/features/admin/repositories/admin_repository.dart` - Admin data access
+- `lib/features/admin/repositories/ban_repository.dart` - Ban data access
+- `lib/features/admin/repositories/appeal_repository.dart` - Appeal data access
+- `lib/features/admin/services/admin_service.dart` - Admin business logic
+- `lib/features/admin/pages/admin_home_page.dart` - Admin dashboard
+- `lib/features/admin/pages/reports_management_page.dart` - Reports list
+- `lib/features/admin/pages/report_detail_page.dart` - Report detail
+- `lib/features/admin/pages/bans_management_page.dart` - Bans list
+- `lib/features/admin/pages/appeals_management_page.dart` - Appeals list
+- `lib/features/admin/pages/appeal_detail_page.dart` - Appeal detail (admin view)
+- `lib/features/admin/pages/appeal_page.dart` - Appeal form (user view)
+- `lib/features/admin/pages/appeal_history_page.dart` - User appeal history
+- `lib/features/auth/banned_account_screen.dart` - Ban screen khi đăng nhập
+- `lib/features/safety/models/report.dart` - Mở rộng Report model
+- `lib/features/safety/repositories/report_repository.dart` - Mở rộng ReportRepository
+- `lib/features/profile/user_profile_repository.dart` - Thêm banStatus fields
+- `lib/features/notifications/models/notification.dart` - Thêm NotificationType.report, NotificationType.appeal
+- `lib/features/notifications/services/notification_service.dart` - Thêm methods tạo report/appeal notifications
+- `lib/features/auth/auth_gate.dart` - Check ban status khi đăng nhập
+- `lib/features/posts/services/post_service.dart` - Guard check ban trước khi post
+- `lib/features/profile/public_profile_page.dart` - Hiển thị ban badge
+- `firebase/firestore.rules` - Rules cho admins, reports, bans, appeals collections
+- `firebase/firestore.indexes.json` - Indexes cho queries (reports, bans, appeals)
+
+---
+
 ## 📝 Lưu Ý
 
 1. **Firestore Rules:** Cần cập nhật rules cho notifications và reactions

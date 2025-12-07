@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
+import '../../admin/pages/admin_appeal_detail_page.dart';
+import '../../admin/pages/admin_report_detail_page.dart';
 import '../../auth/auth_repository.dart';
 import '../../chat/pages/chat_detail_page.dart';
 import '../../posts/models/post.dart';
@@ -575,6 +577,8 @@ class _NotificationDetailsModalState extends State<_NotificationDetailsModal> {
         case models.NotificationType.comment:
         case models.NotificationType.message:
         case models.NotificationType.call:
+        case models.NotificationType.report:
+        case models.NotificationType.appeal:
           break;
       }
     }
@@ -590,6 +594,10 @@ class _NotificationDetailsModalState extends State<_NotificationDetailsModal> {
         return 'Đã gửi tin nhắn';
       case models.NotificationType.call:
         return 'Cuộc gọi đến';
+      case models.NotificationType.report:
+        return 'Có báo cáo mới';
+      case models.NotificationType.appeal:
+        return 'Có đơn kháng cáo mới';
     }
   }
 
@@ -810,6 +818,32 @@ class _NotificationDetailsModalState extends State<_NotificationDetailsModal> {
       case models.NotificationType.call:
         // Call notifications được xử lý tự động bởi incoming call dialog
         // Không cần navigation
+        break;
+      case models.NotificationType.report:
+        if (notification.reportId != null) {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) =>
+                  AdminReportDetailPage(reportId: notification.reportId!),
+            ),
+          );
+        } else if (notification.targetUid != null) {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => PublicProfilePage(uid: notification.targetUid!),
+            ),
+          );
+        }
+        break;
+      case models.NotificationType.appeal:
+        if (notification.appealId != null) {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) =>
+                  AdminAppealDetailPage(appealId: notification.appealId!),
+            ),
+          );
+        }
         break;
     }
   }

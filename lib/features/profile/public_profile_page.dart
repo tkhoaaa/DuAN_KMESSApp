@@ -140,6 +140,12 @@ class _PublicProfilePageState extends State<PublicProfilePage> {
             return const Center(child: Text('Không tìm thấy người dùng.'));
           }
 
+          final now = DateTime.now();
+          final isBanned = profile.banStatus != BanStatus.none &&
+              (profile.banStatus == BanStatus.permanent ||
+                  (profile.banExpiresAt != null &&
+                      now.isBefore(profile.banExpiresAt!)));
+
           final displayName = profile.displayName?.isNotEmpty == true
               ? profile.displayName!
               : (profile.email?.isNotEmpty == true
@@ -339,7 +345,29 @@ class _PublicProfilePageState extends State<PublicProfilePage> {
                           message:
                               'Bạn đã chặn $displayName. Bỏ chặn để tiếp tục theo dõi hoặc nhắn tin.',
                         ),
-                      if (profile.bio?.isNotEmpty == true) ...[
+                      if (isBanned) ...[
+                        const SizedBox(height: 8),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.red.withOpacity(0.08),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.redAccent),
+                            ),
+                            child: const Text(
+                              'Tài khoản này đã bị khóa. Bạn không thể xem nội dung hoặc tương tác với tài khoản này.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: Colors.redAccent,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ] else if (profile.bio?.isNotEmpty == true) ...[
                         const SizedBox(height: 8),
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 32),
@@ -380,34 +408,36 @@ class _PublicProfilePageState extends State<PublicProfilePage> {
                         ),
                       ],
                       const SizedBox(height: 16),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [
-                          _StatTile(
-                            label: 'Người theo dõi',
-                            value: profile.followersCount,
-                          ),
-                          _StatTile(
-                            label: 'Đang theo dõi',
-                            value: profile.followingCount,
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      if (currentUid == null)
-                        const Text('Đăng nhập để theo dõi hoặc nhắn tin.')
-                      else
-                        _FollowActions(
-                          currentUid: currentUid,
-                          targetUid: widget.uid,
-                          isTargetPrivate: profile.isPrivate,
-                          isBlockedByCurrent: blockedByMe,
-                          isBlockedByTarget: blockedByTarget,
-                          themeColor: themeColor,
+                      if (!isBanned) ...[
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: [
+                            _StatTile(
+                              label: 'Người theo dõi',
+                              value: profile.followersCount,
+                            ),
+                            _StatTile(
+                              label: 'Đang theo dõi',
+                              value: profile.followingCount,
+                            ),
+                          ],
                         ),
-                      const SizedBox(height: 24),
+                        const SizedBox(height: 16),
+                        if (currentUid == null)
+                          const Text('Đăng nhập để theo dõi hoặc nhắn tin.')
+                        else
+                          _FollowActions(
+                            currentUid: currentUid,
+                            targetUid: widget.uid,
+                            isTargetPrivate: profile.isPrivate,
+                            isBlockedByCurrent: blockedByMe,
+                            isBlockedByTarget: blockedByTarget,
+                            themeColor: themeColor,
+                          ),
+                        const SizedBox(height: 24),
+                      ],
                       // Pinned Posts Section
-                      if (_pinnedPosts.isNotEmpty) ...[
+                      if (!isBanned && _pinnedPosts.isNotEmpty) ...[
                         const Padding(
                           padding: EdgeInsets.symmetric(horizontal: 16),
                           child: Row(
@@ -451,66 +481,68 @@ class _PublicProfilePageState extends State<PublicProfilePage> {
                         const SizedBox(height: 16),
                       ],
                       // Posts Grid Section
-                      const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 16),
-                        child: Row(
-                          children: [
-                            Icon(Icons.grid_on, size: 20),
-                            SizedBox(width: 8),
-                            Text(
-                              'Bài viết',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
+                      if (!isBanned) ...[
+                        const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 16),
+                          child: Row(
+                            children: [
+                              Icon(Icons.grid_on, size: 20),
+                              SizedBox(width: 8),
+                              Text(
+                                'Bài viết',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        if (_isLoadingPosts)
+                          const Padding(
+                            padding: EdgeInsets.all(32),
+                            child: Center(child: CircularProgressIndicator()),
+                          )
+                        else if (_allPosts.isEmpty)
+                          const Padding(
+                            padding: EdgeInsets.all(32),
+                            child: Center(
+                              child: Text(
+                                'Chưa có bài viết nào',
+                                style: TextStyle(color: Colors.grey),
                               ),
                             ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      if (_isLoadingPosts)
-                        const Padding(
-                          padding: EdgeInsets.all(32),
-                          child: Center(child: CircularProgressIndicator()),
-                        )
-                      else if (_allPosts.isEmpty)
-                        const Padding(
-                          padding: EdgeInsets.all(32),
-                          child: Center(
-                            child: Text(
-                              'Chưa có bài viết nào',
-                              style: TextStyle(color: Colors.grey),
+                          )
+                        else
+                          GridView.builder(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            padding: const EdgeInsets.all(8),
+                            gridDelegate:
+                                const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 3,
+                              crossAxisSpacing: 4,
+                              mainAxisSpacing: 4,
                             ),
-                          ),
-                        )
-                      else
-                        GridView.builder(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          padding: const EdgeInsets.all(8),
-                          gridDelegate:
-                              const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 3,
-                            crossAxisSpacing: 4,
-                            mainAxisSpacing: 4,
-                          ),
-                          itemCount: _allPosts.length,
-                          itemBuilder: (context, index) {
-                            final post = _allPosts[index];
-                            return _PostGridItem(
-                              post: post,
-                              onTap: () {
-                                Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (_) => PostPermalinkPage(
-                                      postId: post.id,
+                            itemCount: _allPosts.length,
+                            itemBuilder: (context, index) {
+                              final post = _allPosts[index];
+                              return _PostGridItem(
+                                post: post,
+                                onTap: () {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => PostPermalinkPage(
+                                        postId: post.id,
+                                      ),
                                     ),
-                                  ),
-                                );
-                              },
-                            );
-                          },
-                        ),
+                                  );
+                                },
+                              );
+                            },
+                          ),
+                      ],
                     ],
                   );
                 },

@@ -16,7 +16,6 @@ _**Agent (model claude-4-opus-thinking, mode Agent)**_
 
 ---
 
-
 Đang kiểm tra cấu trúc dự án để giải thích ý nghĩa các thư mục models, pages, repositories, và service.
 
 
@@ -24,7 +23,7 @@ _**Agent (model claude-4-opus-thinking, mode Agent)**_
 
 <tool-use data-tool-type="generic" data-tool-name="list_dir">
 <details>
-            <summary>Tool use: **list_directory** • Listed directory undefined • **0** results</summary>
+            <summary>Tool use: **list_dir** • Listed directory undefined • **0** results</summary>
         
 No results found
 </details>
@@ -43,7 +42,6 @@ No results found
 
 
 ---
-
 
 Đang kiểm tra cấu trúc thư mục trong `lib` để xác định các thư mục models, pages, repositories, và service:
 
@@ -140,7 +138,7 @@ Directory: **c:\Users\Admin\StudioProjects\duan_kmessapp** (0 file)
 
 <tool-use data-tool-type="generic" data-tool-name="list_dir">
 <details>
-            <summary>Tool use: **list_directory** • Listed directory undefined • **0** results</summary>
+            <summary>Tool use: **list_dir** • Listed directory undefined • **0** results</summary>
         
 No results found
 </details>
@@ -150,7 +148,7 @@ No results found
 
 <tool-use data-tool-type="generic" data-tool-name="list_dir">
 <details>
-            <summary>Tool use: **list_directory** • Listed directory undefined • **0** results</summary>
+            <summary>Tool use: **list_dir** • Listed directory undefined • **0** results</summary>
         
 No results found
 </details>
@@ -161,7 +159,6 @@ No results found
 
 
 ---
-
 
 Đang xem một số file mẫu để hiểu rõ hơn về cách sử dụng:
 
@@ -203,7 +200,6 @@ No results found
 
 
 ---
-
 
 Dựa trên cấu trúc dự án Flutter của bạn, đây là ý nghĩa của các thư mục:
 

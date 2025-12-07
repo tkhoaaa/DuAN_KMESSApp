@@ -6,6 +6,8 @@ enum NotificationType {
   follow,
   message,
   call,
+  report, // Report notification cho admin
+  appeal, // Appeal notification cho admin
 }
 
 class Notification {
@@ -18,6 +20,9 @@ class Notification {
     this.commentId,
     this.conversationId,
     this.callId,
+    this.reportId,
+    this.appealId,
+    this.targetUid, // UID của người bị report (để navigate đến profile)
     required this.read,
     required this.createdAt,
     this.text,
@@ -34,6 +39,9 @@ class Notification {
   final String? commentId;
   final String? conversationId;
   final String? callId;
+  final String? reportId; // ID của report (cho notification type report)
+  final String? appealId; // ID của appeal (cho notification type appeal)
+  final String? targetUid; // UID của người bị report (để navigate đến profile)
   final bool read;
   final DateTime? createdAt;
   final String? text; // Text của comment hoặc message
@@ -61,6 +69,12 @@ class Notification {
       case 'call':
         type = NotificationType.call;
         break;
+      case 'report':
+        type = NotificationType.report;
+        break;
+      case 'appeal':
+        type = NotificationType.appeal;
+        break;
       default:
         type = NotificationType.like;
     }
@@ -79,6 +93,9 @@ class Notification {
       commentId: data['commentId'] as String?,
       conversationId: data['conversationId'] as String?,
       callId: data['callId'] as String?,
+      reportId: data['reportId'] as String?,
+      appealId: data['appealId'] as String?,
+      targetUid: data['targetUid'] as String?,
       read: data['read'] as bool? ?? false,
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
       text: data['text'] as String?,
@@ -106,6 +123,12 @@ class Notification {
       case NotificationType.call:
         typeStr = 'call';
         break;
+      case NotificationType.report:
+        typeStr = 'report';
+        break;
+      case NotificationType.appeal:
+        typeStr = 'appeal';
+        break;
     }
 
     return {
@@ -116,6 +139,9 @@ class Notification {
       if (commentId != null) 'commentId': commentId,
       if (conversationId != null) 'conversationId': conversationId,
       if (callId != null) 'callId': callId,
+      if (reportId != null) 'reportId': reportId,
+      if (appealId != null) 'appealId': appealId,
+      if (targetUid != null) 'targetUid': targetUid,
       'read': read,
       'createdAt': createdAt != null ? Timestamp.fromDate(createdAt!) : FieldValue.serverTimestamp(),
       if (text != null) 'text': text,

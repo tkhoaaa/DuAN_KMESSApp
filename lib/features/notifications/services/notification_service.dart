@@ -1,12 +1,17 @@
+import '../../admin/repositories/admin_repository.dart';
 import '../../call/models/call.dart';
 import '../models/notification.dart';
 import '../repositories/notification_repository.dart';
 
 class NotificationService {
-  NotificationService({NotificationRepository? repository})
-      : _repository = repository ?? NotificationRepository();
+  NotificationService({
+    NotificationRepository? repository,
+    AdminRepository? adminRepository,
+  })  : _repository = repository ?? NotificationRepository(),
+        _adminRepository = adminRepository ?? AdminRepository();
 
   final NotificationRepository _repository;
+  final AdminRepository _adminRepository;
 
   /// Generate group key cho notification
   /// Format: {type}_{postId?}_{toUid}
@@ -26,6 +31,8 @@ class NotificationService {
       case NotificationType.comment:
       case NotificationType.message:
       case NotificationType.call:
+      case NotificationType.report:
+      case NotificationType.appeal:
         // Comments, messages và calls không group
         throw ArgumentError('Comments, messages and calls should not be grouped');
     }
@@ -214,6 +221,67 @@ class NotificationService {
     );
 
     await _repository.createNotification(notification);
+  }
+
+  /// Tạo notification cho admin khi có report mới
+  Future<void> createReportNotification({
+    required String reportId,
+    required String reporterUid,
+    required String targetUid,
+  }) async {
+    // Lấy danh sách tất cả admin
+    final adminUids = await _adminRepository.getAllAdmins();
+    if (adminUids.isEmpty) return; // Không có admin nào
+
+    // Tạo notification cho mỗi admin
+    final notifications = adminUids.map((adminUid) {
+      return Notification(
+        id: '',
+        type: NotificationType.report,
+        fromUid: reporterUid,
+        toUid: adminUid,
+        reportId: reportId,
+        targetUid: targetUid, // UID của người bị report
+        read: false,
+        createdAt: DateTime.now(),
+        text: 'Có báo cáo mới về người dùng',
+      );
+    }).toList();
+
+    // Tạo tất cả notifications
+    for (final notification in notifications) {
+      await _repository.createNotification(notification);
+    }
+  }
+
+  /// Tạo notification cho admin khi có appeal mới
+  Future<void> createAppealNotification({
+    required String appealId,
+    required String uid,
+    required String banId,
+  }) async {
+    // Lấy danh sách tất cả admin
+    final adminUids = await _adminRepository.getAllAdmins();
+    if (adminUids.isEmpty) return; // Không có admin nào
+
+    // Tạo notification cho mỗi admin
+    final notifications = adminUids.map((adminUid) {
+      return Notification(
+        id: '',
+        type: NotificationType.appeal,
+        fromUid: uid, // User bị ban (người kháng cáo)
+        toUid: adminUid,
+        appealId: appealId,
+        read: false,
+        createdAt: DateTime.now(),
+        text: 'Có đơn kháng cáo mới',
+      );
+    }).toList();
+
+    // Tạo tất cả notifications
+    for (final notification in notifications) {
+      await _repository.createNotification(notification);
+    }
   }
 }
 

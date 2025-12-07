@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import 'user_profile_repository.dart';
+import '../admin/pages/admin_dashboard_page.dart';
+import '../admin/repositories/admin_repository.dart';
 import '../auth/auth_repository.dart';
 import '../follow/services/follow_service.dart';
 import '../../services/cloudinary_service.dart';
@@ -27,18 +29,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final TextEditingController photoUrlController = TextEditingController();
   final TextEditingController bioController = TextEditingController();
   final ImagePicker _picker = ImagePicker();
+  final AdminRepository _adminRepository = AdminRepository();
   bool isSaving = false;
   bool isUploading = false;
   bool _loadedInitial = false;
   bool _isPrivate = false;
   String? _themeColor;
   List<ProfileLink> _links = [];
+  bool _isAdmin = false;
   late final FollowService _followService;
 
   @override
   void initState() {
     super.initState();
     _followService = FollowService();
+    _checkAdminStatus();
+  }
+
+  Future<void> _checkAdminStatus() async {
+    final user = authRepository.currentUser();
+    if (user != null) {
+      final isAdmin = await _adminRepository.isAdmin(user.uid);
+      if (mounted) {
+        setState(() {
+          _isAdmin = isAdmin;
+        });
+      }
+    }
   }
 
   @override
@@ -261,6 +278,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
               );
             },
           ),
+          if (_isAdmin)
+            IconButton(
+              icon: const Icon(Icons.admin_panel_settings),
+              tooltip: 'Admin Dashboard',
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const AdminDashboardPage(),
+                  ),
+                );
+              },
+            ),
         ],
       ),
       body: StreamBuilder<UserProfile?>(

@@ -1,10 +1,10 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../../admin/pages/admin_appeal_detail_page.dart';
+import '../../admin/pages/admin_report_detail_page.dart';
 import '../../auth/auth_repository.dart';
 import '../../chat/pages/chat_detail_page.dart';
-import '../../chat/repositories/chat_repository.dart';
-import '../../posts/pages/post_feed_page.dart';
 import '../../posts/pages/post_permalink_page.dart';
 import '../../profile/public_profile_page.dart';
 import '../../profile/user_profile_repository.dart';
@@ -79,7 +79,6 @@ class _NotificationCenterPageState extends State<NotificationCenterPage> {
         break;
       case models.NotificationType.message:
         if (notification.conversationId != null) {
-          final chatRepo = ChatRepository();
           Navigator.of(context).push(
             MaterialPageRoute(
               builder: (_) => ChatDetailPage(
@@ -93,6 +92,37 @@ class _NotificationCenterPageState extends State<NotificationCenterPage> {
       case models.NotificationType.call:
         // Call notifications được xử lý tự động bởi incoming call dialog
         // Không cần navigation
+        break;
+      case models.NotificationType.report:
+        // Navigate đến report detail page
+        if (notification.reportId != null) {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => AdminReportDetailPage(
+                reportId: notification.reportId!,
+              ),
+            ),
+          );
+        } else if (notification.targetUid != null) {
+          // Nếu không có reportId, navigate đến profile của user bị report
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => PublicProfilePage(uid: notification.targetUid!),
+            ),
+          );
+        }
+        break;
+      case models.NotificationType.appeal:
+        // Navigate đến appeal detail page
+        if (notification.appealId != null) {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => AdminAppealDetailPage(
+                appealId: notification.appealId!,
+              ),
+            ),
+          );
+        }
         break;
     }
   }
@@ -108,6 +138,8 @@ class _NotificationCenterPageState extends State<NotificationCenterPage> {
         case models.NotificationType.comment:
         case models.NotificationType.message:
         case models.NotificationType.call:
+        case models.NotificationType.report:
+        case models.NotificationType.appeal:
           // Comments, messages và calls không group, nhưng vẫn check để an toàn
           break;
       }
@@ -125,6 +157,10 @@ class _NotificationCenterPageState extends State<NotificationCenterPage> {
         return 'Đã gửi tin nhắn';
       case models.NotificationType.call:
         return notification.text ?? 'Cuộc gọi đến';
+      case models.NotificationType.report:
+        return 'Có báo cáo mới';
+      case models.NotificationType.appeal:
+        return 'Có đơn kháng cáo mới';
     }
   }
 
@@ -140,6 +176,10 @@ class _NotificationCenterPageState extends State<NotificationCenterPage> {
         return Icons.chat;
       case models.NotificationType.call:
         return Icons.phone;
+      case models.NotificationType.report:
+        return Icons.report;
+      case models.NotificationType.appeal:
+        return Icons.gavel;
     }
   }
 
@@ -154,7 +194,11 @@ class _NotificationCenterPageState extends State<NotificationCenterPage> {
       case models.NotificationType.message:
         return Colors.purple;
       case models.NotificationType.call:
+        return Colors.blue;
+      case models.NotificationType.report:
         return Colors.orange;
+      case models.NotificationType.appeal:
+        return Colors.purple;
     }
   }
 
