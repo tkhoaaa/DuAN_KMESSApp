@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -16,6 +17,7 @@ import '../settings/pages/privacy_settings_page.dart';
 import '../posts/pages/drafts_and_scheduled_page.dart';
 import '../call/pages/call_history_page.dart';
 import 'pages/manage_pinned_posts_page.dart';
+import '../auth/pages/change_password_page.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -290,6 +292,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 );
               },
             ),
+          // Chỉ hiển thị nút đổi mật khẩu nếu user đăng nhập bằng email/password
+          Builder(
+            builder: (context) {
+              final currentUser = authRepository.currentUser();
+              final hasEmailPassword = currentUser?.email != null &&
+                  currentUser?.providerData.any((p) =>
+                          p.providerId == 'password') ==
+                      true;
+              if (!hasEmailPassword) return const SizedBox.shrink();
+              return IconButton(
+                icon: const Icon(Icons.lock),
+                tooltip: 'Đổi mật khẩu',
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const ChangePasswordPage(),
+                    ),
+                  );
+                },
+              );
+            },
+          ),
         ],
       ),
       body: StreamBuilder<UserProfile?>(

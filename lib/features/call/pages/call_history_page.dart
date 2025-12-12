@@ -1,6 +1,7 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../auth/auth_repository.dart';
 import '../../profile/user_profile_repository.dart';
@@ -53,10 +54,96 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
         _isLoading = false;
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Lỗi tải lịch sử: $e')),
-        );
+        _handleError(e);
       }
+    }
+  }
+
+  void _handleError(dynamic error) {
+    final errorString = error.toString();
+    
+    // Kiểm tra lỗi failed-precondition (thiếu indexes)
+    if (errorString.contains('failed-precondition') || 
+        errorString.contains('requires an index')) {
+      // Trích xuất URL tạo index từ error message
+      final urlMatch = RegExp(r'https://[^\s]+').firstMatch(errorString);
+      final indexUrl = urlMatch?.group(0);
+      
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Cần tạo Index'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Firestore cần tạo indexes để truy vấn lịch sử cuộc gọi. '
+                'Bạn có thể tạo indexes tự động bằng cách:',
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                '1. Deploy indexes từ file firebase/firestore.indexes.json',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              const Text('Hoặc'),
+              const SizedBox(height: 8),
+              const Text(
+                '2. Click vào link bên dưới để tạo indexes trên Firebase Console',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              if (indexUrl != null) ...[
+                const SizedBox(height: 12),
+                SelectableText(
+                  indexUrl,
+                  style: const TextStyle(
+                    color: Colors.blue,
+                    decoration: TextDecoration.underline,
+                  ),
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Đóng'),
+            ),
+            if (indexUrl != null)
+              TextButton(
+                onPressed: () async {
+                  final uri = Uri.parse(indexUrl);
+                  if (await canLaunchUrl(uri)) {
+                    await launchUrl(uri, mode: LaunchMode.externalApplication);
+                  }
+                  if (mounted) Navigator.pop(context);
+                },
+                child: const Text('Mở link'),
+              ),
+            if (indexUrl != null)
+              TextButton(
+                onPressed: () {
+                  // Copy URL to clipboard
+                  Clipboard.setData(ClipboardData(text: indexUrl));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Đã copy link vào clipboard')),
+                  );
+                  Navigator.pop(context);
+                },
+                child: const Text('Copy link'),
+              ),
+          ],
+        ),
+      );
+    } else {
+      // Hiển thị lỗi thông thường
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Lỗi tải lịch sử: ${error.toString()}'),
+          duration: const Duration(seconds: 5),
+        ),
+      );
     }
   }
 

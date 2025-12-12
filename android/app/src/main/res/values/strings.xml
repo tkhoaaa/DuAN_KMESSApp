@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">duan_kmessapp</string>
+    <string name="facebook_app_id">841543928576901</string>
+    <string name="fb_login_protocol_scheme">fb841543928576901</string>
+    <!-- Client Token từ Facebook Console > Settings > Basic -->
+    <string name="facebook_client_token">1db8bc66233b65bbbb53d22c77aa9cfc</string>
+</resources>

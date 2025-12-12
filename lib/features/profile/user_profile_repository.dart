@@ -231,7 +231,9 @@ class UserProfileRepository {
         'isPrivate': isPrivate ?? false,
         'followersCount': 0,
         'followingCount': 0,
-      'postsCount': 0,
+        'postsCount': 0,
+        'banStatus': 'none', // Đảm bảo banStatus luôn được set
+        'isAdmin': false, // Đảm bảo isAdmin luôn được set
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
@@ -296,8 +298,15 @@ class UserProfileRepository {
       'updatedAt': FieldValue.serverTimestamp(),
     };
     if (displayName != null) {
-      data['displayName'] = displayName;
-      data['displayNameLower'] = displayName.toLowerCase();
+      final trimmedName = displayName.trim();
+      if (trimmedName.isEmpty) {
+        // Nếu displayName rỗng, xóa field
+        data['displayName'] = FieldValue.delete();
+        data['displayNameLower'] = FieldValue.delete();
+      } else {
+        data['displayName'] = trimmedName;
+        data['displayNameLower'] = trimmedName.toLowerCase();
+      }
     }
     if (phoneNumber != null) data['phoneNumber'] = phoneNumber;
     if (removePhoto) {

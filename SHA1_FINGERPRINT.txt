@@ -1,0 +1,35 @@
+==========================================
+SHA-1 FINGERPRINT CHO GOOGLE SIGN-IN
+==========================================
+
+SHA-1: 2B:A0:44:DF:6C:0B:8D:18:A0:72:0C:52:36:98:E0:05:B5:DB:D3:63
+
+CÁCH THÊM VÀO FIREBASE CONSOLE:
+================================
+
+1. Vào https://console.firebase.google.com/
+2. Chọn project của bạn
+3. Vào Project Settings (⚙️) > Your apps
+4. Chọn app Android của bạn
+5. Click "Add fingerprint"
+6. Paste SHA-1: 2B:A0:44:DF:6C:0B:8D:18:A0:72:0C:52:36:98:E0:05:B5:DB:D3:63
+7. Click "Save"
+
+SAU KHI THÊM:
+=============
+
+1. Tải lại file google-services.json từ Firebase Console
+2. Thay thế file cũ trong android/app/google-services.json
+3. Rebuild app:
+   flutter clean
+   flutter pub get
+   flutter run
+
+LƯU Ý:
+======
+- SHA-1 này là của debug keystore
+- Khi build release, cần thêm SHA-1 của release keystore
+- Mỗi developer cần thêm SHA-1 của họ vào Firebase Console
+
+
+

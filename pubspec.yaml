@@ -52,6 +52,7 @@ dependencies:
   share_plus: ^10.1.2
   flutter_webrtc: ^1.0.0
   permission_handler: ^11.3.1
+  flutter_facebook_auth: ^7.1.2
 
 dev_dependencies:
   flutter_test:

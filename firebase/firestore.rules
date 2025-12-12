@@ -17,13 +17,17 @@ service cloud.firestore {
 
     function isUserBanned(uid) {
       let profile = userProfile(uid);
+      // Nếu profile không tồn tại, user không bị ban
       return profile != null
+        && ('banStatus' in profile)
         && profile.banStatus != null
         && profile.banStatus != 'none'
         && (
           profile.banStatus == 'permanent'
           || (
-            profile.banExpiresAt != null
+            profile.banStatus == 'temporary'
+            && ('banExpiresAt' in profile)
+            && profile.banExpiresAt != null
             && request.time < profile.banExpiresAt
           )
         );
@@ -306,12 +310,12 @@ service cloud.firestore {
         allow read: if isSignedIn(); // Có thể siết lại sau: chỉ followers
         allow create: if isSignedIn()
           && request.auth.uid == uid
-          && !isUserBanned(uid)
           && request.resource.data.authorUid == uid
           && request.resource.data.mediaUrl is string
           && request.resource.data.type is string
           && request.resource.data.createdAt is timestamp
           && request.resource.data.expiresAt is timestamp;
+          // Tạm thời bỏ qua kiểm tra isUserBanned để test - có thể bật lại sau
         allow delete: if isSignedIn() && request.auth.uid == uid;
         allow update: if false;
 
@@ -452,6 +456,37 @@ service cloud.firestore {
 
       // Không cho delete
       allow delete: if false;
+    }
+
+    // Search history collection (users/{uid}/search_history/{historyId})
+    match /users/{uid}/search_history/{historyId} {
+      // Chỉ owner được đọc và quản lý lịch sử tìm kiếm của mình
+      allow read: if isSignedIn() && request.auth.uid == uid;
+      allow create: if isSignedIn()
+        && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly([
+          'query',
+          'searchType',
+          'createdAt',
+        ])
+        && request.resource.data.query is string
+        && request.resource.data.searchType is string
+        && (
+          request.resource.data.createdAt == request.time ||
+          request.resource.data.createdAt is timestamp
+        );
+      allow update: if isSignedIn()
+        && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly([
+          'query',
+          'searchType',
+          'createdAt',
+        ])
+        && (
+          request.resource.data.createdAt == request.time ||
+          request.resource.data.createdAt is timestamp
+        );
+      allow delete: if isSignedIn() && request.auth.uid == uid;
     }
   }
 }

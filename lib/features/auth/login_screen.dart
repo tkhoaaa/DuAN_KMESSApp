@@ -2,6 +2,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'register_screen.dart';
 import 'auth_repository.dart';
+import 'pages/forgot_password_page.dart';
+import 'pages/add_phone_page.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -13,9 +15,42 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController emailController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
+  final _formKey = GlobalKey<FormState>();
   bool isLoadingEmail = false;
   bool isBusy = false;
+  bool _obscurePassword = true;
   String? errorText;
+
+  Future<void> _maybePromptAddPhone() async {
+    final user = authRepository.currentUser();
+    if (user == null) return;
+    if (user.phoneNumber != null && user.phoneNumber!.isNotEmpty) return;
+    if (!mounted) return;
+    final shouldAdd = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Thêm số điện thoại'),
+        content: const Text(
+          'Bạn chưa thêm số điện thoại. Thêm số để đăng nhập/khôi phục mật khẩu bằng SĐT.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Để sau'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Thêm ngay'),
+          ),
+        ],
+      ),
+    );
+    if (shouldAdd == true && mounted) {
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const AddPhonePage()),
+      );
+    }
+  }
 
   void _setBusy(bool value) {
     if (!mounted) return;
@@ -24,19 +59,68 @@ class _LoginScreenState extends State<LoginScreen> {
     });
   }
 
+  bool _isEmail(String input) => input.contains('@');
+
+  String? _validateEmail(String? value) {
+    if (value == null || value.isEmpty) {
+      return 'Vui lòng nhập email hoặc số điện thoại';
+    }
+    if (_isEmail(value)) {
+    if (!value.contains('@') || !value.contains('.')) {
+      return 'Email không đúng định dạng';
+      }
+    } else {
+      if (value.length < 6) return 'Số điện thoại không hợp lệ';
+    }
+    return null;
+  }
+
+  String? _validatePassword(String? value) {
+    if (value == null || value.isEmpty) {
+      return 'Vui lòng nhập mật khẩu';
+    }
+    return null;
+  }
+
   Future<void> _login() async {
+    if (!_formKey.currentState!.validate()) return;
+
     setState(() {
       isLoadingEmail = true;
       errorText = null;
     });
+    final identifier = emailController.text.trim();
     try {
+      if (_isEmail(identifier)) {
       await authRepository.signInWithEmail(
-        emailController.text.trim(),
+          identifier,
         passwordController.text,
       );
+        await _maybePromptAddPhone();
+      }
     } on FirebaseAuthException catch (e) {
+      String errorMessage;
+      switch (e.code) {
+        case 'user-not-found':
+          errorMessage = 'Tài khoản chưa đăng ký';
+          break;
+        case 'wrong-password':
+          errorMessage = 'Mật khẩu không đúng';
+          break;
+        case 'invalid-email':
+          errorMessage = 'Email không đúng định dạng';
+          break;
+        case 'user-disabled':
+          errorMessage = 'Tài khoản đã bị vô hiệu hóa';
+          break;
+        case 'too-many-requests':
+          errorMessage = 'Quá nhiều lần thử. Vui lòng đợi vài phút';
+          break;
+        default:
+          errorMessage = e.message ?? 'Lỗi đăng nhập: ${e.code}';
+      }
       setState(() {
-        errorText = e.message;
+        errorText = errorMessage;
       });
     } finally {
       if (mounted) {
@@ -47,60 +131,77 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  Future<void> _signInAnonymously() async {
-    _setBusy(true);
-    try {
-      await authRepository.signInAnonymously();
-    } on FirebaseAuthException catch (e) {
-      _showError(e.message);
-    } finally {
-      _setBusy(false);
-    }
-  }
-
   Future<void> _signInWithGoogle() async {
     _setBusy(true);
     try {
       await authRepository.signInWithGoogle();
+      // Success - navigation handled by auth state listener
+      await _maybePromptAddPhone();
     } on FirebaseAuthException catch (e) {
-      _showError(e.message);
+      String errorMessage;
+      switch (e.code) {
+        case 'google-signin-developer-error':
+          errorMessage = 'Lỗi cấu hình Google Sign-In. Vui lòng kiểm tra SHA-1 fingerprint trong Firebase Console.';
+          break;
+        case 'google-signin-network-error':
+          errorMessage = 'Lỗi kết nối. Vui lòng kiểm tra internet và thử lại.';
+          break;
+        case 'account-exists-with-different-credential':
+          errorMessage = 'Tài khoản này đã được đăng ký bằng phương thức khác. Vui lòng sử dụng email/mật khẩu.';
+          break;
+        case 'invalid-credential':
+          errorMessage = 'Thông tin đăng nhập không hợp lệ. Vui lòng thử lại.';
+          break;
+        case 'google-signin-failed':
+          errorMessage = 'Đăng nhập Google thất bại. Vui lòng thử lại.';
+          break;
+        default:
+          errorMessage = e.message ?? 'Lỗi đăng nhập: ${e.code}';
+      }
+      _showError(errorMessage);
+    } catch (e) {
+      // Handle non-Firebase errors (e.g., user cancelled)
+      final errorStr = e.toString().toLowerCase();
+      if (errorStr.contains('cancelled') || errorStr.contains('cancel')) {
+        // User cancelled - don't show error
+        return;
+      }
+      _showError('Đăng nhập Google thất bại. Vui lòng thử lại.');
     } finally {
       _setBusy(false);
     }
   }
 
-  Future<void> _signInWithPhone() async {
+  Future<void> _signInWithFacebook() async {
     _setBusy(true);
     try {
-      final phone = await _promptForValue(
-        title: 'Phone number (+84...)',
-        keyboardType: TextInputType.phone,
-      );
-      if (phone == null || phone.isEmpty) {
-        _setBusy(false);
+      await authRepository.signInWithFacebook();
+      // Success - navigation handled by auth state listener
+      await _maybePromptAddPhone();
+    } on FirebaseAuthException catch (e) {
+      String errorMessage;
+      switch (e.code) {
+        case 'account-exists-with-different-credential':
+          errorMessage = 'Tài khoản này đã được đăng ký bằng phương thức khác. Vui lòng sử dụng email/mật khẩu.';
+          break;
+        case 'invalid-credential':
+          errorMessage = 'Thông tin đăng nhập không hợp lệ. Vui lòng thử lại.';
+          break;
+        case 'facebook-login-failed':
+          errorMessage = 'Đăng nhập Facebook thất bại. Vui lòng thử lại.';
+          break;
+        default:
+          errorMessage = e.message ?? 'Lỗi đăng nhập: ${e.code}';
+      }
+      _showError(errorMessage);
+    } catch (e) {
+      // Handle non-Firebase errors (e.g., user cancelled)
+      final errorStr = e.toString().toLowerCase();
+      if (errorStr.contains('cancelled') || errorStr.contains('cancel')) {
+        // User cancelled - don't show error
         return;
       }
-      await authRepository.startPhoneVerification(
-        phoneNumber: phone,
-        onCompleted: (cred) async {
-          await authRepository.signInWithCredential(cred);
-        },
-        onError: (e) => _showError(e.message),
-        onCodeSent: (verificationId) async {
-          final smsCode = await _promptForValue(
-            title: 'SMS code',
-            keyboardType: TextInputType.number,
-          );
-          if (smsCode == null || smsCode.isEmpty) return;
-          await authRepository.confirmSmsCode(
-            verificationId: verificationId,
-            smsCode: smsCode,
-          );
-        },
-        onTimeout: (_) {},
-      );
-    } on FirebaseAuthException catch (e) {
-      _showError(e.message);
+      _showError('Đăng nhập Facebook thất bại. Vui lòng thử lại.');
     } finally {
       _setBusy(false);
     }
@@ -113,30 +214,6 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Future<String?> _promptForValue({
-    required String title,
-    TextInputType keyboardType = TextInputType.text,
-  }) async {
-    final controller = TextEditingController();
-    return showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(title),
-        content: TextField(
-          controller: controller,
-          keyboardType: keyboardType,
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final disabled = isBusy || isLoadingEmail;
@@ -144,30 +221,97 @@ class _LoginScreenState extends State<LoginScreen> {
       appBar: AppBar(title: const Text('Login')),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            TextField(
-              controller: emailController,
-              decoration: const InputDecoration(labelText: 'Email'),
-              keyboardType: TextInputType.emailAddress,
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: passwordController,
-              decoration: const InputDecoration(labelText: 'Password'),
-              obscureText: true,
-            ),
-            const SizedBox(height: 12),
-            if (errorText != null)
-              Text(errorText!, style: const TextStyle(color: Colors.red)),
-            const SizedBox(height: 12),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              TextFormField(
+                controller: emailController,
+                decoration: const InputDecoration(
+                  labelText: 'Email',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.email),
+                ),
+                keyboardType: TextInputType.emailAddress,
+                enabled: !disabled,
+                validator: _validateEmail,
+                autovalidateMode: AutovalidateMode.onUserInteraction,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: passwordController,
+                decoration: InputDecoration(
+                  labelText: 'Mật khẩu',
+                  border: const OutlineInputBorder(),
+                  prefixIcon: const Icon(Icons.lock),
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _obscurePassword ? Icons.visibility : Icons.visibility_off,
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        _obscurePassword = !_obscurePassword;
+                      });
+                    },
+                  ),
+                ),
+                obscureText: _obscurePassword,
+                enabled: !disabled,
+                validator: _validatePassword,
+                autovalidateMode: AutovalidateMode.onUserInteraction,
+              ),
+              const SizedBox(height: 12),
+              if (errorText != null)
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.red.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.error_outline, color: Colors.red.shade700, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          errorText!,
+                          style: TextStyle(color: Colors.red.shade700),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              if (errorText != null) const SizedBox(height: 12),
             FilledButton(
-              onPressed: isLoadingEmail ? null : _login,
+              onPressed: (isLoadingEmail || disabled) ? null : _login,
+              style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+              ),
               child: isLoadingEmail
                   ? const SizedBox(
-                      height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Text('Login'),
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    )
+                  : const Text('Đăng nhập'),
+            ),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: disabled
+                  ? null
+                  : () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const ForgotPasswordPage(),
+                        ),
+                      );
+                    },
+              child: const Text('Quên mật khẩu?'),
             ),
             const SizedBox(height: 8),
             TextButton(
@@ -188,39 +332,58 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                             ),
                           );
-                        } else if (status == 'phone') {
+                        } else if (status == 'facebook') {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
-                              content: Text('Đăng ký bằng số điện thoại thành công.'),
+                              content: Text('Đăng ký bằng Facebook thành công.'),
                             ),
                           );
                         }
                       }
                     },
-              child: const Text('Create an account'),
+              child: const Text('Tạo tài khoản'),
             ),
             const Divider(height: 32),
             const Text(
-              'Or continue with',
+              'Hoặc đăng nhập bằng',
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 12),
-            OutlinedButton(
-              onPressed: disabled ? null : _signInAnonymously,
-              child: const Text('Continue anonymously'),
+            OutlinedButton.icon(
+              onPressed: disabled ? null : _signInWithGoogle,
+              icon: isBusy
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.login),
+              label: const Text('Đăng nhập bằng Google'),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+              ),
             ),
             const SizedBox(height: 8),
             OutlinedButton.icon(
-              onPressed: disabled ? null : _signInWithGoogle,
-              icon: const Icon(Icons.login),
-              label: const Text('Sign in with Google'),
-            ),
-            const SizedBox(height: 8),
-            OutlinedButton(
-              onPressed: disabled ? null : _signInWithPhone,
-              child: const Text('Sign in with Phone'),
+              onPressed: disabled ? null : _signInWithFacebook,
+              icon: isBusy
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.facebook, color: Color(0xFF1877F2)),
+              label: const Text(
+                'Đăng nhập bằng Facebook',
+                style: TextStyle(color: Color(0xFF1877F2)),
+              ),
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: Color(0xFF1877F2)),
+                padding: const EdgeInsets.symmetric(vertical: 16),
+              ),
             ),
           ],
+        ),
         ),
       ),
     );

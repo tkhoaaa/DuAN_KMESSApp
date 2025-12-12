@@ -48,4 +48,6 @@ dependencies {
     implementation(platform("com.google.firebase:firebase-bom:34.5.0"))
     implementation("com.google.firebase:firebase-analytics")
     implementation("com.google.firebase:firebase-auth")
+    // Facebook SDK for Android
+    implementation("com.facebook.android:facebook-android-sdk:latest.release")
 }

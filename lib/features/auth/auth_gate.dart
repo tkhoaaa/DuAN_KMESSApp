@@ -18,6 +18,7 @@ import '../posts/services/post_scheduling_service.dart';
 import '../search/pages/search_page.dart';
 import '../share/models/deep_link.dart';
 import '../share/services/deep_link_service.dart';
+import 'pages/add_phone_page.dart';
 import '../call/models/call.dart';
 import '../call/services/call_service.dart';
 import '../call/widgets/incoming_call_dialog.dart';
@@ -121,6 +122,8 @@ class _SignedInHomeState extends State<_SignedInHome> {
   StreamSubscription<List<Call>>? _activeCallsSub;
   Call? _currentIncomingCall;
   bool _isShowingDialog = false;
+  bool _phonePromptShown = false;
+  StreamSubscription<UserProfile?>? _profileSub;
 
   @override
   void initState() {
@@ -135,6 +138,7 @@ class _SignedInHomeState extends State<_SignedInHome> {
         photoUrl: user.photoURL,
       );
       userProfileRepository.setPresence(user.uid, true);
+      _listenProfilePhoneMissing();
       // Check và publish scheduled posts khi app mở
       _checkScheduledPosts();
       // Check định kỳ mỗi phút để auto-publish scheduled posts
@@ -287,7 +291,47 @@ class _SignedInHomeState extends State<_SignedInHome> {
     if (user != null) {
       userProfileRepository.setPresence(user.uid, false);
     }
+    _profileSub?.cancel();
     super.dispose();
+  }
+
+  void _listenProfilePhoneMissing() {
+    final uid = authRepository.currentUser()?.uid;
+    if (uid == null) return;
+    
+    _profileSub?.cancel();
+    _profileSub = userProfileRepository.watchProfile(uid).listen((profile) {
+      if (!mounted || _phonePromptShown) return;
+      if (profile != null && (profile.phoneNumber == null || profile.phoneNumber!.isEmpty)) {
+        _phonePromptShown = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (ctx) => AlertDialog(
+              title: const Text('Thêm số điện thoại'),
+              content: const Text('Bạn chưa thêm số điện thoại. Thêm số để đăng nhập/khôi phục mật khẩu bằng SĐT.'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Để sau'),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const AddPhonePage()),
+                    );
+                  },
+                  child: const Text('Thêm ngay'),
+                ),
+              ],
+            ),
+          );
+        });
+      }
+    });
   }
 
   @override

@@ -14,6 +14,8 @@ import '../../profile/public_profile_page.dart';
 import '../../profile/user_profile_repository.dart';
 import '../services/search_service.dart';
 import '../models/user_search_filters.dart';
+import '../models/search_history.dart';
+import '../repositories/search_history_repository.dart';
 
 class SearchPage extends StatefulWidget {
   const SearchPage({super.key});
@@ -26,6 +28,8 @@ class _SearchPageState extends State<SearchPage>
     with SingleTickerProviderStateMixin {
   final SearchService _searchService = SearchService();
   final FollowService _followService = FollowService();
+  final SearchHistoryRepository _searchHistoryRepository =
+      SearchHistoryRepository();
   final TextEditingController _searchController = TextEditingController();
   late final TabController _tabController;
 
@@ -118,6 +122,21 @@ class _SearchPageState extends State<SearchPage>
       _isSearchingUsers = false;
       _isSearchingPosts = false;
     });
+
+    // Lưu lịch sử tìm kiếm
+    if (currentUid != null && query.trim().isNotEmpty) {
+      // Lưu lịch sử cho cả user và post search
+      _searchHistoryRepository.saveSearchHistory(
+        uid: currentUid,
+        query: query,
+        searchType: 'user',
+      );
+      _searchHistoryRepository.saveSearchHistory(
+        uid: currentUid,
+        query: query,
+        searchType: 'post',
+      );
+    }
   }
 
   List<Post> _applyPostFilters(List<Post> posts) {
@@ -212,9 +231,7 @@ class _SearchPageState extends State<SearchPage>
 
   Widget _buildUsersTab() {
     if (_currentQuery.isEmpty) {
-      return const Center(
-        child: Text('Nhập từ khóa để tìm kiếm người dùng...'),
-      );
+      return _buildSearchHistory(searchType: 'user');
     }
 
     return Column(
@@ -264,9 +281,7 @@ class _SearchPageState extends State<SearchPage>
 
   Widget _buildPostsTab() {
     if (_currentQuery.isEmpty) {
-      return const Center(
-        child: Text('Nhập từ khóa để tìm kiếm bài viết...'),
-      );
+      return _buildSearchHistory(searchType: 'post');
     }
 
     return Column(
@@ -614,6 +629,107 @@ class _SearchPageState extends State<SearchPage>
       case PostSortOption.mostCommented:
         return 'Nhiều comment nhất';
     }
+  }
+
+  Widget _buildSearchHistory({required String searchType}) {
+    final currentUid = authRepository.currentUser()?.uid;
+    if (currentUid == null) {
+      return const Center(
+        child: Text('Vui lòng đăng nhập để xem lịch sử tìm kiếm'),
+      );
+    }
+
+    return StreamBuilder<List<SearchHistory>>(
+      stream: _searchHistoryRepository.watchSearchHistory(
+        uid: currentUid,
+        searchType: searchType,
+        limit: 20,
+      ),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final history = snapshot.data ?? [];
+        if (history.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  searchType == 'user'
+                      ? Icons.person_search
+                      : Icons.search_off,
+                  size: 64,
+                  color: Colors.grey,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  searchType == 'user'
+                      ? 'Nhập từ khóa để tìm kiếm người dùng...'
+                      : 'Nhập từ khóa để tìm kiếm bài viết...',
+                  style: const TextStyle(color: Colors.grey),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Lịch sử tìm kiếm',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () async {
+                      await _searchHistoryRepository.clearSearchHistory(
+                        uid: currentUid,
+                        searchType: searchType,
+                      );
+                    },
+                    child: const Text('Xóa tất cả'),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: ListView.builder(
+                itemCount: history.length,
+                itemBuilder: (context, index) {
+                  final item = history[index];
+                  return ListTile(
+                    leading: const Icon(Icons.history),
+                    title: Text(item.query),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.close, size: 20),
+                      onPressed: () async {
+                        await _searchHistoryRepository.deleteSearchHistory(
+                          uid: currentUid,
+                          historyId: item.id,
+                        );
+                      },
+                    ),
+                    onTap: () {
+                      _searchController.text = item.query;
+                      _performSearch(item.query);
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        );
+      },
+    );
   }
 }
 

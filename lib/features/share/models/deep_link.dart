@@ -2,6 +2,7 @@ enum DeepLinkType {
   post,
   profile,
   hashtag,
+  resetPassword,
   unknown,
 }
 
@@ -12,6 +13,7 @@ class DeepLink {
     this.postId,
     this.uid,
     this.hashtag,
+    this.actionCode,
   });
 
   final DeepLinkType type;
@@ -19,6 +21,7 @@ class DeepLink {
   final String? postId;
   final String? uid;
   final String? hashtag;
+  final String? actionCode; // For password reset
 
   /// Parse URL thành DeepLink object
   /// Hỗ trợ format:
@@ -87,6 +90,21 @@ class DeepLink {
             type: DeepLinkType.hashtag,
             rawUrl: url,
             hashtag: path[1],
+          );
+        }
+      }
+      
+      // Xử lý Firebase Auth action links (password reset, email verification, etc.)
+      if (uri.scheme == 'https' && 
+          (uri.host.contains('firebaseapp.com') || uri.host.contains('firebase'))) {
+        final mode = uri.queryParameters['mode'];
+        final oobCode = uri.queryParameters['oobCode'];
+        
+        if (mode == 'resetPassword' && oobCode != null) {
+          return DeepLink(
+            type: DeepLinkType.resetPassword,
+            rawUrl: url,
+            actionCode: oobCode,
           );
         }
       }

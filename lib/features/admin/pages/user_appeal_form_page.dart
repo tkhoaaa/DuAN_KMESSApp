@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../auth/auth_repository.dart';
+import '../../notifications/services/notification_service.dart';
 import '../models/appeal.dart';
 import '../repositories/appeal_repository.dart';
 import '../repositories/ban_repository.dart';
@@ -22,6 +23,7 @@ class UserAppealFormPage extends StatefulWidget {
 class _UserAppealFormPageState extends State<UserAppealFormPage> {
   final AppealRepository _appealRepository = AppealRepository();
   final BanRepository _banRepository = BanRepository();
+  final NotificationService _notificationService = NotificationService();
   final TextEditingController _reasonController = TextEditingController();
   final ImagePicker _picker = ImagePicker();
   final List<String> _evidenceUrls = [];
@@ -131,19 +133,20 @@ class _UserAppealFormPageState extends State<UserAppealFormPage> {
     });
 
     try {
-      await _appealRepository.createAppeal(
+      // Tạo appeal và lấy appealId
+      final appealId = await _appealRepository.createAppeal(
         uid: user.uid,
         banId: widget.banId,
         reason: _reasonController.text.trim(),
         evidence: _evidenceUrls,
       );
 
-      // Update ban với appealId
-      final ban = await _banRepository.getBan(widget.banId);
-      if (ban != null) {
-        // Appeal ID sẽ được set sau khi tạo, nhưng để đơn giản ta không cần update ban ở đây
-        // Ban sẽ được update khi admin xử lý appeal
-      }
+      // Gửi notification cho admin
+      await _notificationService.createAppealNotification(
+        appealId: appealId,
+        uid: user.uid,
+        banId: widget.banId,
+      );
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

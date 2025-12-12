@@ -1,4 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../services/cloudinary_service.dart';
@@ -29,15 +31,83 @@ class StoryRepository {
     final expiresAt = now.add(const Duration(hours: 24));
 
     final docRef = _storiesCollection(authorUid).doc();
-    await docRef.set({
+    
+    // Debug: In ra thông tin để kiểm tra
+    // Kiểm tra authentication state trước khi tạo story
+    final currentUser = FirebaseAuth.instance.currentUser;
+    debugPrint('=== Story Creation Debug ===');
+    debugPrint('Current Firebase Auth User: ${currentUser?.uid}');
+    debugPrint('Current Firebase Auth Email: ${currentUser?.email}');
+    debugPrint('Author UID: $authorUid');
+    debugPrint('UIDs match: ${currentUser?.uid == authorUid}');
+    debugPrint('Creating story - path: stories/$authorUid/items/${docRef.id}');
+    
+    if (currentUser == null) {
+      throw Exception('User not authenticated. Please log in again.');
+    }
+    
+    final currentUid = currentUser.uid;
+    if (currentUid != authorUid) {
+      throw Exception('Author UID mismatch. Current user: $currentUid, Author: $authorUid');
+    }
+    
+    // Đảm bảo tất cả fields bắt buộc đều có giá trị
+    final storyData = <String, dynamic>{
       'authorUid': authorUid,
       'mediaUrl': mediaUrl,
       'type': type.name,
       'createdAt': Timestamp.fromDate(now),
       'expiresAt': Timestamp.fromDate(expiresAt),
-      if (thumbnailUrl != null) 'thumbnailUrl': thumbnailUrl,
-      if (text != null && text.isNotEmpty) 'text': text,
+    };
+    
+    // Thêm optional fields
+    if (thumbnailUrl != null) {
+      storyData['thumbnailUrl'] = thumbnailUrl;
+    }
+    if (text != null && text.isNotEmpty) {
+      storyData['text'] = text;
+    }
+    
+    debugPrint('Story data: $storyData');
+    debugPrint('Story data keys: ${storyData.keys.toList()}');
+    debugPrint('Story data types:');
+    storyData.forEach((key, value) {
+      debugPrint('  $key: ${value.runtimeType}');
     });
+    
+    try {
+      debugPrint('Attempting to create story document...');
+      await docRef.set(storyData);
+      debugPrint('Story created successfully!');
+    } catch (e, stackTrace) {
+      debugPrint('=== Story Creation Error ===');
+      debugPrint('Error type: ${e.runtimeType}');
+      debugPrint('Error message: $e');
+      debugPrint('Stack trace: $stackTrace');
+      
+      // Thêm thông tin chi tiết về lỗi
+      final errorString = e.toString().toLowerCase();
+      if (errorString.contains('permission') || errorString.contains('denied')) {
+        debugPrint('=== Permission Denied Debug ===');
+        final authUid = FirebaseAuth.instance.currentUser?.uid ?? 'null';
+        debugPrint('Current Firebase Auth UID: $authUid');
+        debugPrint('Author UID: $authorUid');
+        debugPrint('UIDs match: ${authUid == authorUid}');
+        debugPrint('Story path: stories/$authorUid/items/${docRef.id}');
+        debugPrint('Story data fields:');
+        storyData.forEach((key, value) {
+          debugPrint('  $key: $value (${value.runtimeType})');
+        });
+        debugPrint('Required fields check:');
+        debugPrint('  authorUid: ${storyData['authorUid']} (${storyData['authorUid'].runtimeType})');
+        debugPrint('  mediaUrl: ${storyData['mediaUrl']} (${storyData['mediaUrl'].runtimeType})');
+        debugPrint('  type: ${storyData['type']} (${storyData['type'].runtimeType})');
+        debugPrint('  createdAt: ${storyData['createdAt']} (${storyData['createdAt'].runtimeType})');
+        debugPrint('  expiresAt: ${storyData['expiresAt']} (${storyData['expiresAt'].runtimeType})');
+      }
+      
+      rethrow;
+    }
   }
 
   /// Upload file lên Cloudinary và tạo story

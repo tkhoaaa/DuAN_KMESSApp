@@ -1,7 +1,5 @@
 import 'dart:async';
 
-import 'dart:async';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -1043,10 +1041,18 @@ class _StoriesBar extends StatelessWidget {
                     return GestureDetector(
                       onTap: () {
                         if (hasMyStories) {
+                          // Tạo danh sách users có story: chính mình + người theo dõi có story
+                          final usersWithStories = <String>[user.uid];
+                          for (final entry in following) {
+                            // Kiểm tra xem user này có story không (đã được check trong StreamBuilder)
+                            usersWithStories.add(entry.uid);
+                          }
                           Navigator.of(context).push(
                             MaterialPageRoute(
-                              builder: (_) =>
-                                  StoryViewerPage(authorUid: user.uid),
+                              builder: (_) => StoryViewerPage(
+                                initialAuthorUid: user.uid,
+                                userIdsWithStories: usersWithStories,
+                              ),
                             ),
                           );
                         } else {
@@ -1128,10 +1134,18 @@ class _StoriesBar extends StatelessWidget {
                       }
                       return GestureDetector(
                         onTap: () {
+                          // Tạo danh sách users có story: chính mình + người theo dõi có story
+                          final usersWithStories = <String>[user.uid];
+                          for (final followEntry in following) {
+                            // Chỉ thêm những user có story (đã được check trong StreamBuilder)
+                            usersWithStories.add(followEntry.uid);
+                          }
                           Navigator.of(context).push(
                             MaterialPageRoute(
-                              builder: (_) =>
-                                  StoryViewerPage(authorUid: entry.uid),
+                              builder: (_) => StoryViewerPage(
+                                initialAuthorUid: entry.uid,
+                                userIdsWithStories: usersWithStories,
+                              ),
                             ),
                           );
                         },

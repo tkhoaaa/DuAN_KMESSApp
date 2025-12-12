@@ -4,6 +4,7 @@ import '../models/deep_link.dart';
 import '../../posts/pages/post_permalink_page.dart';
 import '../../profile/public_profile_page.dart';
 import '../../posts/pages/hashtag_page.dart';
+import '../../auth/pages/reset_password_page.dart';
 
 class DeepLinkService {
   /// Handle deep link và navigate đến page tương ứng
@@ -47,6 +48,18 @@ class DeepLinkService {
           );
         } else {
           _showError(context, 'Link hashtag không hợp lệ');
+        }
+        break;
+
+      case DeepLinkType.resetPassword:
+        if (link.actionCode != null) {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => ResetPasswordPage(actionCode: link.actionCode!),
+            ),
+          );
+        } else {
+          _showError(context, 'Link reset mật khẩu không hợp lệ');
         }
         break;
 

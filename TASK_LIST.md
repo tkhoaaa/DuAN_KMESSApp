@@ -2054,3 +2054,398 @@
 9. **Discover/Explore Page** (tăng discovery)
 10. **Realtime Presence** (nice to have)
 
+---
+
+### 28. Authentication System - Cải Tiến & Facebook Login
+**Mô tả:** Cải tiến hệ thống authentication với đổi mật khẩu, quên mật khẩu, và thay thế các phương thức đăng nhập không cần thiết bằng Facebook login.
+
+#### Ý Tưởng Tổng Quan
+
+**1. Đổi Mật Khẩu:**
+- User đã đăng nhập có thể đổi mật khẩu từ trang Settings/Profile
+- Yêu cầu nhập mật khẩu hiện tại để xác thực
+- Validate mật khẩu mới (độ dài, độ phức tạp)
+- Gửi email xác nhận sau khi đổi mật khẩu thành công
+
+**2. Quên Mật Khẩu:**
+- Link "Quên mật khẩu?" trên màn hình login
+- Nhập email → gửi link reset password qua email
+- User click link → mở app với deep link → nhập mật khẩu mới
+- Hoặc nhập OTP code từ email (tùy chọn)
+
+**3. Loại Bỏ Phương Thức Đăng Nhập:**
+- Bỏ đăng ký bằng số điện thoại (chỉ giữ email)
+- Bỏ đăng nhập "Continue anonymously"
+- Bỏ đăng nhập "Sign in with iPhone" (nếu có)
+
+**4. Thêm Facebook Login:**
+- Tích hợp Facebook SDK
+- Đăng nhập/đăng ký bằng tài khoản Facebook
+- Lấy thông tin profile từ Facebook (tên, ảnh đại diện, email)
+- Tự động tạo user profile nếu chưa có
+
+#### Phase 1 – Dependencies & Setup
+
+**1.1. Thêm Dependencies:**
+- [ ] Thêm `flutter_facebook_auth: ^x.x.x` vào `pubspec.yaml`
+- [ ] Chạy `flutter pub get`
+- [ ] Cấu hình Facebook App trên Facebook Developers Console:
+  - Tạo Facebook App ID
+  - Cấu hình OAuth redirect URIs cho Android và iOS
+  - Lấy App ID và App Secret
+
+**1.2. Cấu Hình Android:**
+- [ ] Thêm Facebook App ID vào `android/app/src/main/res/values/strings.xml`:
+  ```xml
+  <string name="facebook_app_id">YOUR_APP_ID</string>
+  <string name="fb_login_protocol_scheme">fbYOUR_APP_ID</string>
+  ```
+- [ ] Cập nhật `AndroidManifest.xml` với Facebook configuration
+- [ ] Thêm Facebook App ID vào `build.gradle` (nếu cần)
+
+**1.3. Cấu Hình iOS:**
+- [ ] Thêm Facebook App ID vào `ios/Runner/Info.plist`:
+  ```xml
+  <key>FacebookAppID</key>
+  <string>YOUR_APP_ID</string>
+  <key>FacebookDisplayName</key>
+  <string>Your App Name</string>
+  ```
+- [ ] Cấu hình URL schemes trong `Info.plist`
+- [ ] Cấu hình Associated Domains (nếu dùng universal links)
+
+**1.4. Cấu Hình Firebase:**
+- [ ] Bật Facebook provider trong Firebase Console (Authentication > Sign-in method)
+- [ ] Nhập Facebook App ID và App Secret
+- [ ] Cấu hình OAuth redirect URIs
+
+#### Phase 2 – Repository & Service Layer
+
+**2.1. Auth Repository Extension:**
+- [ ] Mở rộng `AuthRepository` interface:
+  - `Future<void> signInWithFacebook()`: Đăng nhập bằng Facebook
+  - `Future<void> changePassword(String currentPassword, String newPassword)`: Đổi mật khẩu
+  - `Future<void> sendPasswordResetEmail(String email)`: Gửi email reset password
+  - `Future<void> confirmPasswordReset(String code, String newPassword)`: Xác nhận reset password với code
+
+**2.2. Firebase Auth Repository Implementation:**
+- [ ] Implement `signInWithFacebook()`:
+  - Sử dụng `flutter_facebook_auth` để login
+  - Lấy access token từ Facebook
+  - Tạo Firebase credential từ Facebook token
+  - Sign in với Firebase
+  - Lấy thông tin profile từ Facebook (tên, email, ảnh)
+  - Tự động tạo/update user profile
+- [ ] Implement `changePassword()`:
+  - Re-authenticate user với mật khẩu hiện tại
+  - Update password mới
+  - Gửi email xác nhận (Firebase tự động gửi)
+- [ ] Implement `sendPasswordResetEmail()`:
+  - Gọi `FirebaseAuth.instance.sendPasswordResetEmail(email: email)`
+  - Hiển thị thông báo "Đã gửi email reset password"
+- [ ] Implement `confirmPasswordReset()`:
+  - Sử dụng `FirebaseAuth.instance.confirmPasswordReset(code: code, newPassword: newPassword)`
+  - Hoặc sử dụng action code từ email link
+
+**2.3. Facebook Service (Optional):**
+- [ ] Tạo `FacebookAuthService` (nếu cần logic phức tạp):
+  - Method `getFacebookProfile()`: Lấy thông tin profile từ Facebook
+  - Method `linkFacebookAccount()`: Link Facebook account với email account hiện có
+  - Method `unlinkFacebookAccount()`: Gỡ link Facebook account
+
+#### Phase 3 – UI: Change Password
+
+**3.1. Change Password Page:**
+- [ ] Tạo `lib/features/auth/pages/change_password_page.dart`:
+  - TextField: Mật khẩu hiện tại (obscureText: true)
+  - TextField: Mật khẩu mới (obscureText: true)
+  - TextField: Xác nhận mật khẩu mới (obscureText: true)
+  - Validation:
+    - Mật khẩu hiện tại không được rỗng
+    - Mật khẩu mới phải có ít nhất 6 ký tự
+    - Mật khẩu mới và xác nhận phải khớp
+  - Nút "Đổi mật khẩu"
+  - Loading state khi đang xử lý
+  - SnackBar xác nhận sau khi đổi thành công
+  - Error handling với thông báo rõ ràng
+
+**3.2. Integration:**
+- [ ] Thêm nút "Đổi mật khẩu" vào `ProfileScreen` hoặc `SettingsPage`:
+  - Chỉ hiển thị nếu user đăng nhập bằng email/password
+  - Navigate đến `ChangePasswordPage`
+- [ ] (Optional) Thêm vào menu 3 chấm trong ProfileScreen
+
+#### Phase 4 – UI: Forgot Password
+
+**4.1. Forgot Password Page:**
+- [ ] Tạo `lib/features/auth/pages/forgot_password_page.dart`:
+  - TextField: Email
+  - Validation: Email phải hợp lệ
+  - Nút "Gửi email reset password"
+  - Loading state
+  - Thông báo: "Vui lòng kiểm tra email để reset mật khẩu"
+  - Link "Quay lại đăng nhập"
+
+**4.2. Reset Password Page:**
+- [ ] Tạo `lib/features/auth/pages/reset_password_page.dart`:
+  - Nhận `actionCode` từ deep link hoặc query parameter
+  - TextField: Mật khẩu mới
+  - TextField: Xác nhận mật khẩu mới
+  - Validation: Mật khẩu mới phải có ít nhất 6 ký tự, phải khớp
+  - Nút "Đặt lại mật khẩu"
+  - Loading state
+  - SnackBar xác nhận sau khi reset thành công
+  - Navigate đến LoginScreen sau khi reset thành công
+
+**4.3. Integration:**
+- [ ] Thêm link "Quên mật khẩu?" vào `LoginScreen`:
+  - Đặt dưới TextField password
+  - Tap → navigate đến `ForgotPasswordPage`
+- [ ] Xử lý deep link reset password:
+  - Parse action code từ email link
+  - Navigate đến `ResetPasswordPage` với action code
+  - Validate action code trước khi cho phép reset
+
+#### Phase 5 – UI: Facebook Login
+
+**5.1. Login Screen Updates:**
+- [ ] Cập nhật `LoginScreen`:
+  - Xóa nút "Continue anonymously"
+  - Xóa nút "Sign in with Phone" (nếu có)
+  - Xóa nút "Sign in with iPhone" (nếu có)
+  - Thêm nút "Sign in with Facebook":
+    - Icon Facebook (có thể dùng `flutter_svg` hoặc image asset)
+    - Label: "Đăng nhập bằng Facebook"
+    - Style: Màu Facebook (#1877F2)
+  - Giữ nguyên: Email/Password login, Google login
+
+**5.2. Register Screen Updates:**
+- [ ] Cập nhật `RegisterScreen`:
+  - Xóa `RegisterMode.phone` (chỉ giữ email)
+  - Xóa SegmentedButton (không cần chọn mode nữa)
+  - Xóa toàn bộ logic đăng ký bằng phone
+  - Thêm nút "Đăng ký bằng Facebook":
+    - Icon Facebook
+    - Label: "Đăng ký bằng Facebook"
+    - Style: Màu Facebook
+  - Giữ nguyên: Email/Password registration
+
+**5.3. Facebook Login Flow:**
+- [ ] Implement `_signInWithFacebook()` trong `LoginScreen`:
+  - Gọi `authRepository.signInWithFacebook()`
+  - Loading state khi đang xử lý
+  - Error handling với thông báo rõ ràng
+  - Tự động navigate sau khi login thành công
+- [ ] Implement `_registerWithFacebook()` trong `RegisterScreen`:
+  - Tương tự login, nhưng tạo account mới
+  - Tự động lấy thông tin từ Facebook (tên, email, ảnh)
+  - Tự động tạo user profile
+
+#### Phase 6 – Remove Phone & Anonymous Authentication
+
+**6.1. Remove Phone Registration:**
+- [ ] Xóa `RegisterMode.phone` enum
+- [ ] Xóa tất cả logic phone registration trong `RegisterScreen`:
+  - Xóa `phoneController`, `smsCodeController`
+  - Xóa `phoneVerificationId`
+  - Xóa `_sendPhoneCode()`, `_verifyPhoneCode()`, `_formatPhoneNumber()`
+  - Xóa UI phone registration
+- [ ] Xóa phone registration methods từ `AuthRepository` (nếu không dùng cho login):
+  - `startPhoneVerification()` (giữ lại nếu vẫn dùng cho login)
+  - `confirmSmsCode()` (giữ lại nếu vẫn dùng cho login)
+
+**6.2. Remove Anonymous Login:**
+- [ ] Xóa `signInAnonymously()` method từ `AuthRepository` interface
+- [ ] Xóa implementation trong `FirebaseAuthRepository`
+- [ ] Xóa `_signInAnonymously()` từ `LoginScreen`
+- [ ] Xóa nút "Continue anonymously" từ UI
+
+**6.3. Remove Sign in with iPhone:**
+- [ ] Tìm và xóa tất cả code liên quan đến Apple Sign In (nếu có)
+- [ ] Xóa dependencies `sign_in_with_apple` (nếu có)
+- [ ] Xóa cấu hình Apple Sign In trong Firebase Console
+
+**6.4. Keep Phone Login (Optional):**
+- [ ] Quyết định: Có giữ phone login không?
+  - Nếu giữ: Chỉ dùng cho login, không dùng cho registration
+  - Nếu bỏ: Xóa toàn bộ phone authentication
+
+#### Phase 7 – Profile Integration
+
+**7.1. Auto-create Profile from Facebook:**
+- [ ] Cập nhật `UserProfileRepository.ensureProfile()`:
+  - Khi user đăng nhập bằng Facebook lần đầu:
+    - Lấy `displayName` từ Facebook profile
+    - Lấy `photoUrl` từ Facebook profile
+    - Lấy `email` từ Facebook profile
+    - Tự động tạo user profile với thông tin từ Facebook
+- [ ] Xử lý trường hợp user đã có profile:
+  - Update `photoUrl` nếu chưa có
+  - Update `displayName` nếu chưa có
+  - Không ghi đè thông tin đã có
+
+**7.2. Link Facebook Account:**
+- [ ] (Optional) Thêm chức năng link Facebook account:
+  - Trong `ProfileScreen`, thêm section "Liên kết tài khoản"
+  - Hiển thị trạng thái: "Đã liên kết Facebook" hoặc "Chưa liên kết"
+  - Nút "Liên kết Facebook" nếu chưa link
+  - Nút "Gỡ liên kết" nếu đã link
+
+#### Phase 8 – Deep Link & Email Handling
+
+**8.1. Password Reset Deep Link:**
+- [ ] Cập nhật `DeepLinkService`:
+  - Thêm type `password_reset` vào `DeepLinkType`
+  - Parse action code từ URL: `kmessapp://reset-password?actionCode=xxx`
+  - Navigate đến `ResetPasswordPage` với action code
+- [ ] Cấu hình Firebase:
+  - Set custom action handler URL trong Firebase Console
+  - Format: `kmessapp://reset-password?actionCode={actionCode}`
+
+**8.2. Email Link Handling:**
+- [ ] Xử lý khi user click link từ email:
+  - Parse action code từ email link
+  - Validate action code
+  - Navigate đến `ResetPasswordPage`
+  - Hoặc tự động reset nếu action code hợp lệ
+
+#### Phase 9 – Error Handling & Edge Cases
+
+**9.1. Change Password Errors:**
+- [ ] Xử lý các lỗi:
+  - Mật khẩu hiện tại sai → "Mật khẩu hiện tại không đúng"
+  - Mật khẩu mới quá yếu → "Mật khẩu phải có ít nhất 6 ký tự"
+  - Mật khẩu mới giống mật khẩu cũ → "Mật khẩu mới phải khác mật khẩu cũ"
+  - Network error → "Lỗi kết nối, vui lòng thử lại"
+
+**9.2. Forgot Password Errors:**
+- [ ] Xử lý các lỗi:
+  - Email không tồn tại → "Email này chưa được đăng ký"
+  - Email không hợp lệ → "Email không đúng định dạng"
+  - Quá nhiều requests → "Vui lòng đợi vài phút trước khi thử lại"
+
+**9.3. Facebook Login Errors:**
+- [ ] Xử lý các lỗi:
+  - User hủy login → Không hiển thị error
+  - Facebook login failed → "Đăng nhập Facebook thất bại, vui lòng thử lại"
+  - Account đã liên kết với email khác → "Tài khoản Facebook này đã được sử dụng"
+  - Network error → "Lỗi kết nối, vui lòng thử lại"
+
+**9.4. Edge Cases:**
+- [ ] User đăng nhập bằng Facebook nhưng email đã tồn tại:
+  - Link Facebook account với email account hiện có
+  - Hoặc hiển thị error "Email này đã được sử dụng"
+- [ ] User đổi mật khẩu nhưng đang online trên nhiều thiết bị:
+  - Firebase tự động logout các thiết bị khác (cần re-authenticate)
+- [ ] User reset password nhưng link đã hết hạn:
+  - Hiển thị error "Link đã hết hạn, vui lòng yêu cầu link mới"
+
+#### Phase 10 – Security & Validation
+
+**10.1. Password Validation:**
+- [ ] Thêm password strength validation:
+  - Tối thiểu 6 ký tự (Firebase requirement)
+  - (Optional) Yêu cầu chữ hoa, chữ thường, số, ký tự đặc biệt
+  - Hiển thị password strength indicator (weak/medium/strong)
+- [ ] Validate password confirmation:
+  - Phải khớp với mật khẩu mới
+  - Hiển thị error ngay khi không khớp
+
+**10.2. Re-authentication:**
+- [ ] Đảm bảo re-authenticate trước khi đổi mật khẩu:
+  - Yêu cầu nhập mật khẩu hiện tại
+  - Validate mật khẩu hiện tại trước khi cho phép đổi
+  - Sử dụng `FirebaseAuth.instance.currentUser?.reauthenticateWithCredential()`
+
+**10.3. Rate Limiting:**
+- [ ] Giới hạn số lần gửi email reset password:
+  - Tối đa 3 lần trong 1 giờ
+  - Hiển thị countdown timer nếu đã vượt quá
+- [ ] Giới hạn số lần đổi mật khẩu:
+  - Tối đa 5 lần trong 1 ngày
+  - Hiển thị warning nếu đã vượt quá
+
+#### Phase 11 – UI/UX Improvements
+
+**11.1. Loading States:**
+- [ ] Hiển thị loading indicator khi:
+  - Đang đổi mật khẩu
+  - Đang gửi email reset password
+  - Đang đăng nhập bằng Facebook
+  - Đang reset password
+
+**11.2. Success Feedback:**
+- [ ] SnackBar xác nhận sau mỗi action:
+  - "Đã đổi mật khẩu thành công"
+  - "Đã gửi email reset password, vui lòng kiểm tra hộp thư"
+  - "Đã đặt lại mật khẩu thành công"
+  - "Đăng nhập Facebook thành công"
+
+**11.3. Error Messages:**
+- [ ] Hiển thị error messages rõ ràng, dễ hiểu:
+  - Dùng tiếng Việt
+  - Giải thích nguyên nhân và cách khắc phục
+  - Không hiển thị technical error messages cho user
+
+**11.4. Form Validation:**
+- [ ] Real-time validation:
+  - Validate email format khi user nhập
+  - Validate password strength khi user nhập
+  - Hiển thị error ngay dưới field
+  - Disable submit button nếu form không hợp lệ
+
+#### Phase 12 – Testing & QA
+
+**12.1. Test Cases:**
+- [ ] Đổi mật khẩu thành công với mật khẩu hợp lệ
+- [ ] Đổi mật khẩu thất bại với mật khẩu hiện tại sai
+- [ ] Đổi mật khẩu thất bại với mật khẩu mới quá yếu
+- [ ] Gửi email reset password thành công
+- [ ] Reset password thành công với link hợp lệ
+- [ ] Reset password thất bại với link đã hết hạn
+- [ ] Đăng nhập Facebook thành công (lần đầu)
+- [ ] Đăng nhập Facebook thành công (đã có account)
+- [ ] Đăng ký Facebook thành công
+- [ ] Phone registration đã bị xóa
+- [ ] Anonymous login đã bị xóa
+- [ ] Apple Sign In đã bị xóa (nếu có)
+
+**12.2. Edge Cases:**
+- [ ] User đăng nhập Facebook nhưng email đã tồn tại
+- [ ] User đổi mật khẩu nhưng mất kết nối
+- [ ] User reset password nhưng không nhận được email
+- [ ] User click reset link trên thiết bị khác
+- [ ] User đăng nhập Facebook nhưng hủy permission
+
+**12.3. Security Testing:**
+- [ ] Test re-authentication trước khi đổi mật khẩu
+- [ ] Test rate limiting cho email reset
+- [ ] Test password validation
+- [ ] Test deep link security (không cho phép reset password nếu không có action code hợp lệ)
+
+**Files cần tạo/sửa:**
+- `lib/features/auth/pages/change_password_page.dart` - UI đổi mật khẩu
+- `lib/features/auth/pages/forgot_password_page.dart` - UI quên mật khẩu
+- `lib/features/auth/pages/reset_password_page.dart` - UI reset mật khẩu
+- `lib/features/auth/auth_repository.dart` - Thêm methods: changePassword, sendPasswordResetEmail, signInWithFacebook
+- `lib/features/auth/login_screen.dart` - Xóa anonymous/phone/iPhone login, thêm Facebook login
+- `lib/features/auth/register_screen.dart` - Xóa phone registration, thêm Facebook registration
+- `lib/features/profile/profile_screen.dart` - Thêm nút "Đổi mật khẩu"
+- `lib/features/share/services/deep_link_service.dart` - Thêm xử lý password reset deep link
+- `pubspec.yaml` - Thêm dependency `flutter_facebook_auth`
+- `android/app/src/main/res/values/strings.xml` - Cấu hình Facebook App ID
+- `android/app/src/main/AndroidManifest.xml` - Cấu hình Facebook
+- `ios/Runner/Info.plist` - Cấu hình Facebook App ID
+- `firebase/firestore.rules` - (Không cần thay đổi, Firebase Auth tự xử lý)
+
+---
+
+## 📝 Lưu Ý
+
+1. **Firestore Rules:** Cần cập nhật rules cho notifications và reactions
+2. **Cloudinary:** Đã có sẵn service, chỉ cần gọi khi upload
+3. **Realtime:** Sử dụng `StreamBuilder` và `snapshots()` cho realtime updates
+4. **Security:** Đảm bảo chỉ chủ sở hữu mới có thể xóa post/comment
+5. **Facebook Login:** Cần cấu hình Facebook App và Firebase Console trước khi implement
+6. **Password Reset:** Firebase tự động gửi email, chỉ cần xử lý deep link và UI
+
