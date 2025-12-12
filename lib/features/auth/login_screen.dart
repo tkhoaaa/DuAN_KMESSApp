@@ -218,7 +218,7 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {
     final disabled = isBusy || isLoadingEmail;
     return Scaffold(
-      appBar: AppBar(title: const Text('Login')),
+      appBar: AppBar(title: const Text('Đăng nhập')),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Form(

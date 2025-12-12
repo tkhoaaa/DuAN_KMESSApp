@@ -1,13 +1,11 @@
 import 'dart:async';
-
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
-
 import '../../notifications/services/notification_service.dart';
 import '../../profile/user_profile_repository.dart';
 import '../models/conversation_summary.dart';
 import '../models/message.dart';
 import '../models/message_attachment.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class ChatRepository {
   ChatRepository({FirebaseFirestore? firestore})
@@ -83,10 +81,12 @@ class ChatRepository {
     if (snapshot.exists) return;
 
     await participantDoc.set({
+      'uid': uid,
       'role': role,
       'joinedAt': FieldValue.serverTimestamp(),
       'lastReadAt': FieldValue.serverTimestamp(),
       'notificationsEnabled': true,
+      'unreadCount': 0,
     }, SetOptions(merge: true));
   }
 
@@ -465,6 +465,32 @@ class ChatRepository {
             snap.docs.map(ConversationSummary.fromDoc).toList());
   }
 
+  Stream<int> watchUnreadCount(String uid) {
+    return watchConversations(uid).asyncMap((conversations) async {
+      int total = 0;
+      for (final conv in conversations) {
+        try {
+          final participantSnap = await _participantsRef(conv.id).doc(uid).get();
+          final data = participantSnap.data();
+          if (data == null) continue;
+          // Backfill uid field for old participant documents to keep future queries consistent
+          if (!(data.containsKey('uid')) || data['uid'] != uid) {
+            _participantsRef(conv.id)
+                .doc(uid)
+                .set({'uid': uid}, SetOptions(merge: true));
+          }
+          final unread = data['unreadCount'];
+          if (unread is int && unread > 0) {
+            total += 1; // đếm số cuộc hội thoại có tin chưa đọc (kể cả nhóm)
+          }
+        } catch (_) {
+          // Ignore per-conversation errors to avoid breaking the stream
+        }
+      }
+      return total;
+    });
+  }
+
   Stream<List<ChatMessage>> watchMessages(
     String conversationId, {
     int limit = 50,
@@ -519,6 +545,32 @@ class ChatRepository {
       },
       SetOptions(merge: true),
     );
+
+    // Update participant unread counters
+    for (final participantId in participantIds) {
+      final participantRef = _participantsRef(conversationId).doc(participantId);
+      if (participantId == senderId) {
+        batch.set(
+          participantRef,
+          {
+            'uid': participantId,
+            'lastReadAt': Timestamp.fromDate(now),
+            'unreadCount': 0,
+          },
+          SetOptions(merge: true),
+        );
+      } else {
+        batch.set(
+          participantRef,
+          {
+            'uid': participantId,
+            'unreadCount': FieldValue.increment(1),
+          },
+          SetOptions(merge: true),
+        );
+      }
+    }
+
     await batch.commit();
     
     // Tạo notification cho các participants khác (không phải sender)
@@ -645,7 +697,9 @@ class ChatRepository {
         .get();
     final batch = _firestore.batch();
     batch.set(participantDoc, {
+      'uid': uid,
       'lastReadAt': FieldValue.serverTimestamp(),
+      'unreadCount': 0,
     }, SetOptions(merge: true));
 
     for (final doc in recentMessages.docs) {
@@ -730,10 +784,12 @@ class ParticipantNotificationSettings {
   const ParticipantNotificationSettings({
     required this.notificationsEnabled,
     this.mutedUntil,
+    this.unreadCount = 0,
   });
 
   final bool notificationsEnabled;
   final DateTime? mutedUntil;
+  final int unreadCount;
 
   bool isMutedAt(DateTime reference) {
     if (!notificationsEnabled) return true;
@@ -753,6 +809,7 @@ class ParticipantNotificationSettings {
     return ParticipantNotificationSettings(
       notificationsEnabled: (data?['notificationsEnabled'] as bool?) ?? true,
       mutedUntil: muted,
+      unreadCount: (data?['unreadCount'] as int?) ?? 0,
     );
   }
 }

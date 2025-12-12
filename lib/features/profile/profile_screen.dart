@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -14,10 +13,16 @@ import '../follow/services/follow_service.dart';
 import '../../services/cloudinary_service.dart';
 import '../saved_posts/pages/saved_posts_page.dart';
 import '../settings/pages/privacy_settings_page.dart';
-import '../posts/pages/drafts_and_scheduled_page.dart';
-import '../call/pages/call_history_page.dart';
-import 'pages/manage_pinned_posts_page.dart';
 import '../auth/pages/change_password_page.dart';
+import '../../theme/colors.dart';
+
+enum _ProfileMenuAction {
+  privacy,
+  savedPosts,
+  changePassword,
+  adminDashboard,
+  logout,
+}
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -225,94 +230,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
       appBar: AppBar(
         title: const Text('Hồ sơ của bạn'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.privacy_tip),
-            tooltip: 'Quyền riêng tư',
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => PrivacySettingsPage(),
-                ),
-              );
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.drafts),
-            tooltip: 'Bài nháp & Bài hẹn giờ',
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const DraftsAndScheduledPage(),
-                ),
-              );
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.history),
-            tooltip: 'Lịch sử cuộc gọi',
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const CallHistoryPage(),
-                ),
-              );
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.push_pin),
-            tooltip: 'Quản lý bài viết ghim',
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const ManagePinnedPostsPage(),
-                ),
-              );
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.bookmark),
-            tooltip: 'Bài viết đã lưu',
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const SavedPostsPage(),
-                ),
-              );
-            },
-          ),
-          if (_isAdmin)
-            IconButton(
-              icon: const Icon(Icons.admin_panel_settings),
-              tooltip: 'Admin Dashboard',
-              onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const AdminDashboardPage(),
-                  ),
-                );
-              },
-            ),
-          // Chỉ hiển thị nút đổi mật khẩu nếu user đăng nhập bằng email/password
-          Builder(
-            builder: (context) {
-              final currentUser = authRepository.currentUser();
-              final hasEmailPassword = currentUser?.email != null &&
-                  currentUser?.providerData.any((p) =>
-                          p.providerId == 'password') ==
-                      true;
-              if (!hasEmailPassword) return const SizedBox.shrink();
-              return IconButton(
-                icon: const Icon(Icons.lock),
-                tooltip: 'Đổi mật khẩu',
-                onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const ChangePasswordPage(),
-                    ),
-                  );
-                },
-              );
-            },
+          PopupMenuButton<_ProfileMenuAction>(
+            icon: const Icon(Icons.more_vert, color: AppColors.primaryPink),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            onSelected: _handleMenuAction,
+            itemBuilder: (context) => _buildMenuItems(),
           ),
         ],
       ),
@@ -798,6 +720,92 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ],
       ),
     );
+  }
+
+  List<PopupMenuEntry<_ProfileMenuAction>> _buildMenuItems() {
+    final items = <PopupMenuEntry<_ProfileMenuAction>>[
+      PopupMenuItem(
+        value: _ProfileMenuAction.privacy,
+        child: _menuRow(Icons.privacy_tip, 'Quyền riêng tư'),
+      ),
+      PopupMenuItem(
+        value: _ProfileMenuAction.savedPosts,
+        child: _menuRow(Icons.bookmark, 'Đã lưu'),
+      ),
+    ];
+
+    final currentUser = authRepository.currentUser();
+    final hasEmailPassword = currentUser?.email != null &&
+        currentUser?.providerData.any((p) => p.providerId == 'password') == true;
+    if (hasEmailPassword) {
+      items.add(
+        PopupMenuItem(
+          value: _ProfileMenuAction.changePassword,
+          child: _menuRow(Icons.lock, 'Đổi mật khẩu'),
+        ),
+      );
+    }
+
+    if (_isAdmin) {
+      items.add(
+        PopupMenuItem(
+          value: _ProfileMenuAction.adminDashboard,
+          child: _menuRow(Icons.admin_panel_settings, 'Admin Dashboard'),
+        ),
+      );
+    }
+
+    items.add(
+      PopupMenuItem(
+        value: _ProfileMenuAction.logout,
+        child: _menuRow(Icons.logout, 'Đăng xuất'),
+      ),
+    );
+
+    return items;
+  }
+
+  Widget _menuRow(IconData icon, String label) {
+    return Row(
+      children: [
+        Icon(icon, color: AppColors.primaryPink),
+        const SizedBox(width: 10),
+        Expanded(child: Text(label)),
+      ],
+    );
+  }
+
+  Future<void> _handleMenuAction(_ProfileMenuAction action) async {
+    switch (action) {
+      case _ProfileMenuAction.privacy:
+        await Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => PrivacySettingsPage()),
+        );
+        break;
+      case _ProfileMenuAction.savedPosts:
+        await Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const SavedPostsPage()),
+        );
+        break;
+      case _ProfileMenuAction.changePassword:
+        await Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const ChangePasswordPage()),
+        );
+        break;
+      case _ProfileMenuAction.adminDashboard:
+        await Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const AdminDashboardPage()),
+        );
+        break;
+      case _ProfileMenuAction.logout:
+        final current = authRepository.currentUser();
+        if (current != null) {
+          await userProfileRepository.setPresence(current.uid, false);
+        }
+        await authRepository.signOut();
+        if (mounted) Navigator.of(context).pop();
+        break;
+    }
   }
 }
 

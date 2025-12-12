@@ -169,6 +169,13 @@ service cloud.firestore {
             ||
             // Admin update (ví dụ đổi role)
             (request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.admins)
+            ||
+            // Cho phép bất kỳ participant cập nhật unreadCount của bất kỳ participant nào để cộng/trừ số chưa đọc
+            (
+              request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participantIds &&
+              request.resource.data.diff(resource.data).affectedKeys().hasOnly(['unreadCount', 'uid']) &&
+              request.resource.data.unreadCount is int
+            )
           );
         allow delete: if false;
       }

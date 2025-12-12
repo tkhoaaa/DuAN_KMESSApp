@@ -231,7 +231,7 @@ class UserProfileRepository {
         'isPrivate': isPrivate ?? false,
         'followersCount': 0,
         'followingCount': 0,
-        'postsCount': 0,
+      'postsCount': 0,
         'banStatus': 'none', // Đảm bảo banStatus luôn được set
         'isAdmin': false, // Đảm bảo isAdmin luôn được set
         'createdAt': FieldValue.serverTimestamp(),

@@ -6,6 +6,7 @@ import '../../auth/auth_repository.dart';
 import '../../profile/user_profile_repository.dart';
 import '../models/story.dart';
 import '../repositories/story_repository.dart';
+import '../../../theme/colors.dart';
 
 /// Page hiển thị story với progress bar, video player, và swipe gestures
 class StoryViewerPage extends StatefulWidget {
@@ -314,19 +315,19 @@ class _StoryViewerPageState extends State<StoryViewerPage> {
   @override
   Widget build(BuildContext context) {
     if (_userIds.isEmpty) {
-      return Scaffold(
-        backgroundColor: Colors.black,
-        body: const Center(
-          child: Text(
-            'Không có story nào',
-            style: TextStyle(color: Colors.white),
-          ),
-        ),
-      );
-    }
-
     return Scaffold(
       backgroundColor: Colors.black,
+        body: const Center(
+                child: Text(
+                  'Không có story nào',
+                  style: TextStyle(color: Colors.white),
+                ),
+        ),
+              );
+            }
+
+    return Scaffold(
+      backgroundColor: Colors.black.withOpacity(0.92),
       body: SafeArea(
         child: Stack(
           fit: StackFit.expand,
@@ -355,7 +356,7 @@ class _StoryViewerPageState extends State<StoryViewerPage> {
                   );
                 }
 
-                return PageView.builder(
+            return PageView.builder(
                   controller: _storyPageController,
                   itemCount: _currentStories.length,
                   onPageChanged: (index) {
@@ -369,26 +370,26 @@ class _StoryViewerPageState extends State<StoryViewerPage> {
                     return GestureDetector(
                       onTapDown: _handleTap,
                       child: Stack(
-                        fit: StackFit.expand,
-                        children: [
+                  fit: StackFit.expand,
+                  children: [
                           // Media content
-                          if (story.type == StoryMediaType.image)
-                            Image.network(
-                              story.mediaUrl,
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) {
-                                return const Center(
-                                  child: Icon(
-                                    Icons.broken_image,
-                                    color: Colors.white,
-                                    size: 48,
-                                  ),
-                                );
-                              },
-                            )
+                    if (story.type == StoryMediaType.image)
+                      Image.network(
+                        story.mediaUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) {
+                          return const Center(
+                            child: Icon(
+                              Icons.broken_image,
+                              color: Colors.white,
+                              size: 48,
+                            ),
+                          );
+                        },
+                      )
                           else if (_videoController != null &&
                               _videoController!.value.isInitialized)
-                            Center(
+                      Center(
                               child: AspectRatio(
                                 aspectRatio: _videoController!.value.aspectRatio,
                                 child: VideoPlayer(_videoController!),
@@ -397,8 +398,8 @@ class _StoryViewerPageState extends State<StoryViewerPage> {
                           else
                             const Center(
                               child: CircularProgressIndicator(
-                                color: Colors.white,
-                              ),
+                            color: Colors.white,
+                          ),
                             ),
                           
                           // Pause overlay
@@ -436,10 +437,10 @@ class _StoryViewerPageState extends State<StoryViewerPage> {
                             margin: EdgeInsets.only(
                               right: index < _currentStories.length - 1 ? 4 : 0,
                             ),
-                            height: 3,
+                            height: 6,
                             decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.3),
-                              borderRadius: BorderRadius.circular(2),
+                              color: AppColors.lightPink.withOpacity(0.35),
+                              borderRadius: BorderRadius.circular(4),
                             ),
                             child: Stack(
                               children: [
@@ -448,16 +449,16 @@ class _StoryViewerPageState extends State<StoryViewerPage> {
                                     widthFactor: _progress.clamp(0.0, 1.0),
                                     child: Container(
                                       decoration: BoxDecoration(
-                                        color: Colors.white,
-                                        borderRadius: BorderRadius.circular(2),
+                                        gradient: AppColors.storyPinkGradient,
+                                        borderRadius: BorderRadius.circular(4),
                                       ),
                                     ),
                                   )
                                 else if (index < _currentStoryIndex)
                                   Container(
                                     decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      borderRadius: BorderRadius.circular(2),
+                                      color: AppColors.primaryPink,
+                                      borderRadius: BorderRadius.circular(4),
                                     ),
                                   ),
                               ],
@@ -509,7 +510,7 @@ class _StoryViewerPageState extends State<StoryViewerPage> {
                           },
                         ),
                       ],
-                    ),
+                      ),
                   ],
                 ),
               ),
@@ -518,28 +519,28 @@ class _StoryViewerPageState extends State<StoryViewerPage> {
             if (_currentStories.isNotEmpty &&
                 _currentStories[_currentStoryIndex].text != null &&
                 _currentStories[_currentStoryIndex].text!.isNotEmpty)
-              Positioned(
+                    Positioned(
                 bottom: 32,
-                left: 16,
-                right: 16,
+                      left: 16,
+                      right: 16,
                 child: Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: Colors.black54,
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Text(
+                            child: Text(
                     _currentStories[_currentStoryIndex].text!,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
                     ),
                     maxLines: 3,
                     overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ),
-          ],
+                              ),
+                            ),
+                          ),
+                        ],
         ),
       ),
     );

@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 
 import '../../auth/auth_repository.dart';
 import '../../follow/models/follow_state.dart';
-import '../../follow/models/follow_state.dart' as follow_models;
 import '../../follow/services/follow_service.dart';
 import '../../posts/models/post.dart';
 import '../../posts/models/post_media.dart';
@@ -16,6 +15,9 @@ import '../services/search_service.dart';
 import '../models/user_search_filters.dart';
 import '../models/search_history.dart';
 import '../repositories/search_history_repository.dart';
+import '../../../theme/colors.dart';
+import '../../../theme/typography.dart';
+import '../../../widgets/inputs/rounded_text_field.dart';
 
 class SearchPage extends StatefulWidget {
   const SearchPage({super.key});
@@ -187,24 +189,23 @@ class _SearchPageState extends State<SearchPage>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: TextField(
-          controller: _searchController,
-          autofocus: true,
-          decoration: const InputDecoration(
+        titleSpacing: 0,
+        title: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: RoundedTextField(
+            controller: _searchController,
             hintText: 'Tìm kiếm người dùng hoặc bài viết...',
-            border: InputBorder.none,
-            hintStyle: TextStyle(color: Colors.white70),
+            prefixIcon: const Icon(Icons.search, color: AppColors.primaryPink),
+            onSubmitted: (value) {
+              if (value.trim().isNotEmpty) {
+                _performSearch(value.trim());
+              }
+            },
           ),
-          style: const TextStyle(color: Colors.white),
-          onSubmitted: (value) {
-            if (value.trim().isNotEmpty) {
-              _performSearch(value.trim());
-            }
-          },
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.filter_list),
+            icon: const Icon(Icons.filter_list, color: AppColors.primaryPink),
             tooltip: 'Lọc',
             onPressed: () {
               _showFilterDialog();
@@ -213,6 +214,10 @@ class _SearchPageState extends State<SearchPage>
         ],
         bottom: TabBar(
           controller: _tabController,
+          indicatorColor: AppColors.primaryPink,
+          labelColor: AppColors.primaryPink,
+          unselectedLabelColor: AppColors.textLight,
+          labelStyle: AppTypography.body.copyWith(fontWeight: FontWeight.w700),
           tabs: const [
             Tab(text: 'Người dùng'),
             Tab(text: 'Bài viết'),

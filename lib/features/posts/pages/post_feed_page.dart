@@ -12,6 +12,10 @@ import '../../safety/services/block_service.dart';
 import '../../safety/services/report_service.dart';
 import '../../stories/pages/story_create_page.dart';
 import '../../stories/pages/story_viewer_page.dart';
+import '../../notifications/pages/notification_center_page.dart';
+import '../../notifications/services/notification_service.dart';
+import '../../profile/pages/manage_pinned_posts_page.dart';
+import 'drafts_and_scheduled_page.dart';
 import '../../stories/models/story.dart';
 import '../../stories/repositories/story_repository.dart';
 import '../../follow/services/follow_service.dart';
@@ -26,6 +30,10 @@ import '../widgets/feed_filter_chips.dart';
 import 'post_comments_sheet.dart';
 import 'post_create_page.dart';
 import 'post_video_page.dart';
+import '../../../theme/colors.dart';
+import '../../../theme/typography.dart';
+
+enum _FeedMenuAction { filter, story, notifications, drafts, pinned }
 
 class PostFeedPage extends StatefulWidget {
   const PostFeedPage({super.key});
@@ -35,8 +43,18 @@ class PostFeedPage extends StatefulWidget {
 }
 
 class _PostFeedPageState extends State<PostFeedPage> {
+  // Gộp các hành động AppBar vào một menu gọn
+  static const _menuActions = [
+    _FeedMenuAction.filter,
+    _FeedMenuAction.story,
+    _FeedMenuAction.notifications,
+    _FeedMenuAction.drafts,
+    _FeedMenuAction.pinned,
+  ];
+
   final PostService _postService = PostService();
   final StoryRepository _storyRepository = StoryRepository();
+  final NotificationService _notificationService = NotificationService();
   final List<PostFeedEntry> _entries = [];
   final ScrollController _scrollController = ScrollController();
 
@@ -45,8 +63,10 @@ class _PostFeedPageState extends State<PostFeedPage> {
   bool _isLoading = false;
   bool _initialLoading = true;
   StreamSubscription<List<Post>>? _publishedPostsSubscription;
+  StreamSubscription<int>? _unreadNotificationsSub;
   Set<String> _knownPostIds = {}; // Track posts đã load để tránh duplicate
   FeedFilters _filters = FeedFilters(); // Default filters
+  int _unreadNotifications = 0;
 
   @override
   void initState() {
@@ -55,11 +75,13 @@ class _PostFeedPageState extends State<PostFeedPage> {
     _scrollController.addListener(_onScroll);
     // Listen cho posts mới được publish
     _listenForNewPublishedPosts();
+    _listenUnreadNotifications();
   }
 
   @override
   void dispose() {
     _publishedPostsSubscription?.cancel();
+    _unreadNotificationsSub?.cancel();
     _scrollController.dispose();
     super.dispose();
   }
@@ -149,39 +171,205 @@ class _PostFeedPageState extends State<PostFeedPage> {
     }
   }
 
+  void _handleMenuAction(_FeedMenuAction action) {
+    switch (action) {
+      case _FeedMenuAction.filter:
+        _openFilterSheet();
+        break;
+      case _FeedMenuAction.story:
+        _openStoryCreator();
+        break;
+      case _FeedMenuAction.notifications:
+        _openNotifications();
+        break;
+      case _FeedMenuAction.drafts:
+        _openDraftsAndScheduled();
+        break;
+      case _FeedMenuAction.pinned:
+        _openPinnedPosts();
+        break;
+    }
+  }
+
+  Future<void> _openFilterSheet() async {
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => FeedFilterBottomSheet(
+        initialFilters: _filters,
+        onApply: (filters) {
+          setState(() {
+            _filters = filters;
+          });
+          _loadInitial();
+        },
+      ),
+    );
+  }
+
+  Future<void> _openStoryCreator() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const StoryCreatePage()),
+    );
+  }
+
+  Future<void> _openNotifications() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const NotificationCenterPage()),
+    );
+  }
+
+  void _listenUnreadNotifications() {
+    final uid = authRepository.currentUser()?.uid;
+    _unreadNotificationsSub?.cancel();
+    if (uid == null) return;
+    _unreadNotificationsSub =
+        _notificationService.watchUnreadCount(uid).listen((count) {
+      if (!mounted) return;
+      setState(() {
+        _unreadNotifications = count;
+      });
+    });
+  }
+
+  Future<void> _openDraftsAndScheduled() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const DraftsAndScheduledPage()),
+    );
+  }
+
+  Future<void> _openPinnedPosts() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const ManagePinnedPostsPage()),
+    );
+  }
+
+  IconData _menuIcon(_FeedMenuAction action) {
+    switch (action) {
+      case _FeedMenuAction.filter:
+        return Icons.filter_list;
+      case _FeedMenuAction.story:
+        return Icons.history;
+      case _FeedMenuAction.notifications:
+        return Icons.notifications_outlined;
+      case _FeedMenuAction.drafts:
+        return Icons.drafts;
+      case _FeedMenuAction.pinned:
+        return Icons.push_pin;
+    }
+  }
+
+  String _menuLabel(_FeedMenuAction action) {
+    switch (action) {
+      case _FeedMenuAction.filter:
+        return 'Lọc & sắp xếp';
+      case _FeedMenuAction.story:
+        return 'Story của bạn';
+      case _FeedMenuAction.notifications:
+        return 'Thông báo';
+      case _FeedMenuAction.drafts:
+        return 'Bài nháp & hẹn giờ';
+      case _FeedMenuAction.pinned:
+        return 'Bài viết ghim';
+    }
+  }
+
+  Widget _menuButtonIcon() {
+    if (_unreadNotifications <= 0) {
+      return const Icon(Icons.more_vert, color: AppColors.primaryPink);
+    }
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        const Icon(Icons.more_vert, color: AppColors.primaryPink),
+        Positioned(
+          right: -4,
+          top: -2,
+          child: _badge(_unreadNotifications),
+        ),
+      ],
+    );
+  }
+
+  Widget _menuItem(_FeedMenuAction action) {
+    final showBadge =
+        action == _FeedMenuAction.notifications && _unreadNotifications > 0;
+    final label = _menuLabel(action);
+    return Row(
+      children: [
+        Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Icon(_menuIcon(action), color: AppColors.primaryPink),
+            if (showBadge)
+              Positioned(
+                right: -4,
+                top: -2,
+                child: _badge(_unreadNotifications, dense: true),
+              ),
+          ],
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Row(
+            children: [
+              Text(label),
+              if (showBadge) ...[
+                const SizedBox(width: 8),
+                _badge(_unreadNotifications, dense: true),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _badge(int count, {bool dense = false}) {
+    final display = count > 99 ? '99+' : '$count';
+    final padding = dense
+        ? const EdgeInsets.symmetric(horizontal: 6, vertical: 2)
+        : const EdgeInsets.all(6);
+    return Container(
+      padding: padding,
+      decoration: BoxDecoration(
+        color: AppColors.primaryPink,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
+      child: Text(
+        display,
+        style: AppTypography.small
+            .copyWith(color: Colors.white, fontWeight: FontWeight.bold),
+        textAlign: TextAlign.center,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Bảng tin'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.filter_list),
-            tooltip: 'Lọc & Sắp xếp',
-            onPressed: () {
-              showModalBottomSheet(
-                context: context,
-                isScrollControlled: true,
-                builder: (context) => FeedFilterBottomSheet(
-                  initialFilters: _filters,
-                  onApply: (filters) {
-                    setState(() {
-                      _filters = filters;
-                    });
-                    _loadInitial();
-                  },
-                ),
-              );
-            },
+        title: Text(
+          'Bảng tin',
+          style: AppTypography.body.copyWith(
+            fontWeight: FontWeight.w700,
+            color: AppColors.primaryPink,
           ),
-          IconButton(
-            icon: const Icon(Icons.history),
-            tooltip: 'Story của bạn',
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const StoryCreatePage()),
-              );
-            },
+        ),
+        actions: [
+          PopupMenuButton<_FeedMenuAction>(
+            icon: _menuButtonIcon(),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            onSelected: _handleMenuAction,
+            itemBuilder: (context) => _menuActions
+                .map(
+                  (action) => PopupMenuItem<_FeedMenuAction>(
+                    value: action,
+                    child: _menuItem(action),
+                  ),
+                )
+                .toList(),
           ),
         ],
       ),
@@ -211,19 +399,7 @@ class _PostFeedPageState extends State<PostFeedPage> {
                       _loadInitial();
                     },
                     onTap: () {
-                      showModalBottomSheet(
-                        context: context,
-                        isScrollControlled: true,
-                        builder: (context) => FeedFilterBottomSheet(
-                          initialFilters: _filters,
-                          onApply: (filters) {
-                            setState(() {
-                              _filters = filters;
-                            });
-                            _loadInitial();
-                          },
-                        ),
-                      );
+                      _openFilterSheet();
                     },
                   ),
                   Expanded(
@@ -552,20 +728,34 @@ class _PostFeedItemState extends State<PostFeedItem> {
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      color: Colors.white,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: const BorderSide(color: AppColors.borderGrey),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             leading: CircleAvatar(
               backgroundImage:
                   authorPhotoUrl != null ? NetworkImage(authorPhotoUrl) : null,
+              backgroundColor: AppColors.borderGrey,
               child: authorPhotoUrl == null
-                  ? const Icon(Icons.person)
+                  ? const Icon(Icons.person, color: AppColors.textLight)
                   : null,
             ),
-            title: Text(displayName),
+            title: Text(
+              displayName,
+              style: AppTypography.body.copyWith(fontWeight: FontWeight.w700),
+            ),
             subtitle: post.createdAt != null
-                ? Text(post.createdAt!.toLocal().toString())
+                ? Text(
+                    post.createdAt!.toLocal().toString(),
+                    style: AppTypography.caption,
+                  )
                 : null,
             onTap: () => widget.onOpenProfile(post.authorUid),
             trailing: _buildTrailingMenu(
@@ -598,7 +788,7 @@ class _PostFeedItemState extends State<PostFeedItem> {
                     return IconButton(
                       icon: Icon(
                         isLiked ? Icons.favorite : Icons.favorite_border,
-                        color: isLiked ? Colors.red : Colors.grey,
+                        color: isLiked ? AppColors.primaryPink : AppColors.textLight,
                       ),
                       onPressed: isLoggedIn
                           ? () async {
@@ -621,12 +811,18 @@ class _PostFeedItemState extends State<PostFeedItem> {
                     );
                   },
                 ),
-                Text('${post.likeCount}'),
+                Text(
+                  '${post.likeCount}',
+                  style: AppTypography.caption.copyWith(color: AppColors.textDark),
+                ),
                 IconButton(
-                  icon: const Icon(Icons.comment_outlined),
+                  icon: const Icon(Icons.comment_outlined, color: AppColors.primaryPink),
                   onPressed: () => widget.onOpenComments(post),
                 ),
-                Text('${post.commentCount}'),
+                Text(
+                  '${post.commentCount}',
+                  style: AppTypography.caption.copyWith(color: AppColors.textDark),
+                ),
                 const Spacer(),
                 if (!isOwner && currentUid != null)
                   StreamBuilder<bool>(
@@ -636,14 +832,14 @@ class _PostFeedItemState extends State<PostFeedItem> {
                       return IconButton(
                         icon: Icon(
                           isSaved ? Icons.bookmark : Icons.bookmark_border,
-                          color: isSaved ? Colors.blueAccent : Colors.grey,
+                          color: isSaved ? AppColors.primaryPink : AppColors.textLight,
                         ),
                         onPressed: () => _handleToggleSave(post, isSaved),
                       );
                     },
                   ),
                 PopupMenuButton<String>(
-                  icon: const Icon(Icons.share),
+                  icon: const Icon(Icons.share, color: AppColors.primaryPink),
                   onSelected: (value) async {
                     if (value == 'share') {
                       await ShareService.sharePost(
@@ -658,22 +854,22 @@ class _PostFeedItemState extends State<PostFeedItem> {
                       );
                     }
                   },
-                  itemBuilder: (context) => [
-                    const PopupMenuItem(
+                  itemBuilder: (context) => const [
+                    PopupMenuItem(
                       value: 'share',
                       child: Row(
                         children: [
-                          Icon(Icons.share),
+                          Icon(Icons.share, color: AppColors.primaryPink),
                           SizedBox(width: 8),
                           Text('Chia sẻ'),
                         ],
                       ),
                     ),
-                    const PopupMenuItem(
+                    PopupMenuItem(
                       value: 'copy',
                       child: Row(
                         children: [
-                          Icon(Icons.copy),
+                          Icon(Icons.copy, color: AppColors.textDark),
                           SizedBox(width: 8),
                           Text('Sao chép link'),
                         ],

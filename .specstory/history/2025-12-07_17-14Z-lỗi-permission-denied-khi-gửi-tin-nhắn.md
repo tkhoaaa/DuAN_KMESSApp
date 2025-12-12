@@ -2,7 +2,7 @@
 
 <!-- cursor Session 8ea636cd-8358-4194-b13c-0d99a7305f65 (2025-12-07 17:14Z) -->
 
-# Lỗi xem và đăng story (2025-12-07 17:14Z)
+# Lỗi permission denied khi gửi tin nhắn (2025-12-07 17:14Z)
 
 _**User (2025-12-07 17:13Z)**_
 

@@ -27,11 +27,17 @@ class ChatDetailPage extends StatefulWidget {
   const ChatDetailPage({
     required this.conversationId,
     required this.otherUid,
+    this.isGroup = false,
+    this.conversationTitle,
+    this.conversationAvatarUrl,
     super.key,
   });
 
   final String conversationId;
   final String otherUid;
+  final bool isGroup;
+  final String? conversationTitle;
+  final String? conversationAvatarUrl;
 
   @override
   State<ChatDetailPage> createState() => _ChatDetailPageState();
@@ -924,21 +930,23 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
                   _performSearch(value);
                 },
               )
-            : FutureBuilder<UserProfile?>(
-                future: userProfileRepository.fetchProfile(widget.otherUid),
-                builder: (context, snapshot) {
-                  final profile = snapshot.data;
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Text('Đang tải...');
-                  }
-                  final title = profile?.displayName?.isNotEmpty == true
-                      ? profile!.displayName!
-                      : (profile?.email?.isNotEmpty == true
-                          ? profile!.email!
-                          : widget.otherUid);
-                  return Text(title);
-                },
-              ),
+            : widget.isGroup
+                ? Text(widget.conversationTitle ?? 'Nhóm')
+                : FutureBuilder<UserProfile?>(
+                    future: userProfileRepository.fetchProfile(widget.otherUid),
+                    builder: (context, snapshot) {
+                      final profile = snapshot.data;
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Text('Đang tải...');
+                      }
+                      final title = profile?.displayName?.isNotEmpty == true
+                          ? profile!.displayName!
+                          : (profile?.email?.isNotEmpty == true
+                              ? profile!.email!
+                              : widget.otherUid);
+                      return Text(title);
+                    },
+                  ),
         actions: [
           if (!_isSearchMode) ...[
             // Call buttons (chỉ hiện khi không bị block và không bị khóa)

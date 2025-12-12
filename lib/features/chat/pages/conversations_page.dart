@@ -2,7 +2,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../../auth/auth_repository.dart';
+import '../../../theme/colors.dart';
+import '../../../theme/typography.dart';
 import '../services/conversation_service.dart';
+import '../../call/pages/call_history_page.dart';
 import 'chat_detail_page.dart';
 import 'create_group_page.dart';
 
@@ -35,20 +38,31 @@ class _ConversationsPageState extends State<ConversationsPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Hội thoại'),
+        title: Text(
+          'Hội thoại',
+          style: AppTypography.body.copyWith(
+            fontWeight: FontWeight.w700,
+            color: AppColors.primaryPink,
+          ),
+        ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.group_add),
-            tooltip: 'Tạo nhóm mới',
-            onPressed: () async {
-              await Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const CreateGroupPage(),
-                ),
-              );
-            },
+          PopupMenuButton<_ChatMenuAction>(
+            icon: const Icon(Icons.more_vert, color: AppColors.primaryPink),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            onSelected: _handleMenuAction,
+            itemBuilder: (context) => const [
+              PopupMenuItem(
+                value: _ChatMenuAction.callHistory,
+                child: _MenuRow(icon: Icons.history, label: 'Lịch sử cuộc gọi'),
+              ),
+            ],
           ),
         ],
+      ),
+      floatingActionButton: FloatingActionButton.small(
+        backgroundColor: AppColors.primaryPink,
+        onPressed: _openCreateGroup,
+        child: const Icon(Icons.group_add, color: Colors.white),
       ),
       body: StreamBuilder(
         stream: _conversationService.watchConversationEntries(uid),
@@ -104,9 +118,24 @@ class _ConversationsPageState extends State<ConversationsPage> {
                 ),
                 title: Text(entry.title),
                 subtitle: subtitleWidget,
-                trailing: entry.isMuted
-                    ? const Icon(Icons.notifications_off, color: Colors.orange)
-                    : null,
+                trailing: entry.unreadCount > 0
+                    ? Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: AppColors.primaryPink,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          entry.unreadCount > 99 ? '99+' : '${entry.unreadCount}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      )
+                    : entry.isMuted
+                        ? const Icon(Icons.notifications_off, color: Colors.orange)
+                        : null,
                 onTap: () {
                   final otherUid = entry.summary.type == 'direct'
                       ? entry.summary.participantIds
@@ -121,6 +150,9 @@ class _ConversationsPageState extends State<ConversationsPage> {
                       builder: (_) => ChatDetailPage(
                         conversationId: entry.summary.id,
                         otherUid: otherUid,
+                        isGroup: entry.summary.isGroup,
+                        conversationTitle: entry.title,
+                        conversationAvatarUrl: entry.avatarUrl,
                       ),
                     ),
                   );
@@ -130,6 +162,50 @@ class _ConversationsPageState extends State<ConversationsPage> {
           );
         },
       ),
+    );
+  }
+
+  Future<void> _openCreateGroup() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => const CreateGroupPage(),
+      ),
+    );
+  }
+
+  Future<void> _openCallHistory() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => const CallHistoryPage(),
+      ),
+    );
+  }
+
+  void _handleMenuAction(_ChatMenuAction action) {
+    switch (action) {
+      case _ChatMenuAction.callHistory:
+        _openCallHistory();
+        break;
+    }
+  }
+}
+
+enum _ChatMenuAction { callHistory }
+
+class _MenuRow extends StatelessWidget {
+  const _MenuRow({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, color: AppColors.primaryPink),
+        const SizedBox(width: 10),
+        Expanded(child: Text(label)),
+      ],
     );
   }
 }

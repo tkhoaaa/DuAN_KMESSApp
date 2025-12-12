@@ -8,6 +8,8 @@ import '../../chat/pages/chat_detail_page.dart';
 import '../../posts/pages/post_permalink_page.dart';
 import '../../profile/public_profile_page.dart';
 import '../../profile/user_profile_repository.dart';
+import '../../../theme/colors.dart';
+import '../../../theme/typography.dart';
 import '../models/notification.dart' as models;
 import '../services/notification_service.dart';
 import '../services/notification_digest_service.dart';
@@ -184,22 +186,8 @@ class _NotificationCenterPageState extends State<NotificationCenterPage> {
   }
 
   Color _getNotificationColor(models.Notification notification) {
-    switch (notification.type) {
-      case models.NotificationType.like:
-        return Colors.red;
-      case models.NotificationType.comment:
-        return Colors.blue;
-      case models.NotificationType.follow:
-        return Colors.green;
-      case models.NotificationType.message:
-        return Colors.purple;
-      case models.NotificationType.call:
-        return Colors.blue;
-      case models.NotificationType.report:
-        return Colors.orange;
-      case models.NotificationType.appeal:
-        return Colors.purple;
-    }
+    // Dùng tông hồng nhất quán
+    return AppColors.primaryPink;
   }
 
   @override
@@ -212,10 +200,16 @@ class _NotificationCenterPageState extends State<NotificationCenterPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Thông báo'),
+        title: Text(
+          'Thông báo',
+          style: AppTypography.body.copyWith(
+            fontWeight: FontWeight.w700,
+            color: AppColors.primaryPink,
+          ),
+        ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.summarize),
+            icon: const Icon(Icons.summarize, color: AppColors.primaryPink),
             tooltip: 'Tổng kết',
             onPressed: () {
               Navigator.of(context).push(
@@ -243,15 +237,19 @@ class _NotificationCenterPageState extends State<NotificationCenterPage> {
             );
           }
           return ListView.builder(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             itemCount: notifications.length,
             itemBuilder: (context, index) {
               final notification = notifications[index];
-              return _NotificationTile(
-                notification: notification,
-                onTap: () => _handleNotificationTap(notification),
-                getTitle: _getNotificationTitle,
-                getIcon: _getNotificationIcon,
-                getColor: _getNotificationColor,
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: _NotificationTile(
+                  notification: notification,
+                  onTap: () => _handleNotificationTap(notification),
+                  getTitle: _getNotificationTitle,
+                  getIcon: _getNotificationIcon,
+                  getColor: _getNotificationColor,
+                ),
               );
             },
           );
@@ -283,35 +281,47 @@ class _NotificationTile extends StatelessWidget {
     final displayUids = fromUids.take(3).toList();
     final remainingCount = fromUids.length > 3 ? fromUids.length - 3 : 0;
 
-    return ListTile(
-      leading: isGrouped && displayUids.isNotEmpty
-          ? _buildGroupedAvatars(displayUids, remainingCount, getColor(notification))
-          : CircleAvatar(
-              backgroundColor: getColor(notification).withOpacity(0.2),
-              child: Icon(
-                getIcon(notification),
-                color: getColor(notification),
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: const BorderSide(color: AppColors.borderGrey),
+      ),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        leading: isGrouped && displayUids.isNotEmpty
+            ? _buildGroupedAvatars(displayUids, remainingCount, getColor(notification))
+            : CircleAvatar(
+                backgroundColor: getColor(notification).withOpacity(0.15),
+                child: Icon(
+                  getIcon(notification),
+                  color: getColor(notification),
+                ),
               ),
-            ),
-      title: Text(getTitle(notification)),
-      subtitle: notification.text != null && notification.text!.isNotEmpty
-          ? Text(
-              notification.text!,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            )
-          : null,
-      trailing: notification.read
-          ? null
-          : Container(
-              width: 8,
-              height: 8,
-              decoration: const BoxDecoration(
-                color: Colors.blue,
-                shape: BoxShape.circle,
+        title: Text(
+          getTitle(notification),
+          style: AppTypography.body.copyWith(fontWeight: FontWeight.w700),
+        ),
+        subtitle: notification.text != null && notification.text!.isNotEmpty
+            ? Text(
+                notification.text!,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: AppTypography.caption.copyWith(color: AppColors.textLight),
+              )
+            : null,
+        trailing: notification.read
+            ? null
+            : Container(
+                width: 10,
+                height: 10,
+                decoration: const BoxDecoration(
+                  color: AppColors.primaryPink,
+                  shape: BoxShape.circle,
+                ),
               ),
-            ),
-      onTap: onTap,
+        onTap: onTap,
+      ),
     );
   }
 

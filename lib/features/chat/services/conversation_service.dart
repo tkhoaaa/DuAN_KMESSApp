@@ -67,6 +67,7 @@ class ConversationService {
       subtitle: subtitle,
       notificationsEnabled: settings.notificationsEnabled,
       mutedUntil: settings.mutedUntil,
+      unreadCount: settings.unreadCount,
     );
   }
 
@@ -157,6 +158,7 @@ class ConversationEntry {
     required this.summary,
     required this.title,
     required this.notificationsEnabled,
+    this.unreadCount = 0,
     this.avatarUrl,
     this.subtitle,
     this.mutedUntil,
@@ -168,6 +170,7 @@ class ConversationEntry {
   final String? subtitle;
   final bool notificationsEnabled;
   final DateTime? mutedUntil;
+  final int unreadCount;
 
   DateTime? get lastMessageAt => summary.lastMessageAt;
 
