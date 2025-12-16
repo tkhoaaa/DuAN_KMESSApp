@@ -600,7 +600,7 @@ class _BottomNavBar extends StatelessWidget {
     final items = [
       _NavItem('Bảng tin', Icons.photo_library_outlined),
       _NavItem('Tìm kiếm', Icons.search),
-      _NavItem('Chat', Icons.chat_outlined,
+      _NavItem('Tin nhắn', Icons.chat_outlined,
           badge: unreadChatCount > 0 ? unreadChatCount : null),
       _NavItem('Người theo dõi', Icons.people_outline,
           badge: followerRequestCount > 0 ? followerRequestCount : null),

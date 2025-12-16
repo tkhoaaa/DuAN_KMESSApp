@@ -11,6 +11,7 @@ import '../../saved_posts/services/saved_posts_service.dart';
 import '../../safety/services/block_service.dart';
 import '../../safety/services/report_service.dart';
 import '../../stories/pages/story_create_page.dart';
+import '../../stories/pages/story_archive_page.dart';
 import '../../stories/pages/story_viewer_page.dart';
 import '../../notifications/pages/notification_center_page.dart';
 import '../../notifications/services/notification_service.dart';
@@ -33,7 +34,7 @@ import 'post_video_page.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/typography.dart';
 
-enum _FeedMenuAction { filter, story, notifications, drafts, pinned }
+enum _FeedMenuAction { filter, story, notifications, drafts, pinned, storyArchive }
 
 class PostFeedPage extends StatefulWidget {
   const PostFeedPage({super.key});
@@ -50,6 +51,7 @@ class _PostFeedPageState extends State<PostFeedPage> {
     _FeedMenuAction.notifications,
     _FeedMenuAction.drafts,
     _FeedMenuAction.pinned,
+    _FeedMenuAction.storyArchive,
   ];
 
   final PostService _postService = PostService();
@@ -188,6 +190,9 @@ class _PostFeedPageState extends State<PostFeedPage> {
       case _FeedMenuAction.pinned:
         _openPinnedPosts();
         break;
+      case _FeedMenuAction.storyArchive:
+        _openStoryArchive();
+        break;
     }
   }
 
@@ -244,12 +249,20 @@ class _PostFeedPageState extends State<PostFeedPage> {
     );
   }
 
+  Future<void> _openStoryArchive() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const StoryArchivePage()),
+    );
+  }
+
   IconData _menuIcon(_FeedMenuAction action) {
     switch (action) {
       case _FeedMenuAction.filter:
         return Icons.filter_list;
       case _FeedMenuAction.story:
         return Icons.history;
+      case _FeedMenuAction.storyArchive:
+        return Icons.archive_outlined;
       case _FeedMenuAction.notifications:
         return Icons.notifications_outlined;
       case _FeedMenuAction.drafts:
@@ -265,6 +278,8 @@ class _PostFeedPageState extends State<PostFeedPage> {
         return 'Lọc & sắp xếp';
       case _FeedMenuAction.story:
         return 'Story của bạn';
+      case _FeedMenuAction.storyArchive:
+        return 'Kho lưu trữ Story';
       case _FeedMenuAction.notifications:
         return 'Thông báo';
       case _FeedMenuAction.drafts:

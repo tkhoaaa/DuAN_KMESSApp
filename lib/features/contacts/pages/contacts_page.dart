@@ -1,7 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../auth/auth_repository.dart';
+import '../../../theme/colors.dart';
 import '../../chat/pages/chat_detail_page.dart';
 import '../../chat/repositories/chat_repository.dart';
 import '../../follow/services/follow_service.dart';
@@ -57,12 +59,15 @@ class _ContactsPageState extends State<ContactsPage>
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Kết nối'),
+        title: const Text(
+          'Kết nối',
+          style: TextStyle(color: AppColors.primaryPink),
+        ),
+        iconTheme: const IconThemeData(color: AppColors.primaryPink),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.search),
-            tooltip: 'Tìm kiếm người dùng',
+          _AnimatedSearchButton(
             onPressed: () {
+              HapticFeedback.lightImpact();
               showSearch(
                 context: context,
                 delegate: ContactSearchDelegate(service: _followService),
@@ -70,14 +75,8 @@ class _ContactsPageState extends State<ContactsPage>
             },
           ),
         ],
-        bottom: TabBar(
+        bottom: _ModernTabBar(
           controller: _tabController,
-          tabs: const [
-            Tab(text: 'Đang theo dõi'),
-            Tab(text: 'Người theo dõi'),
-            Tab(text: 'Yêu cầu đến'),
-            Tab(text: 'Yêu cầu đã gửi'),
-          ],
         ),
       ),
       body: Column(
@@ -94,12 +93,12 @@ class _ContactsPageState extends State<ContactsPage>
             child: TabBarView(
               controller: _tabController,
               children: [
-                _FollowList(
+                _ModernFollowList(
                   stream: _followService.watchFollowingEntries(uid),
                   emptyLabel: 'Bạn chưa theo dõi ai.',
                   actionBuilder: (entry) => [
-                    IconButton(
-                      icon: const Icon(Icons.chat_bubble_outline),
+                    _ModernActionButton(
+                      icon: Icons.chat_bubble_outline,
                       tooltip: 'Nhắn tin',
                       onPressed: () async {
                         try {
@@ -122,8 +121,8 @@ class _ContactsPageState extends State<ContactsPage>
                         }
                       },
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.person),
+                    _ModernActionButton(
+                      icon: Icons.person,
                       tooltip: 'Xem trang cá nhân',
                       onPressed: () {
                         Navigator.of(context).push(
@@ -133,7 +132,8 @@ class _ContactsPageState extends State<ContactsPage>
                         );
                       },
                     ),
-                    TextButton(
+                    _ModernTextButton(
+                      label: 'Bỏ theo dõi',
                       onPressed: () async {
                         try {
                           await _followService.unfollow(entry.uid);
@@ -141,16 +141,15 @@ class _ContactsPageState extends State<ContactsPage>
                           _showError(e);
                         }
                       },
-                      child: const Text('Bỏ theo dõi'),
                     ),
                   ],
                 ),
-                _FollowList(
+                _ModernFollowList(
                   stream: _followService.watchFollowersEntries(uid),
                   emptyLabel: 'Chưa có người theo dõi.',
                   actionBuilder: (entry) => [
-                    IconButton(
-                      icon: const Icon(Icons.chat_bubble_outline),
+                    _ModernActionButton(
+                      icon: Icons.chat_bubble_outline,
                       tooltip: 'Nhắn tin',
                       onPressed: () async {
                         try {
@@ -173,8 +172,8 @@ class _ContactsPageState extends State<ContactsPage>
                         }
                       },
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.person),
+                    _ModernActionButton(
+                      icon: Icons.person,
                       tooltip: 'Xem trang cá nhân',
                       onPressed: () {
                         Navigator.of(context).push(
@@ -185,7 +184,8 @@ class _ContactsPageState extends State<ContactsPage>
                       },
                     ),
                     if (!entry.isMutual)
-                      TextButton(
+                      _ModernTextButton(
+                        label: 'Theo dõi lại',
                         onPressed: () async {
                           try {
                             await _followService.followUser(entry.uid);
@@ -193,10 +193,10 @@ class _ContactsPageState extends State<ContactsPage>
                             _showError(e);
                           }
                         },
-                        child: const Text('Theo dõi lại'),
                       )
                     else
-                      TextButton(
+                      _ModernTextButton(
+                        label: 'Bỏ theo dõi',
                         onPressed: () async {
                           try {
                             await _followService.unfollow(entry.uid);
@@ -204,11 +204,10 @@ class _ContactsPageState extends State<ContactsPage>
                             _showError(e);
                           }
                         },
-                        child: const Text('Bỏ theo dõi'),
                       ),
                   ],
                 ),
-                _FollowRequestList(
+                _ModernFollowRequestList(
                   stream: _followService.watchIncomingRequestEntries(uid),
                   emptyLabel: 'Không có yêu cầu theo dõi.',
                   onAccept: (otherUid) async {
@@ -226,7 +225,7 @@ class _ContactsPageState extends State<ContactsPage>
                     }
                   },
                 ),
-                _FollowRequestList(
+                _ModernFollowRequestList(
                   stream: _followService.watchSentRequestEntries(uid),
                   emptyLabel: 'Không có yêu cầu đã gửi.',
                   onAccept: (_) async {},
@@ -250,8 +249,8 @@ class _ContactsPageState extends State<ContactsPage>
   }
 }
 
-class _FollowList extends StatelessWidget {
-  const _FollowList({
+class _ModernFollowList extends StatelessWidget {
+  const _ModernFollowList({
     required this.stream,
     required this.emptyLabel,
     required this.actionBuilder,
@@ -263,55 +262,45 @@ class _FollowList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<List<FollowEntry>>(
-      stream: stream,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        if (snapshot.hasError) {
-          return _FirestoreIndexErrorView(error: snapshot.error);
-        }
-        final entries = snapshot.data ?? [];
-        if (entries.isEmpty) {
-          return Center(child: Text(emptyLabel));
-        }
-        return ListView.separated(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          itemCount: entries.length,
-          separatorBuilder: (_, __) => const Divider(height: 0),
-          itemBuilder: (context, index) {
-            final entry = entries[index];
-            final profile = entry.profile;
-            final title = profile?.displayName?.isNotEmpty == true
-                ? profile!.displayName!
-                : (profile?.email?.isNotEmpty == true
-                    ? profile!.email!
-                    : entry.uid);
-            final avatarUrl = profile?.photoUrl;
-            return ListTile(
-              leading: CircleAvatar(
-                backgroundImage:
-                    avatarUrl != null ? NetworkImage(avatarUrl) : null,
-                child: avatarUrl == null ? const Icon(Icons.person) : null,
-              ),
-              title: Text(title),
-              subtitle:
-                  entry.isMutual ? const Text('Theo dõi lẫn nhau') : null,
-              trailing: Wrap(
-                spacing: 4,
-                children: actionBuilder(entry),
-              ),
-            );
-          },
-        );
+    return RefreshIndicator(
+      onRefresh: () async {
+        await Future.delayed(const Duration(milliseconds: 500));
       },
+      color: AppColors.primaryPink,
+      child: StreamBuilder<List<FollowEntry>>(
+        stream: stream,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return _ShimmerLoadingList();
+          }
+          if (snapshot.hasError) {
+            return _FirestoreIndexErrorView(error: snapshot.error);
+          }
+          final entries = snapshot.data ?? [];
+          if (entries.isEmpty) {
+            return _EmptyStateView(label: emptyLabel);
+          }
+          return ListView.builder(
+            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+            itemCount: entries.length,
+            itemBuilder: (context, index) {
+              final entry = entries[index];
+              return _AnimatedFollowItem(
+                key: ValueKey(entry.uid),
+                entry: entry,
+                index: index,
+                actionBuilder: actionBuilder,
+              );
+            },
+          );
+        },
+      ),
     );
   }
 }
 
-class _FollowRequestList extends StatelessWidget {
-  const _FollowRequestList({
+class _ModernFollowRequestList extends StatelessWidget {
+  const _ModernFollowRequestList({
     required this.stream,
     required this.emptyLabel,
     required this.onAccept,
@@ -331,60 +320,43 @@ class _FollowRequestList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<List<FollowRequestEntry>>(
-      stream: stream,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        if (snapshot.hasError) {
-          return _FirestoreIndexErrorView(error: snapshot.error);
-        }
-        final entries = snapshot.data ?? [];
-        if (entries.isEmpty) {
-          return Center(child: Text(emptyLabel));
-        }
-        return ListView.separated(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          itemCount: entries.length,
-          separatorBuilder: (_, __) => const Divider(height: 0),
-          itemBuilder: (context, index) {
-            final entry = entries[index];
-            final profile = entry.profile;
-            final title = profile?.displayName?.isNotEmpty == true
-                ? profile!.displayName!
-                : (profile?.email?.isNotEmpty == true
-                    ? profile!.email!
-                    : entry.uid);
-            final avatarUrl = profile?.photoUrl;
-            return ListTile(
-              leading: CircleAvatar(
-                backgroundImage:
-                    avatarUrl != null ? NetworkImage(avatarUrl) : null,
-                child: avatarUrl == null ? const Icon(Icons.person) : null,
-              ),
-              title: Text(title),
-              subtitle: entry.createdAt != null
-                  ? Text('Gửi lúc ${entry.createdAt}')
-                  : null,
-              trailing: Wrap(
-                spacing: 8,
-                children: [
-                  if (showAcceptButton)
-                    TextButton(
-                      onPressed: () => onAccept(entry.uid),
-                      child: Text(acceptLabel),
-                    ),
-                  TextButton(
-                    onPressed: () => onDecline(entry.uid),
-                    child: Text(declineLabel),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
+    return RefreshIndicator(
+      onRefresh: () async {
+        await Future.delayed(const Duration(milliseconds: 500));
       },
+      color: AppColors.primaryPink,
+      child: StreamBuilder<List<FollowRequestEntry>>(
+        stream: stream,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return _ShimmerLoadingList();
+          }
+          if (snapshot.hasError) {
+            return _FirestoreIndexErrorView(error: snapshot.error);
+          }
+          final entries = snapshot.data ?? [];
+          if (entries.isEmpty) {
+            return _EmptyStateView(label: emptyLabel);
+          }
+          return ListView.builder(
+            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+            itemCount: entries.length,
+            itemBuilder: (context, index) {
+              final entry = entries[index];
+              return _AnimatedFollowRequestItem(
+                key: ValueKey(entry.uid),
+                entry: entry,
+                index: index,
+                onAccept: onAccept,
+                onDecline: onDecline,
+                acceptLabel: acceptLabel,
+                declineLabel: declineLabel,
+                showAcceptButton: showAcceptButton,
+              );
+            },
+          );
+        },
+      ),
     );
   }
 }
@@ -444,6 +416,733 @@ class _FirestoreIndexErrorView extends StatelessWidget {
     final regex = RegExp(r'https://[^\s]+');
     final match = regex.firstMatch(message);
     return match?.group(0);
+  }
+}
+
+// Shimmer Loading Widget
+class _ShimmerLoadingList extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+      itemCount: 6,
+      itemBuilder: (context, index) {
+        return _ShimmerItem(delay: Duration(milliseconds: index * 100));
+      },
+    );
+  }
+}
+
+class _ShimmerItem extends StatefulWidget {
+  const _ShimmerItem({required this.delay});
+
+  final Duration delay;
+
+  @override
+  State<_ShimmerItem> createState() => _ShimmerItemState();
+}
+
+class _ShimmerItemState extends State<_ShimmerItem>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    )..repeat(reverse: true);
+    Future.delayed(widget.delay, () {
+      if (mounted) _controller.forward();
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        return Opacity(
+          opacity: 0.3 + (_controller.value * 0.4),
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade300,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade400,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        height: 16,
+                        width: double.infinity,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade400,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        height: 12,
+                        width: 150,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade400,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+// Empty State Widget
+class _EmptyStateView extends StatefulWidget {
+  const _EmptyStateView({required this.label});
+
+  final String label;
+
+  @override
+  State<_EmptyStateView> createState() => _EmptyStateViewState();
+}
+
+class _EmptyStateViewState extends State<_EmptyStateView>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _fadeAnimation;
+  late Animation<double> _scaleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    );
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeIn),
+    );
+    _scaleAnimation = Tween<double>(begin: 0.8, end: 1.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeOut),
+    );
+    _controller.forward();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _fadeAnimation,
+      child: ScaleTransition(
+        scale: _scaleAnimation,
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryPink.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.people_outline,
+                    size: 80,
+                    color: AppColors.primaryPink.withOpacity(0.6),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  widget.label,
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey.shade700,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// Animated Follow Item
+class _AnimatedFollowItem extends StatefulWidget {
+  const _AnimatedFollowItem({
+    required Key key,
+    required this.entry,
+    required this.index,
+    required this.actionBuilder,
+  }) : super(key: key);
+
+  final FollowEntry entry;
+  final int index;
+  final List<Widget> Function(FollowEntry) actionBuilder;
+
+  @override
+  State<_AnimatedFollowItem> createState() => _AnimatedFollowItemState();
+}
+
+class _AnimatedFollowItemState extends State<_AnimatedFollowItem>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _fadeAnimation;
+  late Animation<Offset> _slideAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 400),
+    );
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeIn),
+    );
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0.3, 0),
+      end: Offset.zero,
+    ).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic),
+    );
+    Future.delayed(Duration(milliseconds: widget.index * 50), () {
+      if (mounted) _controller.forward();
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final profile = widget.entry.profile;
+    final title = profile?.displayName?.isNotEmpty == true
+        ? profile!.displayName!
+        : (profile?.email?.isNotEmpty == true
+            ? profile!.email!
+            : widget.entry.uid);
+    final avatarUrl = profile?.photoUrl;
+
+    return FadeTransition(
+      opacity: _fadeAnimation,
+      child: SlideTransition(
+        position: _slideAnimation,
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () {
+                HapticFeedback.lightImpact();
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => PublicProfilePage(uid: widget.entry.uid),
+                  ),
+                );
+              },
+              borderRadius: BorderRadius.circular(16),
+              child: Card(
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: BorderSide(
+                    color: Colors.grey.shade200,
+                    width: 1,
+                  ),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Row(
+                    children: [
+                      _ModernAvatar(
+                        avatarUrl: avatarUrl,
+                        uid: widget.entry.uid,
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Hero(
+                          tag: 'contact_title_${widget.entry.uid}',
+                          child: Text(
+                            title,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            // Cho phép tên hiển thị xuống nhiều dòng,
+                            // tránh bị cắt mất trên màn hình nhỏ.
+                            softWrap: true,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Wrap(
+                        spacing: 4,
+                        children: widget.actionBuilder(widget.entry),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// Animated Follow Request Item
+class _AnimatedFollowRequestItem extends StatefulWidget {
+  const _AnimatedFollowRequestItem({
+    required Key key,
+    required this.entry,
+    required this.index,
+    required this.onAccept,
+    required this.onDecline,
+    required this.acceptLabel,
+    required this.declineLabel,
+    required this.showAcceptButton,
+  }) : super(key: key);
+
+  final FollowRequestEntry entry;
+  final int index;
+  final Future<void> Function(String) onAccept;
+  final Future<void> Function(String) onDecline;
+  final String acceptLabel;
+  final String declineLabel;
+  final bool showAcceptButton;
+
+  @override
+  State<_AnimatedFollowRequestItem> createState() =>
+      _AnimatedFollowRequestItemState();
+}
+
+class _AnimatedFollowRequestItemState
+    extends State<_AnimatedFollowRequestItem>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _fadeAnimation;
+  late Animation<Offset> _slideAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 400),
+    );
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeIn),
+    );
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0.3, 0),
+      end: Offset.zero,
+    ).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic),
+    );
+    Future.delayed(Duration(milliseconds: widget.index * 50), () {
+      if (mounted) _controller.forward();
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final profile = widget.entry.profile;
+    final title = profile?.displayName?.isNotEmpty == true
+        ? profile!.displayName!
+        : (profile?.email?.isNotEmpty == true
+            ? profile!.email!
+            : widget.entry.uid);
+    final avatarUrl = profile?.photoUrl;
+
+    return FadeTransition(
+      opacity: _fadeAnimation,
+      child: SlideTransition(
+        position: _slideAnimation,
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          child: Card(
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(
+                color: Colors.grey.shade200,
+                width: 1,
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  _ModernAvatar(
+                    avatarUrl: avatarUrl,
+                    uid: widget.entry.uid,
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Hero(
+                          tag: 'request_title_${widget.entry.uid}',
+                          child: Text(
+                            title,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (widget.entry.createdAt != null) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            'Gửi lúc ${widget.entry.createdAt}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      if (widget.showAcceptButton)
+                        _ModernTextButton(
+                          label: widget.acceptLabel,
+                          isPrimary: true,
+                          onPressed: () => widget.onAccept(widget.entry.uid),
+                        ),
+                      _ModernTextButton(
+                        label: widget.declineLabel,
+                        onPressed: () => widget.onDecline(widget.entry.uid),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// Modern Avatar
+class _ModernAvatar extends StatelessWidget {
+  const _ModernAvatar({
+    required this.avatarUrl,
+    required this.uid,
+  });
+
+  final String? avatarUrl;
+  final String uid;
+
+  @override
+  Widget build(BuildContext context) {
+    return Hero(
+      tag: 'contact_avatar_$uid',
+      child: Container(
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: LinearGradient(
+            colors: [
+              AppColors.primaryPink,
+              AppColors.primaryPink.withOpacity(0.6),
+            ],
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.primaryPink.withOpacity(0.3),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        padding: const EdgeInsets.all(2),
+        child: CircleAvatar(
+          radius: 28,
+          backgroundImage: avatarUrl != null ? NetworkImage(avatarUrl!) : null,
+          child: avatarUrl == null
+              ? const Icon(Icons.person, color: AppColors.primaryPink)
+              : null,
+        ),
+      ),
+    );
+  }
+}
+
+
+// Modern Tab Bar
+class _ModernTabBar extends StatelessWidget implements PreferredSizeWidget {
+  const _ModernTabBar({required this.controller});
+
+  final TabController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            Colors.white,
+            AppColors.primaryPink.withOpacity(0.05),
+          ],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+        ),
+      ),
+      child: TabBar(
+        controller: controller,
+        labelColor: AppColors.primaryPink,
+        unselectedLabelColor: Colors.grey,
+        indicatorColor: AppColors.primaryPink,
+        indicatorWeight: 3,
+        tabs: const [
+          Tab(text: 'Đang theo dõi'),
+          Tab(text: 'Người theo dõi'),
+          Tab(text: 'Yêu cầu đến'),
+          Tab(text: 'Yêu cầu đã gửi'),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Size get preferredSize => const Size.fromHeight(48);
+}
+
+// Animated Search Button
+class _AnimatedSearchButton extends StatefulWidget {
+  const _AnimatedSearchButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  State<_AnimatedSearchButton> createState() => _AnimatedSearchButtonState();
+}
+
+class _AnimatedSearchButtonState extends State<_AnimatedSearchButton>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 200),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: (_) => _controller.forward(),
+      onTapUp: (_) {
+        _controller.reverse();
+        widget.onPressed();
+      },
+      onTapCancel: () => _controller.reverse(),
+      child: ScaleTransition(
+        scale: Tween<double>(begin: 1.0, end: 0.9).animate(
+          CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+        ),
+        child: IconButton(
+          icon: const Icon(Icons.search, color: AppColors.primaryPink),
+          tooltip: 'Tìm kiếm người dùng',
+          onPressed: widget.onPressed,
+        ),
+      ),
+    );
+  }
+}
+
+// Modern Action Button
+class _ModernActionButton extends StatefulWidget {
+  const _ModernActionButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onPressed;
+
+  @override
+  State<_ModernActionButton> createState() => _ModernActionButtonState();
+}
+
+class _ModernActionButtonState extends State<_ModernActionButton>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 150),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: (_) {
+        _controller.forward();
+        HapticFeedback.lightImpact();
+      },
+      onTapUp: (_) {
+        _controller.reverse();
+        widget.onPressed();
+      },
+      onTapCancel: () => _controller.reverse(),
+      child: ScaleTransition(
+        scale: Tween<double>(begin: 1.0, end: 0.85).animate(
+          CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+        ),
+        child: IconButton(
+          icon: Icon(widget.icon, color: AppColors.primaryPink),
+          tooltip: widget.tooltip,
+          onPressed: widget.onPressed,
+        ),
+      ),
+    );
+  }
+}
+
+// Modern Text Button
+class _ModernTextButton extends StatefulWidget {
+  const _ModernTextButton({
+    required this.label,
+    required this.onPressed,
+    this.isPrimary = false,
+  });
+
+  final String label;
+  final VoidCallback onPressed;
+  final bool isPrimary;
+
+  @override
+  State<_ModernTextButton> createState() => _ModernTextButtonState();
+}
+
+class _ModernTextButtonState extends State<_ModernTextButton>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 150),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: (_) {
+        _controller.forward();
+        HapticFeedback.lightImpact();
+      },
+      onTapUp: (_) {
+        _controller.reverse();
+        widget.onPressed();
+      },
+      onTapCancel: () => _controller.reverse(),
+      child: ScaleTransition(
+        scale: Tween<double>(begin: 1.0, end: 0.95).animate(
+          CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+        ),
+        child: TextButton(
+          onPressed: widget.onPressed,
+          style: TextButton.styleFrom(
+            foregroundColor: widget.isPrimary
+                ? AppColors.primaryPink
+                : Colors.grey.shade700,
+            backgroundColor: widget.isPrimary
+                ? AppColors.primaryPink.withOpacity(0.1)
+                : null,
+          ),
+          child: Text(widget.label),
+        ),
+      ),
+    );
   }
 }
 

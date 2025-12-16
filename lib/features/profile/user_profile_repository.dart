@@ -48,6 +48,7 @@ class UserProfile {
     this.displayName,
     this.displayNameLower,
     this.bio,
+    this.note,
     this.photoUrl,
     this.phoneNumber,
     this.email,
@@ -62,6 +63,7 @@ class UserProfile {
     this.themeColor,
     this.links = const [],
     this.pinnedPostIds = const [],
+    this.pinnedStoryIds = const [],
     this.showOnlineStatus = true,
     this.lastSeenVisibility = LastSeenVisibility.everyone,
     this.messagePermission = MessagePermission.everyone,
@@ -75,6 +77,8 @@ class UserProfile {
   final String? displayName;
   final String? displayNameLower;
   final String? bio;
+  /// Ghi chú ngắn hiển thị trên hồ sơ và đoạn chat (tương tự \"Đang phát\")
+  final String? note;
   final String? photoUrl;
   final String? phoneNumber;
   final String? email;
@@ -89,6 +93,7 @@ class UserProfile {
   final String? themeColor; // Hex color code (e.g., "#FF5733")
   final List<ProfileLink> links; // List of external links
   final List<String> pinnedPostIds; // List of pinned post IDs (max 3)
+  final List<String> pinnedStoryIds; // List of pinned story IDs (max 3)
   final bool showOnlineStatus; // Hiển thị trạng thái online/offline
   final LastSeenVisibility lastSeenVisibility; // Ai được xem last seen
   final MessagePermission messagePermission; // Ai được phép nhắn tin
@@ -102,6 +107,7 @@ class UserProfile {
       'displayName': displayName,
       'displayNameLower': displayNameLower ?? displayName?.toLowerCase(),
       'bio': bio,
+      'note': note,
       'photoUrl': photoUrl,
       'phoneNumber': phoneNumber,
       'email': email,
@@ -116,6 +122,7 @@ class UserProfile {
       'themeColor': themeColor,
       'links': links.map((link) => link.toMap()).toList(),
       'pinnedPostIds': pinnedPostIds,
+      'pinnedStoryIds': pinnedStoryIds,
       'showOnlineStatus': showOnlineStatus,
       'lastSeenVisibility': lastSeenVisibility.name,
       'messagePermission': messagePermission.name,
@@ -136,6 +143,11 @@ class UserProfile {
         .toList();
     final pinnedPostIdsData = data['pinnedPostIds'] as List<dynamic>? ?? [];
     final pinnedPostIds = pinnedPostIdsData
+        .map((item) => item.toString())
+        .where((item) => item.isNotEmpty)
+        .toList();
+    final pinnedStoryIdsData = data['pinnedStoryIds'] as List<dynamic>? ?? [];
+    final pinnedStoryIds = pinnedStoryIdsData
         .map((item) => item.toString())
         .where((item) => item.isNotEmpty)
         .toList();
@@ -164,6 +176,7 @@ class UserProfile {
       displayName: data['displayName'] as String?,
       displayNameLower: data['displayNameLower'] as String?,
       bio: data['bio'] as String?,
+      note: data['note'] as String?,
       photoUrl: data['photoUrl'] as String?,
       phoneNumber: data['phoneNumber'] as String?,
       email: data['email'] as String?,
@@ -178,6 +191,7 @@ class UserProfile {
       themeColor: data['themeColor'] as String?,
       links: links,
       pinnedPostIds: pinnedPostIds,
+      pinnedStoryIds: pinnedStoryIds,
       showOnlineStatus: (data['showOnlineStatus'] as bool?) ?? true,
       lastSeenVisibility: lastSeenVisibility,
       messagePermission: messagePermission,
@@ -238,6 +252,10 @@ class UserProfileRepository {
         'updatedAt': FieldValue.serverTimestamp(),
       });
     } else {
+      // Doc đã tồn tại - chỉ update các field được truyền vào và không overwrite displayName nếu đã có giá trị
+      final existingData = doc.data() ?? <String, dynamic>{};
+      final existingDisplayName = existingData['displayName'] as String?;
+      
       final update = <String, dynamic>{
         'updatedAt': FieldValue.serverTimestamp(),
       };
@@ -245,9 +263,27 @@ class UserProfileRepository {
         update['email'] = normalizedEmail;
         update['emailLower'] = normalizedEmail.toLowerCase();
       }
-      if (displayName != null) {
+      // Chỉ update displayName nếu:
+      // 1. displayName được truyền vào và không rỗng
+      // 2. VÀ (doc chưa có displayName HOẶC displayName truyền vào khác với giá trị hiện tại)
+      if (displayName != null && normalizedDisplayName.isNotEmpty) {
+        // Nếu doc chưa có displayName hoặc displayName hiện tại rỗng, thì update
+        // Nếu doc đã có displayName và khác với giá trị truyền vào, thì giữ nguyên giá trị trong doc
+        if (existingDisplayName == null || existingDisplayName.isEmpty) {
+          update['displayName'] = normalizedDisplayName;
+          update['displayNameLower'] = normalizedDisplayName.toLowerCase();
+        }
+        // Nếu displayName được truyền vào và khác với giá trị hiện tại, chỉ update nếu giá trị mới không phải là fallback
+        // (tức là không phải là email prefix hoặc uid prefix)
+        else if (normalizedDisplayName != existingDisplayName) {
+          // Chỉ update nếu giá trị mới không phải là fallback từ email/uid
+          final isFallback = normalizedDisplayName == (normalizedEmail?.split('@').first ?? 
+              uid.substring(0, uid.length.clamp(0, 10)));
+          if (!isFallback) {
         update['displayName'] = normalizedDisplayName;
         update['displayNameLower'] = normalizedDisplayName.toLowerCase();
+          }
+        }
       }
       if (phoneNumber != null) {
         update['phoneNumber'] = phoneNumber;
@@ -287,6 +323,7 @@ class UserProfileRepository {
     String? phoneNumber,
     bool removePhoto = false,
     String? bio,
+    String? note,
     bool? isPrivate,
     String? themeColor,
     List<ProfileLink>? links,
@@ -316,6 +353,9 @@ class UserProfileRepository {
     }
     if (bio != null) {
       data['bio'] = bio;
+    }
+    if (note != null) {
+      data['note'] = note;
     }
     if (isPrivate != null) {
       data['isPrivate'] = isPrivate;
@@ -431,6 +471,50 @@ class UserProfileRepository {
       'pinnedPostIds': uniquePostIds,
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
+  }
+
+  /// Cập nhật danh sách pinned stories (tối đa 3)
+  Future<void> updatePinnedStories(
+    String uid,
+    List<String> storyIds,
+  ) async {
+    if (storyIds.length > 3) {
+      throw Exception('Không thể ghim quá 3 story');
+    }
+    final uniqueIds = storyIds.toSet().toList();
+    if (uniqueIds.length != storyIds.length) {
+      throw Exception('Danh sách story không được trùng lặp');
+    }
+    await _collection.doc(uid).set({
+      'pinnedStoryIds': uniqueIds,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
+  Future<void> addPinnedStory(String uid, String storyId) async {
+    final profile = await fetchProfile(uid);
+    if (profile == null) {
+      throw Exception('Không tìm thấy profile');
+    }
+    final current = List<String>.from(profile.pinnedStoryIds);
+    if (current.contains(storyId)) {
+      throw Exception('Story đã được ghim');
+    }
+    if (current.length >= 3) {
+      throw Exception('Đã đạt giới hạn 3 story ghim');
+    }
+    current.add(storyId);
+    await updatePinnedStories(uid, current);
+  }
+
+  Future<void> removePinnedStory(String uid, String storyId) async {
+    final profile = await fetchProfile(uid);
+    if (profile == null) {
+      throw Exception('Không tìm thấy profile');
+    }
+    final current = List<String>.from(profile.pinnedStoryIds);
+    current.remove(storyId);
+    await updatePinnedStories(uid, current);
   }
 
   /// Thêm một post vào danh sách pinned (nếu chưa đủ 3)

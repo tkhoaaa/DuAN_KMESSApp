@@ -180,9 +180,9 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
               TextButton(
                 onPressed: () {
                   Navigator.of(context).pushReplacement(
-                    MaterialPageRoute(
-                      builder: (_) => const LoginScreen(),
-                    ),
+                        MaterialPageRoute(
+                          builder: (_) => const LoginScreen(),
+                        ),
                   );
                 },
                 child: const Text('Quay lại đăng nhập'),

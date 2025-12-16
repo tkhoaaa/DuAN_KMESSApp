@@ -4,9 +4,13 @@ import 'register_screen.dart';
 import 'auth_repository.dart';
 import 'pages/forgot_password_page.dart';
 import 'pages/add_phone_page.dart';
+import 'saved_accounts_repository.dart';
+import 'saved_credentials_repository.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+  const LoginScreen({super.key, this.initialIdentifier});
+
+  final String? initialIdentifier;
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -20,6 +24,15 @@ class _LoginScreenState extends State<LoginScreen> {
   bool isBusy = false;
   bool _obscurePassword = true;
   String? errorText;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialIdentifier != null &&
+        widget.initialIdentifier!.isNotEmpty) {
+      emailController.text = widget.initialIdentifier!;
+    }
+  }
 
   Future<void> _maybePromptAddPhone() async {
     final user = authRepository.currentUser();
@@ -92,10 +105,21 @@ class _LoginScreenState extends State<LoginScreen> {
     final identifier = emailController.text.trim();
     try {
       if (_isEmail(identifier)) {
-      await authRepository.signInWithEmail(
+        await authRepository.signInWithEmail(
           identifier,
-        passwordController.text,
-      );
+          passwordController.text,
+        );
+
+        // Sau khi đăng nhập thành công: lưu thông tin tài khoản + mật khẩu để chuyển đổi nhanh
+        final user = authRepository.currentUser();
+        if (user != null) {
+          await SavedAccountsRepository.instance.saveAccountFromUser(user);
+          await SavedCredentialsRepository.instance.savePassword(
+            uid: user.uid,
+            password: passwordController.text,
+          );
+        }
+
         await _maybePromptAddPhone();
       }
     } on FirebaseAuthException catch (e) {

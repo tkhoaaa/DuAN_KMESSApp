@@ -163,6 +163,29 @@ class StoryRepository {
     });
   }
 
+  /// Stream toàn bộ story (kể cả đã hết hạn) của user để làm kho lưu trữ
+  Stream<List<Story>> watchUserStoryArchive(String uid, {int limit = 200}) {
+    return _storiesCollection(uid)
+        .orderBy('createdAt', descending: true)
+        .limit(limit)
+        .snapshots()
+        .map((snap) => snap.docs.map(Story.fromDoc).toList());
+  }
+
+  /// Đăng lại một story trong kho lưu trữ (tạo story mới với media cũ)
+  Future<void> repostStory({
+    required String authorUid,
+    required Story story,
+  }) async {
+    await createStory(
+      authorUid: authorUid,
+      mediaUrl: story.mediaUrl,
+      type: story.type,
+      thumbnailUrl: story.thumbnailUrl,
+      text: story.text,
+    );
+  }
+
   /// Ghi nhận viewer cho story (best effort)
   Future<void> addViewer({
     required String authorUid,

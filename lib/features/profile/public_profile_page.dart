@@ -13,8 +13,10 @@ import '../share/services/share_service.dart';
 import '../posts/repositories/post_repository.dart';
 import '../posts/models/post.dart';
 import '../posts/models/post_media.dart';
+import '../posts/pages/post_create_page.dart';
 import '../posts/pages/post_permalink_page.dart';
 import 'user_profile_repository.dart';
+import '../stories/pages/story_create_page.dart';
 
 class PublicProfilePage extends StatefulWidget {
   const PublicProfilePage({
@@ -34,8 +36,6 @@ class _PublicProfilePageState extends State<PublicProfilePage> {
   List<Post> _pinnedPosts = [];
   List<Post> _allPosts = [];
   bool _isLoadingPosts = false;
-  bool _isLoadingPinned = false;
-  bool? _isFollowing;
 
   @override
   void initState() {
@@ -45,16 +45,11 @@ class _PublicProfilePageState extends State<PublicProfilePage> {
   }
 
   Future<void> _loadPinnedPosts() async {
-    setState(() {
-      _isLoadingPinned = true;
-    });
-
     try {
       final profile = await userProfileRepository.fetchProfile(widget.uid);
       if (profile == null || profile.pinnedPostIds.isEmpty) {
         setState(() {
           _pinnedPosts = [];
-          _isLoadingPinned = false;
         });
         return;
       }
@@ -71,12 +66,9 @@ class _PublicProfilePageState extends State<PublicProfilePage> {
 
       setState(() {
         _pinnedPosts = posts;
-        _isLoadingPinned = false;
       });
     } catch (e) {
-      setState(() {
-        _isLoadingPinned = false;
-      });
+      // ignore
     }
   }
 
@@ -101,6 +93,80 @@ class _PublicProfilePageState extends State<PublicProfilePage> {
       setState(() {
         _isLoadingPosts = false;
       });
+    }
+  }
+
+  Future<void> _showCreateChooser() async {
+    final action = await showModalBottomSheet<_CreateAction>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.history_edu),
+              title: const Text('Đăng story'),
+              onTap: () => Navigator.pop(context, _CreateAction.story),
+            ),
+            ListTile(
+              leading: const Icon(Icons.add_photo_alternate_outlined),
+              title: const Text('Thêm bài viết'),
+              onTap: () => Navigator.pop(context, _CreateAction.post),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (!mounted || action == null) return;
+    switch (action) {
+      case _CreateAction.story:
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const StoryCreatePage()),
+        );
+        break;
+      case _CreateAction.post:
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const PostCreatePage()),
+        );
+        break;
+    }
+  }
+
+  Future<void> _showAccountMenu() async {
+    final action = await showModalBottomSheet<_AccountMenuAction>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.switch_account),
+              title: const Text('Chuyển tài khoản'),
+              onTap: () => Navigator.pop(context, _AccountMenuAction.switchAccount),
+            ),
+            ListTile(
+              leading: const Icon(Icons.logout),
+              title: const Text('Đăng xuất'),
+              onTap: () => Navigator.pop(context, _AccountMenuAction.logout),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (!mounted || action == null) return;
+    switch (action) {
+      case _AccountMenuAction.switchAccount:
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Tính năng chuyển tài khoản sẽ được cập nhật.')),
+        );
+        break;
+      case _AccountMenuAction.logout:
+        await authRepository.signOut();
+        if (!mounted) return;
+        Navigator.of(context).popUntil((route) => route.isFirst);
+        break;
     }
   }
 
@@ -223,117 +289,20 @@ class _PublicProfilePageState extends State<PublicProfilePage> {
                       ? _parseColor(profile.themeColor!)
                       : null;
 
-                  return Column(
-                    children: [
-                      const SizedBox(height: 24),
-                      // Avatar with theme color border
-                      Container(
-                        decoration: themeColor != null
-                            ? BoxDecoration(
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: themeColor,
-                                  width: 3,
-                                ),
-                              )
-                            : null,
-                        child: CircleAvatar(
-                          radius: 48,
-                          backgroundImage: profile.photoUrl != null
-                              ? NetworkImage(profile.photoUrl!)
-                              : null,
-                          child: profile.photoUrl == null
-                              ? const Icon(Icons.person, size: 48)
-                              : null,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        displayName,
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      // Hiển thị status với privacy check
-                      if (currentUid == widget.uid)
-                        Text(
-                          statusText,
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
-                          ),
-                        )
-                      else if (currentUid != null)
-                        StreamBuilder<FollowState>(
-                          stream: _followService.watchFollowState(
-                            currentUid,
-                            widget.uid,
-                          ),
-                          builder: (context, followSnapshot) {
-                            final followState = followSnapshot.data ??
-                                const FollowState(
-                                  status: FollowStatus.none,
-                                  isTargetPrivate: false,
-                                );
-                            final isFollowing =
-                                followState.status == FollowStatus.following;
-
-                            // Tính toán statusText dựa trên privacy settings
-                            String displayStatus = 'Ngoại tuyến';
-                            if (profile.showOnlineStatus && profile.isOnline) {
-                              displayStatus = 'Đang hoạt động';
-                            } else if (profile.lastSeen != null) {
-                              bool canViewLastSeen = false;
-                              switch (profile.lastSeenVisibility) {
-                                case LastSeenVisibility.everyone:
-                                  canViewLastSeen = true;
-                                  break;
-                                case LastSeenVisibility.followers:
-                                  canViewLastSeen = isFollowing;
-                                  break;
-                                case LastSeenVisibility.nobody:
-                                  canViewLastSeen = false;
-                                  break;
-                              }
-
-                              if (canViewLastSeen) {
-                                final diff =
-                                    DateTime.now().difference(profile.lastSeen!);
-                                if (diff.inMinutes < 1) {
-                                  displayStatus = 'Vừa mới hoạt động';
-                                } else if (diff.inHours < 1) {
-                                  displayStatus =
-                                      'Hoạt động ${diff.inMinutes} phút trước';
-                                } else if (diff.inDays < 1) {
-                                  displayStatus =
-                                      'Hoạt động ${diff.inHours} giờ trước';
-                                } else {
-                                  displayStatus =
-                                      'Hoạt động ${diff.inDays} ngày trước';
-                                }
-                              }
-                            }
-
-                            return Text(
-                              displayStatus,
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSurfaceVariant,
-                              ),
-                            );
-                          },
-                        )
-                      else
-                        Text(
-                          statusText,
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
-                          ),
+                  return SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _InstaProfileHeader(
+                          displayName: displayName,
+                          profile: profile,
+                          statusText: statusText,
+                          currentUid: currentUid,
+                          followService: _followService,
+                          themeColor: themeColor,
+                          onAddPressed: _showCreateChooser,
+                          onAccountMenuPressed: _showAccountMenu,
                         ),
                       if (blockedByTarget)
                         _BlockedInfoBanner(
@@ -543,14 +512,205 @@ class _PublicProfilePageState extends State<PublicProfilePage> {
                             },
                           ),
                       ],
+                      // end children
                     ],
-                  );
-                },
-              );
+                  ),
+                );
+              },
+            );
             },
           );
         },
       ),
+    );
+  }
+}
+
+enum _CreateAction { story, post }
+enum _AccountMenuAction { switchAccount, logout }
+
+class _InstaProfileHeader extends StatelessWidget {
+  const _InstaProfileHeader({
+    required this.displayName,
+    required this.profile,
+    required this.statusText,
+    required this.currentUid,
+    required this.followService,
+    required this.onAddPressed,
+    required this.onAccountMenuPressed,
+    this.themeColor,
+  });
+
+  final String displayName;
+  final UserProfile profile;
+  final String statusText;
+  final String? currentUid;
+  final FollowService followService;
+  final VoidCallback onAddPressed;
+  final VoidCallback onAccountMenuPressed;
+  final Color? themeColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Center(
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Icon ảo bên trái để cân đối layout với mũi tên bên phải
+              IgnorePointer(
+                child: Opacity(
+                  opacity: 0,
+                  child: IconButton(
+                    onPressed: () {},
+                    icon: const Icon(Icons.keyboard_arrow_down, size: 22),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    splashRadius: 20,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                displayName,
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(width: 6),
+              IconButton(
+                onPressed: onAccountMenuPressed,
+                icon: const Icon(Icons.keyboard_arrow_down, size: 22),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                splashRadius: 20,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        Center(
+          child: Container(
+            decoration: themeColor != null
+                ? BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: themeColor!,
+                      width: 3,
+                    ),
+                  )
+                : null,
+            child: CircleAvatar(
+              radius: 48,
+              backgroundImage:
+                  profile.photoUrl != null ? NetworkImage(profile.photoUrl!) : null,
+              child: profile.photoUrl == null
+                  ? const Icon(Icons.person, size: 48)
+                  : null,
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Center(
+          child: Text(
+            profile.displayName ?? displayName,
+            style: const TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+        const SizedBox(height: 4),
+        // Ghi chú hồ sơ (nếu có)
+        if (profile.note != null && profile.note!.isNotEmpty) ...[
+          Center(
+            child: Text(
+              profile.note!,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 13,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
+        ],
+        Center(
+          child: currentUid == profile.uid
+              ? Text(
+                  statusText,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                )
+              : currentUid != null
+                  ? StreamBuilder<FollowState>(
+                      stream: followService.watchFollowState(
+                        currentUid!,
+                        profile.uid,
+                      ),
+                      builder: (context, followSnapshot) {
+                        final followState = followSnapshot.data ??
+                            const FollowState(
+                              status: FollowStatus.none,
+                              isTargetPrivate: false,
+                            );
+                        final isFollowing = followState.status == FollowStatus.following;
+
+                        String displayStatus = 'Ngoại tuyến';
+                        if (profile.showOnlineStatus && profile.isOnline) {
+                          displayStatus = 'Đang hoạt động';
+                        } else if (profile.lastSeen != null) {
+                          bool canViewLastSeen = false;
+                          switch (profile.lastSeenVisibility) {
+                            case LastSeenVisibility.everyone:
+                              canViewLastSeen = true;
+                              break;
+                            case LastSeenVisibility.followers:
+                              canViewLastSeen = isFollowing;
+                              break;
+                            case LastSeenVisibility.nobody:
+                              canViewLastSeen = false;
+                              break;
+                          }
+
+                          if (canViewLastSeen) {
+                            final diff = DateTime.now().difference(profile.lastSeen!);
+                            if (diff.inMinutes < 1) {
+                              displayStatus = 'Vừa mới hoạt động';
+                            } else if (diff.inHours < 1) {
+                              displayStatus = 'Hoạt động ${diff.inMinutes} phút trước';
+                            } else if (diff.inDays < 1) {
+                              displayStatus = 'Hoạt động ${diff.inHours} giờ trước';
+                            } else {
+                              displayStatus = 'Hoạt động ${diff.inDays} ngày trước';
+                            }
+                          }
+                        }
+
+                        return Text(
+                          displayStatus,
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                        );
+                      },
+                    )
+                  : Text(
+                      statusText,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+        ),
+      ],
     );
   }
 }

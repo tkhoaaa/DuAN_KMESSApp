@@ -944,7 +944,28 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
                           : (profile?.email?.isNotEmpty == true
                               ? profile!.email!
                               : widget.otherUid);
-                      return Text(title);
+                      final note = profile?.note;
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          if (note != null && note.isNotEmpty)
+                            Text(
+                              note,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(fontStyle: FontStyle.italic),
+                            ),
+                        ],
+                      );
                     },
                   ),
         actions: [
