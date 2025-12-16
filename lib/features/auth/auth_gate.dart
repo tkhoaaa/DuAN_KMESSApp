@@ -51,7 +51,11 @@ class AuthGate extends StatelessWidget {
             },
           );
         }
-        return const _SignedInHomeWithBanCheck();
+        // Key theo uid để khi đổi user thì home được rebuild hoàn toàn (reset state)
+        return KeyedSubtree(
+          key: ValueKey(user.uid),
+          child: const _SignedInHomeWithBanCheck(),
+        );
       },
     );
   }
@@ -102,14 +106,17 @@ class _SignedInHomeWithBanCheck extends StatelessWidget {
           }
         }
 
-        return const _SignedInHome();
+        // Gắn key theo uid để _SignedInHomeState được tạo lại khi đổi user
+        return _SignedInHome(
+          key: ValueKey(user.uid),
+        );
       },
     );
   }
 }
 
 class _SignedInHome extends StatefulWidget {
-  const _SignedInHome();
+  const _SignedInHome({super.key});
 
   @override
   State<_SignedInHome> createState() => _SignedInHomeState();
