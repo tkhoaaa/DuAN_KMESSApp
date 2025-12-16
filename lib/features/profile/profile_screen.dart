@@ -23,6 +23,10 @@ import '../settings/pages/privacy_settings_page.dart';
 import '../auth/pages/change_password_page.dart';
 import '../stories/pages/story_create_page.dart';
 import '../posts/pages/post_create_page.dart';
+import '../posts/pages/post_permalink_page.dart';
+import '../posts/repositories/post_repository.dart';
+import '../posts/models/post.dart';
+import 'widgets/profile_posts_widgets.dart';
 import '../../theme/colors.dart';
 
 enum _ProfileMenuAction {
@@ -55,6 +59,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final TextEditingController noteController = TextEditingController();
   final ImagePicker _picker = ImagePicker();
   final AdminRepository _adminRepository = AdminRepository();
+  final PostRepository _postRepository = PostRepository();
   bool isSaving = false;
   bool isUploading = false;
   bool _loadedInitial = false;
@@ -63,12 +68,82 @@ class _ProfileScreenState extends State<ProfileScreen> {
   List<ProfileLink> _links = [];
   bool _isAdmin = false;
   late final FollowService _followService;
+  List<Post> _pinnedPosts = [];
+  List<Post> _allPosts = [];
+  bool _isLoadingPosts = false;
 
   @override
   void initState() {
     super.initState();
     _followService = FollowService();
     _checkAdminStatus();
+    _loadPinnedPosts();
+    _loadAllPosts();
+  }
+
+  Future<void> _loadPinnedPosts() async {
+    try {
+      final user = authRepository.currentUser();
+      if (user == null) return;
+      final profile = await userProfileRepository.fetchProfile(user.uid);
+      if (profile == null || profile.pinnedPostIds.isEmpty) {
+        if (mounted) {
+          setState(() {
+            _pinnedPosts = [];
+          });
+        }
+        return;
+      }
+
+      final posts = <Post>[];
+      for (final postId in profile.pinnedPostIds) {
+        try {
+          final post = await _postRepository.watchPost(postId).first;
+          posts.add(post);
+        } catch (_) {
+          continue;
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _pinnedPosts = posts;
+        });
+      }
+    } catch (_) {
+      // ignore
+    }
+  }
+
+  Future<void> _loadAllPosts() async {
+    final user = authRepository.currentUser();
+    if (user == null) return;
+
+    setState(() {
+      _isLoadingPosts = true;
+    });
+
+    try {
+      final pageResult = await _postRepository.fetchPostsByAuthor(
+        authorUid: user.uid,
+        limit: 50,
+      );
+
+      final posts = pageResult.docs.map((doc) => Post.fromDoc(doc)).toList();
+
+      if (mounted) {
+        setState(() {
+          _allPosts = posts;
+          _isLoadingPosts = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _isLoadingPosts = false;
+        });
+      }
+    }
   }
 
   Future<void> _checkAdminStatus() async {
@@ -566,6 +641,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
           style: TextStyle(color: AppColors.primaryPink),
         ),
         iconTheme: const IconThemeData(color: AppColors.primaryPink),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.menu),
+            onPressed: () {
+              _showProfileOptionsSheet(user);
+            },
+          ),
+        ],
       ),
       body: StreamBuilder<UserProfile?>(
         stream: userProfileRepository.watchProfile(user.uid),
@@ -834,41 +917,107 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                 ),
                 const SizedBox(height: 24),
-                // Menu options
-                Card(
-                  child: Column(
+                // Pinned posts section
+                if (_pinnedPosts.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 4),
+                    child: Row(
+                      children: [
+                        Icon(Icons.push_pin, size: 20, color: Colors.orange),
+                        SizedBox(width: 8),
+                        Text(
+                          'Bài viết đã ghim',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    height: 120,
+                    child: ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      itemCount: _pinnedPosts.length,
+                      itemBuilder: (context, index) {
+                        final post = _pinnedPosts[index];
+                        return ProfilePinnedPostItem(
+                          post: post,
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => PostPermalinkPage(postId: post.id),
+                              ),
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+                // Posts grid section
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 4),
+                  child: Row(
                     children: [
-                      ListTile(
-                        leading: const Icon(Icons.privacy_tip, color: AppColors.primaryPink),
-                        title: const Text('Quyền riêng tư'),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: () => _handleMenuAction(_ProfileMenuAction.privacy),
-                      ),
-                      ListTile(
-                        leading: const Icon(Icons.bookmark, color: AppColors.primaryPink),
-                        title: const Text('Đã lưu'),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: () => _handleMenuAction(_ProfileMenuAction.savedPosts),
-                      ),
-                      if (user.email != null &&
-                          user.providerData.any((p) => p.providerId == 'password'))
-                        ListTile(
-                          leading: const Icon(Icons.lock, color: AppColors.primaryPink),
-                          title: const Text('Đổi mật khẩu'),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () => _handleMenuAction(_ProfileMenuAction.changePassword),
+                      Icon(Icons.grid_on, size: 20),
+                      SizedBox(width: 8),
+                      Text(
+                        'Bài viết',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
                         ),
-                      if (_isAdmin)
-                        ListTile(
-                          leading: const Icon(Icons.admin_panel_settings, color: AppColors.primaryPink),
-                          title: const Text('Admin Dashboard'),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () => _handleMenuAction(_ProfileMenuAction.adminDashboard),
-                        ),
+                      ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 8),
+                if (_isLoadingPosts)
+                  const Padding(
+                    padding: EdgeInsets.all(32),
+                    child: Center(child: CircularProgressIndicator()),
+                  )
+                else if (_allPosts.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.all(32),
+                    child: Center(
+                      child: Text(
+                        'Chưa có bài viết nào',
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                    ),
+                  )
+                else
+                  GridView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    padding: const EdgeInsets.all(8),
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 3,
+                      crossAxisSpacing: 4,
+                      mainAxisSpacing: 4,
+                    ),
+                    itemCount: _allPosts.length,
+                    itemBuilder: (context, index) {
+                      final post = _allPosts[index];
+                      return ProfilePostGridItem(
+                        post: post,
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => PostPermalinkPage(postId: post.id),
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  ),
                 // Follow requests section
                 if (profile != null && _isPrivate)
                   StreamBuilder<List<FollowRequestEntry>>(
@@ -1231,6 +1380,61 @@ class _ProfileScreenState extends State<ProfileScreen> {
         await _confirmLogoutAndMaybeSave(currentUser: authRepository.currentUser());
         break;
     }
+  }
+
+  void _showProfileOptionsSheet(User user) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const ListTile(
+              title: Text(
+                'Tùy chọn tài khoản',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.privacy_tip, color: AppColors.primaryPink),
+              title: const Text('Quyền riêng tư'),
+              onTap: () {
+                Navigator.pop(context);
+                _handleMenuAction(_ProfileMenuAction.privacy);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.bookmark, color: AppColors.primaryPink),
+              title: const Text('Đã lưu'),
+              onTap: () {
+                Navigator.pop(context);
+                _handleMenuAction(_ProfileMenuAction.savedPosts);
+              },
+            ),
+            if (user.email != null &&
+                user.providerData.any((p) => p.providerId == 'password'))
+              ListTile(
+                leading: const Icon(Icons.lock, color: AppColors.primaryPink),
+                title: const Text('Đổi mật khẩu'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _handleMenuAction(_ProfileMenuAction.changePassword);
+                },
+              ),
+            if (_isAdmin)
+              ListTile(
+                leading:
+                    const Icon(Icons.admin_panel_settings, color: AppColors.primaryPink),
+                title: const Text('Admin Dashboard'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _handleMenuAction(_ProfileMenuAction.adminDashboard);
+                },
+              ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

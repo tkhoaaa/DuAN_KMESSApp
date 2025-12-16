@@ -15,6 +15,7 @@ import '../posts/models/post.dart';
 import '../posts/models/post_media.dart';
 import '../posts/pages/post_create_page.dart';
 import '../posts/pages/post_permalink_page.dart';
+import '../posts/pages/post_video_page.dart';
 import 'user_profile_repository.dart';
 import '../stories/pages/story_create_page.dart';
 
@@ -1191,9 +1192,19 @@ class _PinnedPostItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final firstMedia = post.media.isNotEmpty ? post.media.first : null;
     final isImage = firstMedia?.type == PostMediaType.image;
+    final isVideo = firstMedia?.type == PostMediaType.video;
 
     return GestureDetector(
       onTap: onTap,
+      onLongPress: () {
+        if (isVideo == true && firstMedia != null) {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => PostVideoPage(videoUrl: firstMedia.url),
+            ),
+          );
+        }
+      },
       child: Container(
         width: 120,
         margin: const EdgeInsets.symmetric(horizontal: 4),
@@ -1219,11 +1230,17 @@ class _PinnedPostItem extends StatelessWidget {
                             child: const Icon(Icons.broken_image),
                           ),
                         )
-                      : Container(
+                      : Image.network(
+                          firstMedia.thumbnailUrl ?? firstMedia.url,
                           width: 120,
                           height: 120,
-                          color: Colors.grey[300],
-                          child: const Icon(Icons.videocam, size: 32),
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => Container(
+                            width: 120,
+                            height: 120,
+                            color: Colors.grey[300],
+                            child: const Icon(Icons.videocam, size: 32),
+                          ),
                         ))
                   : Container(
                       width: 120,
@@ -1232,6 +1249,16 @@ class _PinnedPostItem extends StatelessWidget {
                       child: const Icon(Icons.image, size: 32),
                     ),
             ),
+            if (isVideo == true)
+              const Positioned(
+                bottom: 4,
+                right: 4,
+                child: Icon(
+                  Icons.play_circle_filled,
+                  color: Colors.white,
+                  size: 24,
+                ),
+              ),
             const Positioned(
               top: 4,
               right: 4,
@@ -1274,6 +1301,15 @@ class _PostGridItem extends StatelessWidget {
 
     return GestureDetector(
       onTap: onTap,
+      onLongPress: () {
+        if (isVideo) {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => PostVideoPage(videoUrl: firstMedia.url),
+            ),
+          );
+        }
+      },
       child: Stack(
         fit: StackFit.expand,
         children: [
