@@ -1,4 +1,5 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'register_screen.dart';
 import 'auth_repository.dart';
@@ -159,6 +160,18 @@ class _LoginScreenState extends State<LoginScreen> {
     _setBusy(true);
     try {
       await authRepository.signInWithGoogle();
+      
+      // Lưu tài khoản sau khi đăng nhập thành công
+      final user = authRepository.currentUser();
+      if (user != null) {
+        try {
+          await SavedAccountsRepository.instance.saveAccountFromUser(user);
+        } catch (e) {
+          // Ignore errors khi lưu tài khoản
+          debugPrint('Error saving account after Google sign in: $e');
+        }
+      }
+      
       // Success - navigation handled by auth state listener
       await _maybePromptAddPhone();
     } on FirebaseAuthException catch (e) {
@@ -233,9 +246,22 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _showError(String? message) {
     if (!mounted || message == null) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    // Sử dụng SchedulerBinding để đảm bảo context vẫn valid
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final messenger = ScaffoldMessenger.maybeOf(context);
+      if (messenger != null) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(message),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
+      }
+    });
   }
 
   @override

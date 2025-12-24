@@ -54,7 +54,20 @@ class FirebaseAuthRepository implements AuthRepository {
   User? currentUser() => _auth.currentUser;
 
   @override
-  Future<void> signOut() => _auth.signOut();
+  Future<void> signOut() async {
+    // Sign out Google Sign In nếu đang đăng nhập bằng Google
+    try {
+      await _google.signOut();
+    } catch (e) {
+      // Ignore errors khi sign out Google (có thể chưa đăng nhập bằng Google)
+      if (kDebugMode) {
+        print('Error signing out from Google: $e');
+      }
+    }
+    
+    // Sign out Firebase Auth
+    await _auth.signOut();
+  }
 
   @override
   Future<void> signInWithEmail(String email, String password) =>

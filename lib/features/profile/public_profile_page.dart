@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../auth/auth_repository.dart';
+import '../auth/saved_accounts_repository.dart';
 import '../chat/pages/chat_detail_page.dart';
 import '../chat/repositories/chat_repository.dart';
 import '../follow/models/follow_state.dart';
@@ -168,6 +169,16 @@ class _PublicProfilePageState extends State<PublicProfilePage> {
         );
         break;
       case _AccountMenuAction.logout:
+        final user = authRepository.currentUser();
+        if (user != null) {
+          // Lưu tài khoản trước khi đăng xuất
+          try {
+            await SavedAccountsRepository.instance.saveAccountFromUser(user);
+          } catch (e) {
+            // Ignore errors khi lưu tài khoản
+            debugPrint('Error saving account before logout: $e');
+          }
+        }
         await authRepository.signOut();
         if (!mounted) return;
         Navigator.of(context).popUntil((route) => route.isFirst);
