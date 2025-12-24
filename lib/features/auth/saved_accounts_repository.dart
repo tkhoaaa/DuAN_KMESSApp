@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../profile/user_profile_repository.dart';
 
 class SavedAccount {
   SavedAccount({
@@ -70,11 +71,25 @@ class SavedAccountsRepository {
   Future<void> saveAccountFromUser(User user) async {
     final providerId =
         user.providerData.isNotEmpty ? user.providerData.first.providerId : 'password';
+    
+    // Lấy avatar từ profile nếu có, nếu không mới lấy từ Firebase user
+    // Điều này đảm bảo avatar đã thay đổi bởi user sẽ được lưu đúng
+    String? photoUrl = user.photoURL;
+    try {
+      final profile = await userProfileRepository.fetchProfile(user.uid);
+      if (profile != null && profile.photoUrl != null && profile.photoUrl!.isNotEmpty) {
+        photoUrl = profile.photoUrl;
+      }
+    } catch (e) {
+      // Nếu không lấy được profile, dùng avatar từ Firebase user
+      // Ignore error
+    }
+    
     final account = SavedAccount(
       uid: user.uid,
       displayName: user.displayName,
       email: user.email,
-      photoUrl: user.photoURL,
+      photoUrl: photoUrl,
       providerId: providerId,
       lastUsedAt: DateTime.now(),
     );

@@ -42,7 +42,11 @@ class FirebaseAuthRepository implements AuthRepository {
     FirebaseAuth? firebaseAuth,
     GoogleSignIn? googleSignIn,
   })  : _auth = firebaseAuth ?? FirebaseAuth.instance,
-        _google = googleSignIn ?? GoogleSignIn();
+        _google = googleSignIn ?? GoogleSignIn(
+          scopes: ['email', 'profile'],
+          // Force account picker để đảm bảo user chọn đúng account
+          forceCodeForRefreshToken: true,
+        );
 
   final FirebaseAuth _auth;
   final GoogleSignIn _google;
@@ -80,71 +84,153 @@ class FirebaseAuthRepository implements AuthRepository {
   @override
   Future<void> signInWithGoogle() async {
     try {
+      // Sign out trước để đảm bảo clean state
+      try {
+        await _google.signOut();
+      } catch (e) {
+        // Ignore errors khi sign out (có thể chưa đăng nhập)
+        if (kDebugMode) {
+          print('Note: Error during pre-signout (can be ignored): $e');
+        }
+      }
+      
+      // Thực hiện sign in
       final user = await _google.signIn();
       if (user == null) {
         // User cancelled - không phải lỗi
         return;
       }
       
-      final auth = await user.authentication;
-      if (auth.accessToken == null || auth.idToken == null) {
+      // Lấy authentication tokens với retry logic
+      GoogleSignInAuthentication? auth;
+      int retryCount = 0;
+      const maxRetries = 2;
+      
+      while (retryCount <= maxRetries) {
+        try {
+          auth = await user.authentication;
+          if (auth.accessToken != null && auth.idToken != null) {
+            break; // Thành công
+          }
+        } catch (e) {
+          if (kDebugMode) {
+            print('Error getting authentication (attempt ${retryCount + 1}): $e');
+          }
+        }
+        
+        if (retryCount < maxRetries) {
+          // Đợi một chút trước khi retry
+          await Future.delayed(Duration(milliseconds: 500 * (retryCount + 1)));
+          retryCount++;
+        } else {
+          // Thử request lại authentication
+          try {
+            auth = await user.authentication;
+          } catch (e) {
+            if (kDebugMode) {
+              print('Final attempt to get authentication failed: $e');
+            }
+          }
+          break;
+        }
+      }
+      
+      if (auth == null || auth.accessToken == null || auth.idToken == null) {
+        // Kiểm tra xem có phải lỗi cấu hình không
+        final errorDetails = auth == null 
+            ? 'Không thể lấy thông tin xác thực từ Google. '
+            : 'Thiếu accessToken hoặc idToken. ';
+        
         throw FirebaseAuthException(
           code: 'google-signin-failed',
-          message: 'Không thể lấy thông tin xác thực từ Google',
+          message: '$errorDetails\n\n'
+              'Vui lòng kiểm tra:\n'
+              '1. SHA-1 fingerprint đã được thêm vào Firebase Console\n'
+              '2. google-services.json đã được cập nhật\n'
+              '3. OAuth client ID đã được cấu hình đúng',
         );
       }
       
+      // Tạo credential và sign in với Firebase
       final credential = GoogleAuthProvider.credential(
         accessToken: auth.accessToken,
         idToken: auth.idToken,
       );
       
-      await _auth.signInWithCredential(credential);
+      final userCredential = await _auth.signInWithCredential(credential);
+      
+      // Kiểm tra xem có user không
+      if (userCredential.user == null) {
+        throw FirebaseAuthException(
+          code: 'google-signin-failed',
+          message: 'Không thể tạo tài khoản Firebase từ Google',
+        );
+      }
       
       // Auto-create/update profile sau khi đăng nhập thành công
-      final firebaseUser = _auth.currentUser;
-      if (firebaseUser != null) {
-        try {
-          await userProfileRepository.ensureProfile(
-            uid: firebaseUser.uid,
-            email: firebaseUser.email,
-            displayName: firebaseUser.displayName,
-            photoUrl: firebaseUser.photoURL,
-          );
-        } catch (e) {
-          if (kDebugMode) {
-            print('Error creating profile after Google sign-in: $e');
-          }
-          // Không throw error vì đăng nhập đã thành công
+      final firebaseUser = userCredential.user!;
+      try {
+        await userProfileRepository.ensureProfile(
+          uid: firebaseUser.uid,
+          email: firebaseUser.email,
+          displayName: firebaseUser.displayName,
+          photoUrl: firebaseUser.photoURL,
+        );
+      } catch (e) {
+        if (kDebugMode) {
+          print('Error creating profile after Google sign-in: $e');
         }
+        // Không throw error vì đăng nhập đã thành công
       }
-    } on FirebaseAuthException {
+    } on FirebaseAuthException catch (e) {
+      // Re-throw FirebaseAuthException với thông tin chi tiết hơn
+      if (kDebugMode) {
+        print('FirebaseAuthException during Google sign-in: ${e.code} - ${e.message}');
+      }
       rethrow;
-    } catch (e) {
+    } catch (e, stackTrace) {
       if (kDebugMode) {
         print('Google Sign-In error: $e');
+        print('Stack trace: $stackTrace');
       }
       
       // Xử lý PlatformException từ Google Sign-In
       final errorStr = e.toString().toLowerCase();
-      if (errorStr.contains('apiException') || errorStr.contains('10')) {
+      
+      // Kiểm tra các loại lỗi phổ biến
+      if (errorStr.contains('apiException') || 
+          errorStr.contains('10') || 
+          errorStr.contains('DEVELOPER_ERROR') ||
+          errorStr.contains('sign_in_failed')) {
         throw FirebaseAuthException(
           code: 'google-signin-developer-error',
           message: 'Lỗi cấu hình Google Sign-In. Vui lòng kiểm tra SHA-1 fingerprint trong Firebase Console.',
         );
-      } else if (errorStr.contains('network') || errorStr.contains('connection')) {
+      } else if (errorStr.contains('network') || 
+                 errorStr.contains('connection') ||
+                 errorStr.contains('socket') ||
+                 errorStr.contains('timeout')) {
         throw FirebaseAuthException(
           code: 'google-signin-network-error',
           message: 'Lỗi kết nối. Vui lòng kiểm tra internet và thử lại.',
         );
-      } else if (errorStr.contains('cancelled') || errorStr.contains('cancel')) {
+      } else if (errorStr.contains('cancelled') || 
+                 errorStr.contains('cancel') ||
+                 errorStr.contains('12500')) {
         // User cancelled - không throw error
         return;
+      } else if (errorStr.contains('account-exists-with-different-credential') ||
+                 errorStr.contains('email-already-in-use')) {
+        throw FirebaseAuthException(
+          code: 'account-exists-with-different-credential',
+          message: 'Tài khoản này đã được đăng ký bằng phương thức khác. Vui lòng sử dụng email/mật khẩu.',
+        );
       }
       
+      // Lỗi không xác định
       throw FirebaseAuthException(
         code: 'google-signin-failed',
-        message: 'Đăng nhập Google thất bại: ${e.toString()}',
+        message: 'Đăng nhập Google thất bại. Vui lòng thử lại. Lỗi: ${e.toString()}',
       );
     }
   }

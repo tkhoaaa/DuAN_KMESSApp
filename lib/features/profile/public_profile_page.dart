@@ -361,9 +361,6 @@ class _PublicProfilePageState extends State<PublicProfilePage> {
                 stream: blockedMeStream,
                 builder: (context, blockedMeSnapshot) {
                   final blockedByTarget = blockedMeSnapshot.data ?? false;
-                  final themeColor = profile.themeColor != null
-                      ? _parseColor(profile.themeColor!)
-                      : null;
 
                   return SingleChildScrollView(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
@@ -393,7 +390,6 @@ class _PublicProfilePageState extends State<PublicProfilePage> {
                               statusText: statusText,
                               currentUid: currentUid,
                               followService: _followService,
-                              themeColor: themeColor,
                               hasActiveStory: hasActiveStory,
                               storyRingColor: ringColor,
                               onAvatarTap: () => _handleAvatarTap(
@@ -469,7 +465,6 @@ class _PublicProfilePageState extends State<PublicProfilePage> {
                                 children: profile.links.map((link) {
                                   return _LinkChip(
                                     link: link,
-                                    themeColor: themeColor,
                                   );
                                 }).toList(),
                               ),
@@ -502,7 +497,6 @@ class _PublicProfilePageState extends State<PublicProfilePage> {
                             isTargetPrivate: profile.isPrivate,
                             isBlockedByCurrent: blockedByMe,
                             isBlockedByTarget: blockedByTarget,
-                            themeColor: themeColor,
                           ),
                         const SizedBox(height: 24),
                       ],
@@ -729,7 +723,6 @@ class _InstaProfileHeader extends StatelessWidget {
     required this.hasActiveStory,
     required this.onAvatarTap,
     this.storyRingColor,
-    this.themeColor,
   });
 
   final String displayName;
@@ -742,7 +735,6 @@ class _InstaProfileHeader extends StatelessWidget {
   final bool hasActiveStory;
   final VoidCallback onAvatarTap;
   final Color? storyRingColor;
-  final Color? themeColor;
 
   @override
   Widget build(BuildContext context) {
@@ -919,7 +911,6 @@ class _FollowActions extends StatefulWidget {
     required this.isTargetPrivate,
     required this.isBlockedByCurrent,
     required this.isBlockedByTarget,
-    this.themeColor,
   });
 
   final String currentUid;
@@ -927,7 +918,6 @@ class _FollowActions extends StatefulWidget {
   final bool isTargetPrivate;
   final bool isBlockedByCurrent;
   final bool isBlockedByTarget;
-  final Color? themeColor;
 
   @override
   State<_FollowActions> createState() => _FollowActionsState();
@@ -1000,11 +990,9 @@ class _FollowActionsState extends State<_FollowActions> {
           case FollowStatus.following:
             buttons.add(
               FilledButton(
-                style: widget.themeColor != null
-                    ? FilledButton.styleFrom(
-                        backgroundColor: widget.themeColor,
-                      )
-                    : null,
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.primaryPink,
+                ),
                 onPressed: () =>
                     _followService.unfollow(widget.targetUid),
                 child: const Text('Bỏ theo dõi'),
@@ -1075,11 +1063,9 @@ class _FollowActionsState extends State<_FollowActions> {
           case FollowStatus.none:
             buttons.add(
               FilledButton(
-                style: widget.themeColor != null
-                    ? FilledButton.styleFrom(
-                        backgroundColor: widget.themeColor,
-                      )
-                    : null,
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.primaryPink,
+                ),
                 onPressed: () => _followService.followUser(widget.targetUid),
                 child: const Text('Theo dõi'),
               ),
@@ -1297,22 +1283,12 @@ class _ProfileMoreMenu extends StatelessWidget {
   }
 }
 
-Color _parseColor(String hexColor) {
-  try {
-    return Color(int.parse(hexColor.replaceFirst('#', '0xFF')));
-  } catch (e) {
-    return Colors.blue;
-  }
-}
-
 class _LinkChip extends StatelessWidget {
   const _LinkChip({
     required this.link,
-    this.themeColor,
   });
 
   final ProfileLink link;
-  final Color? themeColor;
 
   IconData _getIconForUrl(String url) {
     final lower = url.toLowerCase();
@@ -1338,14 +1314,12 @@ class _LinkChip extends StatelessWidget {
       avatar: Icon(
         _getIconForUrl(link.url),
         size: 18,
-        color: themeColor,
+        color: AppColors.primaryPink,
       ),
       label: Text(link.label),
       onPressed: _launchUrl,
-      backgroundColor: themeColor?.withOpacity(0.1),
-      side: themeColor != null
-          ? BorderSide(color: themeColor!)
-          : null,
+      backgroundColor: AppColors.primaryPink.withOpacity(0.1),
+      side: BorderSide(color: AppColors.primaryPink),
     );
   }
 }

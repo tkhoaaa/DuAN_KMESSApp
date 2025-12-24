@@ -259,7 +259,7 @@ class _LoginScreenState extends State<LoginScreen> {
               borderRadius: BorderRadius.circular(10),
             ),
           ),
-        );
+    );
       }
     });
   }

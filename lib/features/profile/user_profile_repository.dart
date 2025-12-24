@@ -349,7 +349,10 @@ class UserProfileRepository {
       if (phoneNumber != null) {
         update['phoneNumber'] = phoneNumber;
       }
-      if (photoUrl != null) {
+      // Chỉ update photoUrl nếu profile chưa có avatar hoặc avatar hiện tại rỗng
+      // Điều này đảm bảo avatar đã thay đổi bởi user sẽ không bị ghi đè khi đăng nhập lại
+      final existingPhotoUrl = existingData['photoUrl'] as String?;
+      if (photoUrl != null && (existingPhotoUrl == null || existingPhotoUrl.isEmpty)) {
         update['photoUrl'] = photoUrl;
       }
       if (bio != null) {

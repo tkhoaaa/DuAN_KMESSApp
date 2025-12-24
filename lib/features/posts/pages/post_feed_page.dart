@@ -295,16 +295,21 @@ class _PostFeedPageState extends State<PostFeedPage> {
     if (_unreadNotifications <= 0) {
       return const Icon(Icons.more_vert, color: AppColors.primaryPink);
     }
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        const Icon(Icons.more_vert, color: AppColors.primaryPink),
-        Positioned(
-          right: -4,
-          top: -2,
-          child: _badge(_unreadNotifications),
-        ),
-      ],
+    return SizedBox(
+      width: 24,
+      height: 24,
+      child: Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.center,
+        children: [
+          const Icon(Icons.more_vert, color: AppColors.primaryPink, size: 24),
+          Positioned(
+            right: -6,
+            top: -4,
+            child: _badge(_unreadNotifications),
+          ),
+        ],
+      ),
     );
   }
 

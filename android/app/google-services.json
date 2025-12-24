@@ -1,25 +1,47 @@
 {
-    "project_info": {
-        "project_number": "370943842654",
-        "project_id": "duankmessapp",
-        "storage_bucket": "duankmessapp.firebasestorage.app"
-    },
-    "client": [{
-        "client_info": {
-            "mobilesdk_app_id": "1:370943842654:android:9aa3fb530453488a1197cf",
-            "android_client_info": {
-                "package_name": "com.example.duan_kmessapp"
-            }
-        },
-        "oauth_client": [],
-        "api_key": [{
-            "current_key": "AIzaSyCpYi3M50N_CDcaGGzmLtCtOkaU0q9bP9I"
-        }],
-        "services": {
-            "appinvite_service": {
-                "other_platform_oauth_client": []
-            }
+  "project_info": {
+    "project_number": "370943842654",
+    "project_id": "duankmessapp",
+    "storage_bucket": "duankmessapp.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:370943842654:android:9aa3fb530453488a1197cf",
+        "android_client_info": {
+          "package_name": "com.example.duan_kmessapp"
         }
-    }],
-    "configuration_version": "1"
+      },
+      "oauth_client": [
+        {
+          "client_id": "370943842654-rg7lf59cijg8ln1sn85o596u3c3ko2eu.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.duan_kmessapp",
+            "certificate_hash": "2ba044df6c0b8d18a0720c523698e005b5dbd363"
+          }
+        },
+        {
+          "client_id": "370943842654-8hq6lflhmrodd78ghoh8aed2ul5oqdiu.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCpYi3M50N_CDcaGGzmLtCtOkaU0q9bP9I"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "370943842654-8hq6lflhmrodd78ghoh8aed2ul5oqdiu.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
 }

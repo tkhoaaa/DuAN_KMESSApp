@@ -17,6 +17,9 @@ import '../auth/login_screen.dart';
 import '../auth/saved_accounts_repository.dart';
 import '../auth/saved_credentials_repository.dart';
 import '../follow/services/follow_service.dart';
+import '../chat/pages/chat_detail_page.dart';
+import '../chat/repositories/chat_repository.dart';
+import '../profile/public_profile_page.dart';
 import '../../services/cloudinary_service.dart';
 import '../saved_posts/pages/saved_posts_page.dart';
 import '../settings/pages/privacy_settings_page.dart';
@@ -467,14 +470,35 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ...accounts.map(
               (acc) => ListTile(
                 leading: CircleAvatar(
+                  radius: 28,
                   backgroundImage:
-                      acc.photoUrl != null && acc.photoUrl!.isNotEmpty ? NetworkImage(acc.photoUrl!) : null,
+                      acc.photoUrl != null && acc.photoUrl!.isNotEmpty 
+                          ? NetworkImage(acc.photoUrl!) 
+                          : null,
+                  backgroundColor: acc.photoUrl == null || acc.photoUrl!.isEmpty
+                      ? Theme.of(ctx).colorScheme.primaryContainer
+                      : null,
                   child: acc.photoUrl == null || acc.photoUrl!.isEmpty
-                      ? const Icon(Icons.person)
+                      ? Icon(
+                          Icons.person,
+                          color: Theme.of(ctx).colorScheme.onPrimaryContainer,
+                          size: 28,
+                        )
                       : null,
                 ),
-                title: Text(acc.displayName ?? acc.email ?? acc.uid),
-                subtitle: acc.email != null ? Text(acc.email!) : null,
+                title: Text(
+                  acc.displayName ?? acc.email ?? acc.uid,
+                  style: const TextStyle(fontWeight: FontWeight.w500),
+                ),
+                subtitle: acc.email != null && acc.email != acc.displayName
+                    ? Text(
+                        acc.email!,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.6),
+                        ),
+                      )
+                    : null,
                 onTap: () => Navigator.pop(ctx, acc),
               ),
             ),
@@ -503,35 +527,100 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (!mounted) return;
 
     if (quickSuccess) {
+      // Đảm bảo tài khoản được lưu sau khi đăng nhập thành công
+      final currentUser = authRepository.currentUser();
+      if (currentUser != null) {
+        try {
+          await SavedAccountsRepository.instance.saveAccountFromUser(currentUser);
+        } catch (e) {
+          debugPrint('Error saving account after quick sign in: $e');
+        }
+      }
+      
+      // Đợi một chút để đảm bảo auth state đã được cập nhật
+      await Future.delayed(const Duration(milliseconds: 300));
+      
+      // Kiểm tra lại auth state trước khi điều hướng
+      final finalUser = authRepository.currentUser();
+      if (finalUser == null) {
+        // Nếu user vẫn null, có thể có vấn đề với auth state
+        debugPrint('Warning: User is null after quick sign in, redirecting to login');
+        if (mounted) {
+          final identifier = selected.email ?? selected.displayName ?? selected.uid;
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(
+              builder: (_) => LoginScreen(initialIdentifier: identifier),
+            ),
+            (route) => false,
+          );
+        }
+        return;
+      }
+      
       // Điều hướng về AuthGate để toàn bộ app rebuild theo user mới
-      Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute(
-          builder: (_) => const AuthGate(),
-        ),
-        (route) => false,
-      );
+      if (mounted) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(
+            builder: (_) => const AuthGate(),
+          ),
+          (route) => false,
+        );
+      }
     } else {
       // Fallback: chuyển sang màn hình login với email được điền sẵn
       final identifier = selected.email ?? selected.displayName ?? selected.uid;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Tài khoản này chưa lưu mật khẩu an toàn. Vui lòng đăng nhập lại một lần.',
+      
+      // Hiển thị thông báo phù hợp với loại tài khoản
+      String message;
+      if (selected.providerId == 'google.com') {
+        message = 'Vui lòng đăng nhập lại bằng Google.';
+      } else if (selected.providerId == 'facebook.com') {
+        message = 'Vui lòng đăng nhập lại bằng Facebook.';
+      } else {
+        message = 'Tài khoản này chưa lưu mật khẩu an toàn. Vui lòng đăng nhập lại một lần.';
+      }
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(message)),
+        );
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(
+            builder: (_) => LoginScreen(initialIdentifier: identifier),
           ),
-        ),
-      );
-      Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute(
-          builder: (_) => LoginScreen(initialIdentifier: identifier),
-        ),
-        (route) => false,
-      );
+          (route) => false,
+        );
+      }
     }
+  }
+
+  Future<void> _showFollowersSheet(BuildContext context, String uid) async {
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _FollowersFollowingSheet(
+        uid: uid,
+        isFollowers: true,
+      ),
+    );
+  }
+
+  Future<void> _showFollowingSheet(BuildContext context, String uid) async {
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _FollowersFollowingSheet(
+        uid: uid,
+        isFollowers: false,
+      ),
+    );
   }
 
   Future<bool> _quickSignInToSavedAccount(SavedAccount account) async {
     try {
-      // Chỉ hỗ trợ auto-login nhanh cho tài khoản đăng nhập bằng email/mật khẩu
+      // Xử lý tài khoản đăng nhập bằng email/mật khẩu
       if (account.providerId == 'password' && account.email != null) {
         final password =
             await SavedCredentialsRepository.instance.getPassword(account.uid);
@@ -575,9 +664,69 @@ class _ProfileScreenState extends State<ProfileScreen> {
         
         return result;
       }
-      // Các provider khác (Google/Facebook) hiện tại không auto-login để tránh chọn sai account
+      
+      // Xử lý tài khoản Google Sign-In
+      if (account.providerId == 'google.com') {
+        try {
+          // Gọi Google Sign-In (user sẽ chọn account)
+          await authRepository.signInWithGoogle();
+          
+          // Đợi auth state thay đổi để đảm bảo signIn hoàn tất
+          final completer = Completer<bool>();
+          StreamSubscription<User?>? subscription;
+          Timer? timeoutTimer;
+          
+          subscription = authRepository.authState().listen((user) async {
+            if (user != null) {
+              subscription?.cancel();
+              timeoutTimer?.cancel();
+              // Lưu tài khoản sau khi đăng nhập thành công
+              try {
+                await SavedAccountsRepository.instance.saveAccountFromUser(user);
+              } catch (e) {
+                debugPrint('Error saving account after Google sign in: $e');
+              }
+              if (!completer.isCompleted) {
+                completer.complete(true);
+              }
+            }
+          });
+          
+          // Timeout sau 5 giây (Google Sign-In có thể mất thời gian hơn)
+          timeoutTimer = Timer(const Duration(seconds: 5), () async {
+            subscription?.cancel();
+            final currentUser = authRepository.currentUser();
+            final success = currentUser != null;
+            if (success && currentUser != null) {
+              // Lưu tài khoản sau khi đăng nhập thành công
+              try {
+                await SavedAccountsRepository.instance.saveAccountFromUser(currentUser);
+              } catch (e) {
+                debugPrint('Error saving account after Google sign in timeout: $e');
+              }
+            }
+            if (!completer.isCompleted) {
+              completer.complete(success);
+            }
+          });
+          
+          // Đợi kết quả
+          final result = await completer.future;
+          subscription.cancel();
+          timeoutTimer.cancel();
+          
+          return result;
+        } catch (e) {
+          // Nếu user cancel hoặc có lỗi, return false để chuyển về login screen
+          debugPrint('Google Sign-In error during account switch: $e');
+          return false;
+        }
+      }
+      
+      // Các provider khác (Facebook, etc.) hiện tại không auto-login
       return false;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('Error in _quickSignInToSavedAccount: $e');
       return false;
     }
   }
@@ -828,10 +977,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       _StatChip(
                         label: 'Người theo dõi',
                         value: profile.followersCount,
+                        onTap: () => _showFollowersSheet(context, user.uid),
                       ),
                       _StatChip(
                         label: 'Đang theo dõi',
                         value: profile.followingCount,
+                        onTap: () => _showFollowingSheet(context, user.uid),
                       ),
                     ],
                   ),
@@ -1703,6 +1854,250 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 }
 
+class _FollowersFollowingSheet extends StatefulWidget {
+  const _FollowersFollowingSheet({
+    required this.uid,
+    required this.isFollowers,
+  });
+
+  final String uid;
+  final bool isFollowers;
+
+  @override
+  State<_FollowersFollowingSheet> createState() => _FollowersFollowingSheetState();
+}
+
+class _FollowersFollowingSheetState extends State<_FollowersFollowingSheet> {
+  final FollowService _followService = FollowService();
+  final ChatRepository _chatRepository = ChatRepository();
+  final authRepository = FirebaseAuthRepository();
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      initialChildSize: 0.9,
+      minChildSize: 0.5,
+      maxChildSize: 0.95,
+      builder: (context, scrollController) {
+        return Container(
+          decoration: BoxDecoration(
+            color: Theme.of(context).scaffoldBackgroundColor,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: Column(
+            children: [
+              // Handle bar
+              Container(
+                margin: const EdgeInsets.only(top: 12),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              // Title
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text(
+                  widget.isFollowers ? 'Người theo dõi' : 'Đang theo dõi',
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              const Divider(height: 1),
+              // List
+              Expanded(
+                child: StreamBuilder<List<FollowEntry>>(
+                  stream: widget.isFollowers
+                      ? _followService.watchFollowersEntries(widget.uid)
+                      : _followService.watchFollowingEntries(widget.uid),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    if (snapshot.hasError) {
+                      return Center(
+                        child: Text('Lỗi: ${snapshot.error}'),
+                      );
+                    }
+                    final entries = snapshot.data ?? [];
+                    if (entries.isEmpty) {
+                      return Center(
+                        child: Text(
+                          widget.isFollowers
+                              ? 'Chưa có người theo dõi'
+                              : 'Chưa theo dõi ai',
+                          style: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 16,
+                          ),
+                        ),
+                      );
+                    }
+                    return ListView.builder(
+                      controller: scrollController,
+                      itemCount: entries.length,
+                      itemBuilder: (context, index) {
+                        final entry = entries[index];
+                        final profile = entry.profile;
+                        if (profile == null) {
+                          return const SizedBox.shrink();
+                        }
+                        return _FollowListItem(
+                          profile: profile,
+                          isMutual: entry.isMutual,
+                          onAvatarTap: () {
+                            Navigator.pop(context);
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => PublicProfilePage(
+                                  uid: entry.uid,
+                                ),
+                              ),
+                            );
+                          },
+                          onMessageTap: () async {
+                            final currentUid = authRepository.currentUser()?.uid;
+                            if (currentUid == null) return;
+                            try {
+                              final conversationId =
+                                  await _chatRepository.createOrGetDirectConversation(
+                                currentUid: currentUid,
+                                otherUid: entry.uid,
+                              );
+                              if (!mounted) return;
+                              Navigator.pop(context);
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => ChatDetailPage(
+                                    conversationId: conversationId,
+                                    otherUid: entry.uid,
+                                  ),
+                                ),
+                              );
+                            } catch (e) {
+                              if (!mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Lỗi: ${e.toString()}'),
+                                ),
+                              );
+                            }
+                          },
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _FollowListItem extends StatelessWidget {
+  const _FollowListItem({
+    required this.profile,
+    required this.isMutual,
+    required this.onAvatarTap,
+    required this.onMessageTap,
+  });
+
+  final UserProfile profile;
+  final bool isMutual;
+  final VoidCallback onAvatarTap;
+  final VoidCallback onMessageTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: GestureDetector(
+        onTap: onAvatarTap,
+        child: CircleAvatar(
+          radius: 28,
+          backgroundImage: profile.photoUrl != null && profile.photoUrl!.isNotEmpty
+              ? NetworkImage(profile.photoUrl!)
+              : null,
+          backgroundColor: profile.photoUrl == null || profile.photoUrl!.isEmpty
+              ? Theme.of(context).colorScheme.primaryContainer
+              : null,
+          child: profile.photoUrl == null || profile.photoUrl!.isEmpty
+              ? Icon(
+                  Icons.person,
+                  color: Theme.of(context).colorScheme.onPrimaryContainer,
+                  size: 28,
+                )
+              : null,
+        ),
+      ),
+      title: Text(
+        profile.displayName ?? profile.email ?? profile.uid,
+        style: const TextStyle(fontWeight: FontWeight.w500),
+      ),
+      subtitle: profile.email != null && profile.email != profile.displayName
+          ? Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    profile.email!,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (isMutual)
+                  Container(
+                    margin: const EdgeInsets.only(left: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.primaryContainer,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      'Bạn bè',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: Theme.of(context).colorScheme.onPrimaryContainer,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+              ],
+            )
+          : isMutual
+              ? Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.primaryContainer,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    'Theo dõi lại',
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: Theme.of(context).colorScheme.onPrimaryContainer,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                )
+              : null,
+      trailing: IconButton(
+        icon: const Icon(Icons.message),
+        onPressed: onMessageTap,
+        tooltip: 'Nhắn tin',
+      ),
+    );
+  }
+}
+
 class _EditProfileHeader extends StatelessWidget {
   const _EditProfileHeader({
     required this.displayName,
@@ -1992,39 +2387,44 @@ class _StatChip extends StatelessWidget {
   const _StatChip({
     required this.label,
     required this.value,
+    this.onTap,
   });
 
   final String label;
   final int value;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-      decoration: BoxDecoration(
-        color: AppColors.primaryPink.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.primaryPink.withOpacity(0.3)),
-      ),
-      child: Column(
-      children: [
-        Text(
-          '$value',
-          style: const TextStyle(
-              fontSize: 20,
-            fontWeight: FontWeight.bold,
-              color: AppColors.primaryPink,
-          ),
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+        decoration: BoxDecoration(
+          color: AppColors.primaryPink.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: AppColors.primaryPink.withOpacity(0.3)),
         ),
-        const SizedBox(height: 4),
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 12,
-              color: AppColors.primaryPink,
+        child: Column(
+          children: [
+            Text(
+              '$value',
+              style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: AppColors.primaryPink,
+              ),
             ),
-          ),
-        ],
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.primaryPink,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
