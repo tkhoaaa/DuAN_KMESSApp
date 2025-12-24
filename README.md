@@ -1926,11 +1926,31 @@ Dự án sử dụng kiến trúc phân lớp (layered architecture) với 4 t�
 - Xử lý query, filter, pagination
 - Trả về dữ liệu dạng raw (`DocumentSnapshot`, `QuerySnapshot`)
 
----Services (Tầng xử lý nghiệp vụ)---
-Mục đích: Xử lý logic nghiệp vụ phức tạp, kết hợp nhiều repositories
-Ví dụ: PostService, ConversationService, NotificationService
-Chức năng:
-Kết hợp nhiều repositories để thực hiện một tác vụ
-Xử lý upload file (ảnh, video) lên Cloudinary/Firebase Storage
-Xử lý business logic (ví dụ: tạo post → upload media → lưu vào Firestore → gửi notification)
-Chuyển đổi dữ liệu từ repository sang model để UI sử dụng
+---
+
+### ⚙️ Services (Tầng xử lý nghiệp vụ)
+
+**Mục đích:** Xử lý logic nghiệp vụ phức tạp, kết hợp nhiều repositories
+
+**Ví dụ:** `PostService`, `ConversationService`, `NotificationService`
+
+**Chức năng:**
+- Kết hợp nhiều repositories để thực hiện một tác vụ
+- Xử lý upload file (ảnh, video) lên Cloudinary/Firebase Storage
+- Xử lý business logic (ví dụ: tạo post → upload media → lưu vào Firestore → gửi notification)
+- Chuyển đổi dữ liệu từ repository sang model để UI sử dụng
+
+---
+
+### 🔄 Luồng dữ liệu
+
+```
+Pages (UI Layer)
+    ↓
+Services (Business Logic Layer)
+    ↓
+Repositories (Data Access Layer)
+    ↓
+Firestore / APIs (Data Source)
+```
+
