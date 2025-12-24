@@ -22,6 +22,7 @@ import '../models/message.dart';
 import '../models/message_attachment.dart';
 import '../repositories/chat_repository.dart';
 import '../../posts/pages/post_video_page.dart';
+import '../../profile/public_profile_page.dart';
 
 class ChatDetailPage extends StatefulWidget {
   const ChatDetailPage({
@@ -71,6 +72,7 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
   StreamSubscription<List<Call>>? _activeCallsSub;
   bool _isOtherUserBanned = false;
   StreamSubscription<UserProfile?>? _otherUserProfileSub;
+  final Map<String, UserProfile?> _profileCache = {};
 
   @override
   void initState() {
@@ -488,6 +490,19 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
     _otherUserProfileSub?.cancel();
     super.dispose();
   }
+  Future<UserProfile?> _getProfile(String uid) async {
+    if (_profileCache.containsKey(uid)) return _profileCache[uid];
+    final profile = await userProfileRepository.fetchProfile(uid);
+    if (mounted) {
+      setState(() {
+        _profileCache[uid] = profile;
+      });
+    } else {
+      _profileCache[uid] = profile;
+    }
+    return profile;
+  }
+
 
   String? get _currentUid => authRepository.currentUser()?.uid;
 
@@ -569,38 +584,202 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
       itemBuilder: (context, index) {
         final message = _searchResults[_searchResults.length - 1 - index];
         final isMine = message.senderId == currentUid;
-        return _ChatMessageBubble(
-          message: message,
-          isMine: isMine,
-          otherUid: widget.otherUid,
-          searchTerm: _searchController.text.trim(),
-          onImageTap: (url) {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => _FullScreenImagePage(imageUrl: url),
-              ),
+        final senderId = message.senderId;
+        return FutureBuilder<UserProfile?>(
+          future: _getProfile(senderId),
+          builder: (context, snapshot) {
+            final profile = snapshot.data;
+            final avatarUrl = profile?.photoUrl;
+            final senderName =
+                profile?.displayName ?? profile?.email ?? senderId;
+            return _ChatMessageBubble(
+              message: message,
+              isMine: isMine,
+              otherUid: widget.otherUid,
+              searchTerm: _searchController.text.trim(),
+              senderAvatarUrl: avatarUrl,
+              senderName: senderName,
+              isGroup: widget.isGroup,
+              onAvatarTap: () {
+                if (senderId.isNotEmpty) {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => PublicProfilePage(uid: senderId),
+                    ),
+                  );
+                }
+              },
+              onEdit: isMine ? () => _editMessage(message) : null,
+              onRecall: isMine ? () => _recallMessage(message) : null,
+              onImageTap: (url) {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => _FullScreenImagePage(imageUrl: url),
+                  ),
+                );
+              },
+              onReact: (emoji) async {
+                try {
+                  final currentUid = _currentUid;
+                  if (currentUid == null) return;
+                  await _chatRepository.toggleReaction(
+                    conversationId: widget.conversationId,
+                    messageId: message.id,
+                    uid: currentUid,
+                    emoji: emoji,
+                  );
+                } catch (e) {
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Lỗi cập nhật reaction: $e')),
+                  );
+                }
+              },
             );
-          },
-          onReact: (emoji) async {
-            try {
-              final currentUid = _currentUid;
-              if (currentUid == null) return;
-              await _chatRepository.toggleReaction(
-                conversationId: widget.conversationId,
-                messageId: message.id,
-                uid: currentUid,
-                emoji: emoji,
-              );
-            } catch (e) {
-              if (!mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Lỗi cập nhật reaction: $e')),
-              );
-            }
           },
         );
       },
     );
+  }
+
+  Future<void> _editMessage(ChatMessage message) async {
+    final currentUid = _currentUid;
+    if (currentUid == null || currentUid != message.senderId) return;
+    final controller = TextEditingController(text: message.text ?? '');
+    final newText = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Chỉnh sửa tin nhắn'),
+        content: TextField(
+          controller: controller,
+          maxLines: 5,
+          minLines: 1,
+          decoration: const InputDecoration(
+            hintText: 'Nhập nội dung mới',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Hủy'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('Lưu'),
+          ),
+        ],
+      ),
+    );
+    if (newText == null) return;
+    if (newText.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Nội dung không được để trống.')),
+      );
+      return;
+    }
+    try {
+      await _chatRepository.editMessage(
+        conversationId: widget.conversationId,
+        messageId: message.id,
+        newText: newText,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Không thể chỉnh sửa: $e')),
+      );
+    }
+  }
+
+  Future<void> _recallMessage(ChatMessage message) async {
+    final currentUid = _currentUid;
+    if (currentUid == null || currentUid != message.senderId) return;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Thu hồi tin nhắn'),
+        content: const Text('Tin nhắn sẽ được thu hồi cho tất cả mọi người.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Hủy'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Thu hồi'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    try {
+      await _chatRepository.recallMessage(
+        conversationId: widget.conversationId,
+        messageId: message.id,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Không thể thu hồi: $e')),
+      );
+    }
+  }
+
+  Future<void> _showParticipantsSheet() async {
+    try {
+      final ids = await _chatRepository.fetchParticipantIds(widget.conversationId);
+      final profiles = await Future.wait(ids.map((id) => _getProfile(id)));
+      if (!mounted) return;
+      showModalBottomSheet(
+        context: context,
+        builder: (context) => SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const ListTile(
+                title: Text(
+                  'Thành viên',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+              ...ids.asMap().entries.map((entry) {
+                final uid = entry.value;
+                final profile = profiles[entry.key];
+                final name = profile?.displayName ??
+                    profile?.email ??
+                    uid;
+                final avatar = profile?.photoUrl;
+                return ListTile(
+                  leading: CircleAvatar(
+                    backgroundImage:
+                        avatar != null ? NetworkImage(avatar) : null,
+                    child: avatar == null ? const Icon(Icons.person) : null,
+                  ),
+                  title: Text(name),
+                  subtitle: profile?.note != null && profile!.note!.isNotEmpty
+                      ? Text(profile.note!)
+                      : null,
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => PublicProfilePage(uid: uid),
+                      ),
+                    );
+                  },
+                );
+              }),
+              const SizedBox(height: 12),
+            ],
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Không thể lấy danh sách thành viên: $e')),
+      );
+    }
   }
 
   void _onTextChanged() {
@@ -931,39 +1110,93 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
                 },
               )
             : widget.isGroup
-                ? Text(widget.conversationTitle ?? 'Nhóm')
+                ? Row(
+                    children: [
+                      GestureDetector(
+                        onTap: widget.conversationAvatarUrl != null
+                            ? null
+                            : null,
+                        child: CircleAvatar(
+                          radius: 18,
+                          backgroundImage: widget.conversationAvatarUrl != null
+                              ? NetworkImage(widget.conversationAvatarUrl!)
+                              : null,
+                          child: widget.conversationAvatarUrl == null
+                              ? const Icon(Icons.groups)
+                              : null,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              widget.conversationTitle ?? 'Nhóm',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  )
                 : FutureBuilder<UserProfile?>(
-                    future: userProfileRepository.fetchProfile(widget.otherUid),
+                    future: _getProfile(widget.otherUid),
                     builder: (context, snapshot) {
                       final profile = snapshot.data;
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return const Text('Đang tải...');
-                      }
                       final title = profile?.displayName?.isNotEmpty == true
                           ? profile!.displayName!
                           : (profile?.email?.isNotEmpty == true
                               ? profile!.email!
                               : widget.otherUid);
                       final note = profile?.note;
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
+                      final photoUrl = profile?.photoUrl;
+                      return Row(
                         children: [
-                          Text(
-                            title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          if (note != null && note.isNotEmpty)
-                            Text(
-                              note,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodySmall
-                                  ?.copyWith(fontStyle: FontStyle.italic),
+                          GestureDetector(
+                            onTap: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      PublicProfilePage(uid: widget.otherUid),
+                                ),
+                              );
+                            },
+                            child: CircleAvatar(
+                              radius: 18,
+                              backgroundImage:
+                                  photoUrl != null ? NetworkImage(photoUrl) : null,
+                              child: photoUrl == null
+                                  ? const Icon(Icons.person)
+                                  : null,
                             ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                if (note != null && note.isNotEmpty)
+                                  Text(
+                                    note,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodySmall
+                                        ?.copyWith(fontStyle: FontStyle.italic),
+                                  ),
+                              ],
+                            ),
+                          ),
                         ],
                       );
                     },
@@ -973,7 +1206,8 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
             // Call buttons (chỉ hiện khi không bị block và không bị khóa)
             if (!_isBlockedByMe &&
                 !_isBlockedByOther &&
-                !_isOtherUserBanned) ...[
+                !_isOtherUserBanned &&
+                !widget.isGroup) ...[
               IconButton(
                 icon: const Icon(Icons.phone),
                 tooltip: 'Gọi thoại',
@@ -985,24 +1219,53 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
                 onPressed: () => _initiateCall(CallType.video),
               ),
             ],
-            IconButton(
-              icon: Icon(
-                _isMuteActive
-                    ? Icons.notifications_off
-                    : Icons.notifications_active,
-              ),
-              tooltip:
-                  _isMuteActive ? 'Thông báo đang tắt' : 'Thông báo đang bật',
-              onPressed:
-                  _isUpdatingNotifications ? null : _showNotificationSettingsSheet,
-            ),
-            IconButton(
-              icon: const Icon(Icons.search),
-              onPressed: () {
-                setState(() {
-                  _isSearchMode = true;
-                });
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.menu),
+              onSelected: (value) async {
+                switch (value) {
+                  case 'search':
+                    setState(() {
+                      _isSearchMode = true;
+                    });
+                    break;
+                  case 'mute':
+                    if (!_isUpdatingNotifications) {
+                      _showNotificationSettingsSheet();
+                    }
+                    break;
+                  case 'members':
+                    await _showParticipantsSheet();
+                    break;
+                }
               },
+              itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: 'search',
+                  child: ListTile(
+                    leading: Icon(Icons.search),
+                    title: Text('Tìm kiếm tin nhắn'),
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'mute',
+                  child: ListTile(
+                    leading: Icon(
+                      _isMuteActive
+                          ? Icons.notifications_off
+                          : Icons.notifications_active,
+                    ),
+                    title: Text(_isMuteActive ? 'Bật thông báo' : 'Tắt thông báo'),
+                  ),
+                ),
+                if (widget.isGroup)
+                  const PopupMenuItem(
+                    value: 'members',
+                    child: ListTile(
+                      leading: Icon(Icons.people_alt),
+                      title: Text('Xem thành viên nhóm'),
+                    ),
+                  ),
+              ],
             ),
           ] else
             IconButton(
@@ -1079,37 +1342,65 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
                         itemBuilder: (context, index) {
                           final message = messages[messages.length - 1 - index];
                           final isMine = message.senderId == currentUid;
-                          return _ChatMessageBubble(
-                            message: message,
-                            isMine: isMine,
-                            otherUid: widget.otherUid,
-                            searchTerm: null,
-                            onImageTap: (url) {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) =>
-                                      _FullScreenImagePage(imageUrl: url),
-                                ),
+                          final senderId = message.senderId;
+                          return FutureBuilder<UserProfile?>(
+                            future: _getProfile(senderId),
+                            builder: (context, snapshot) {
+                              final profile = snapshot.data;
+                              final avatarUrl = profile?.photoUrl;
+                              final senderName = profile?.displayName ??
+                                  profile?.email ??
+                                  senderId;
+                              return _ChatMessageBubble(
+                                message: message,
+                                isMine: isMine,
+                                otherUid: widget.otherUid,
+                                searchTerm: null,
+                                senderName: senderName,
+                                senderAvatarUrl: avatarUrl,
+                                isGroup: widget.isGroup,
+                                onAvatarTap: () {
+                                  if (senderId.isNotEmpty) {
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (_) =>
+                                            PublicProfilePage(uid: senderId),
+                                      ),
+                                    );
+                                  }
+                                },
+                                onEdit:
+                                    isMine ? () => _editMessage(message) : null,
+                                onRecall:
+                                    isMine ? () => _recallMessage(message) : null,
+                                onImageTap: (url) {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          _FullScreenImagePage(imageUrl: url),
+                                    ),
+                                  );
+                                },
+                                onReact: (emoji) async {
+                                  try {
+                                    final uid = _currentUid;
+                                    if (uid == null) return;
+                                    await _chatRepository.toggleReaction(
+                                      conversationId: widget.conversationId,
+                                      messageId: message.id,
+                                      uid: uid,
+                                      emoji: emoji,
+                                    );
+                                  } catch (e) {
+                                    if (!mounted) return;
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                          content: Text(
+                                              'Lỗi cập nhật reaction: $e')),
+                                    );
+                                  }
+                                },
                               );
-                            },
-                            onReact: (emoji) async {
-                              try {
-                                final uid = _currentUid;
-                                if (uid == null) return;
-                                await _chatRepository.toggleReaction(
-                                  conversationId: widget.conversationId,
-                                  messageId: message.id,
-                                  uid: uid,
-                                  emoji: emoji,
-                                );
-                              } catch (e) {
-                                if (!mounted) return;
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                      content: Text(
-                                          'Lỗi cập nhật reaction: $e')),
-                                );
-                              }
                             },
                           );
                         },
@@ -1311,6 +1602,12 @@ class _ChatMessageBubble extends StatelessWidget {
     required this.onImageTap,
     required this.onReact,
     this.searchTerm,
+    this.senderAvatarUrl,
+    this.senderName,
+    this.isGroup = false,
+    this.onAvatarTap,
+    this.onEdit,
+    this.onRecall,
   });
 
   final ChatMessage message;
@@ -1320,6 +1617,12 @@ class _ChatMessageBubble extends StatelessWidget {
    /// Gọi khi user chọn một emoji reaction
   final void Function(String emoji) onReact;
   final String? searchTerm;
+  final String? senderAvatarUrl;
+  final String? senderName;
+  final bool isGroup;
+  final VoidCallback? onAvatarTap;
+  final VoidCallback? onEdit;
+  final VoidCallback? onRecall;
 
   @override
   Widget build(BuildContext context) {
@@ -1338,230 +1641,331 @@ class _ChatMessageBubble extends StatelessWidget {
 
     return Align(
       alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
-      child: GestureDetector(
-        onLongPress: () async {
-          final selected = await showModalBottomSheet<String>(
-            context: context,
-            builder: (context) {
-              final emojis = <String>['👍', '❤️', '😂', '😮', '😢', '🙏'];
-              return SafeArea(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: emojis.map((emoji) {
-                      return InkWell(
-                        onTap: () {
-                          Navigator.of(context).pop(emoji);
-                        },
-                        child: Padding(
-                          padding: const EdgeInsets.all(8),
-                          child: Text(
-                            emoji,
-                            style: const TextStyle(fontSize: 24),
-                          ),
-                        ),
-                      );
-                    }).toList(),
-                  ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment:
+            isMine ? MainAxisAlignment.end : MainAxisAlignment.start,
+        children: [
+          if (!isMine)
+            GestureDetector(
+              onTap: onAvatarTap,
+              child: Padding(
+                padding: const EdgeInsets.only(right: 8, top: 4),
+                child: CircleAvatar(
+                  radius: 18,
+                  backgroundImage: senderAvatarUrl != null
+                      ? NetworkImage(senderAvatarUrl!)
+                      : null,
+                  child: senderAvatarUrl == null
+                      ? const Icon(Icons.person, size: 20)
+                      : null,
                 ),
-              );
-            },
-          );
-          if (selected != null) {
-            onReact(selected);
-          }
-        },
-        child: Container(
-          margin: const EdgeInsets.symmetric(vertical: 4),
-          constraints: BoxConstraints(
-            maxWidth: MediaQuery.of(context).size.width * 0.75,
-          ),
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: isMine
-                ? Theme.of(context).colorScheme.primaryContainer
-                : Theme.of(context).colorScheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Column(
-            crossAxisAlignment:
-                isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-            children: [
-              if (hasImages)
-                ...message.attachments
-                    .where((a) => a.mimeType.startsWith('image/'))
-                    .map(
-                      (attachment) => Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: GestureDetector(
-                          onTap: () => onImageTap(attachment.url),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: Image.network(
-                              attachment.url,
-                              fit: BoxFit.cover,
-                              width: double.infinity,
-                              loadingBuilder:
-                                  (context, child, loadingProgress) {
-                                if (loadingProgress == null) return child;
-                                return Container(
-                                  height: 200,
-                                  color: Colors.grey[300],
-                                  child: Center(
-                                    child: CircularProgressIndicator(
-                                      value: loadingProgress
-                                                  .expectedTotalBytes !=
-                                              null
-                                          ? loadingProgress
-                                                  .cumulativeBytesLoaded /
-                                              loadingProgress
-                                                  .expectedTotalBytes!
-                                          : null,
+              ),
+            ),
+          Flexible(
+            child: GestureDetector(
+              onLongPress: () async {
+                // Menu reaction + chỉnh sửa/thu hồi
+                final options = <String>[
+                  'react',
+                  if (isMine && !(message.systemPayload?['recalled'] == true))
+                    'edit',
+                  if (isMine && !(message.systemPayload?['recalled'] == true))
+                    'recall',
+                ];
+                final selected = await showModalBottomSheet<String>(
+                  context: context,
+                  builder: (context) {
+                    final emojis = <String>['👍', '❤️', '😂', '😮', '😢', '🙏'];
+                    return SafeArea(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                              children: emojis.map((emoji) {
+                                return InkWell(
+                                  onTap: () {
+                                    Navigator.of(context).pop(emoji);
+                                  },
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(8),
+                                    child: Text(
+                                      emoji,
+                                      style: const TextStyle(fontSize: 24),
                                     ),
                                   ),
                                 );
-                              },
-                              errorBuilder: (context, error, stackTrace) {
-                                return Container(
-                                  height: 200,
-                                  color: Colors.grey[300],
-                                  child: const Icon(Icons.error),
-                                );
-                              },
+                              }).toList(),
                             ),
                           ),
-                        ),
-                      ),
-                    ),
-              if (voiceAttachments.isNotEmpty) ...[
-                ...voiceAttachments.map(
-                  (attachment) => Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: _VoiceMessagePlayer(
-                      attachment: attachment,
-                      isMine: isMine,
-                    ),
-                  ),
-                ),
-              ],
-              if (videoAttachments.isNotEmpty) ...[
-                ...videoAttachments.map(
-                  (attachment) => Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: GestureDetector(
-                      onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => PostVideoPage(
-                              videoUrl: attachment.url,
+                          if (isMine &&
+                              !(message.systemPayload?['recalled'] == true))
+                            ListTile(
+                              leading: const Icon(Icons.edit),
+                              title: const Text('Chỉnh sửa tin nhắn'),
+                              onTap: () => Navigator.of(context).pop('edit_action'),
                             ),
-                          ),
-                        );
-                      },
-                      child: Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: attachment.thumbnailUrl != null
-                                ? Image.network(
-                                    attachment.thumbnailUrl!,
-                                    fit: BoxFit.cover,
-                                    width: double.infinity,
-                                    height: 200,
-                                  )
-                                : Container(
-                                    width: double.infinity,
-                                    height: 200,
-                                    color: Colors.black12,
-                                  ),
-                          ),
-                          Container(
-                            decoration: const BoxDecoration(
-                              color: Colors.black45,
-                              shape: BoxShape.circle,
+                          if (isMine &&
+                              !(message.systemPayload?['recalled'] == true))
+                            ListTile(
+                              leading: const Icon(Icons.undo),
+                              title: const Text('Thu hồi tin nhắn'),
+                              onTap: () =>
+                                  Navigator.of(context).pop('recall_action'),
                             ),
-                            padding: const EdgeInsets.all(8),
-                            child: const Icon(
-                              Icons.play_arrow,
-                              color: Colors.white,
-                              size: 32,
-                            ),
-                          ),
                         ],
                       ),
-                    ),
-                  ),
-                ),
-              ],
-              if (message.text != null && message.text!.isNotEmpty)
-                _buildHighlightedText(
-                  message.text!,
-                  searchTerm: searchTerm,
-                  style: const TextStyle(fontSize: 16),
-                ),
-              if (reactionEntries.isNotEmpty) ...[
-                const SizedBox(height: 4),
-                Wrap(
-                  spacing: 4,
-                  children: reactionEntries.map((entry) {
-                    final emoji = entry.key;
-                    final count = entry.value.length;
-                    return Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.7),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        '$emoji $count',
-                        style: const TextStyle(fontSize: 12),
-                      ),
                     );
-                  }).toList(),
+                  },
+                );
+                if (selected == null) return;
+                if (['👍', '❤️', '😂', '😮', '😢', '🙏'].contains(selected)) {
+                  onReact(selected);
+                } else if (selected == 'edit_action' && onEdit != null) {
+                  onEdit!();
+                } else if (selected == 'recall_action' && onRecall != null) {
+                  onRecall!();
+                }
+              },
+              child: Container(
+                margin: const EdgeInsets.symmetric(vertical: 4),
+                constraints: BoxConstraints(
+                  maxWidth: MediaQuery.of(context).size.width * 0.7,
                 ),
-              ],
-              if (isMine)
-                Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        message.seenBy.contains(otherUid)
-                            ? Icons.done_all
-                            : Icons.done,
-                        size: 14,
-                        color: message.seenBy.contains(otherUid)
-                            ? Theme.of(context).colorScheme.primary
-                            : Theme.of(context).colorScheme.onSurfaceVariant,
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: message.systemPayload?['recalled'] == true
+                      ? Colors.grey.shade200
+                      : (isMine
+                          ? Theme.of(context).colorScheme.primaryContainer
+                          : Theme.of(context)
+                              .colorScheme
+                              .surfaceContainerHighest),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  crossAxisAlignment:
+                      isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                  children: [
+                    if (!isMine && isGroup && senderName != null)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Text(
+                          senderName!,
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurfaceVariant,
+                          ),
+                        ),
                       ),
-                      if (message.seenBy.contains(otherUid))
-                        Padding(
-                          padding: const EdgeInsets.only(left: 4),
-                          child: Text(
-                            'Đã xem',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSurfaceVariant,
+                    if (hasImages)
+                      ...message.attachments
+                          .where((a) => a.mimeType.startsWith('image/'))
+                          .map(
+                            (attachment) => Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: GestureDetector(
+                                onTap: () => onImageTap(attachment.url),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Image.network(
+                                    attachment.url,
+                                    fit: BoxFit.cover,
+                                    width: double.infinity,
+                                    loadingBuilder:
+                                        (context, child, loadingProgress) {
+                                      if (loadingProgress == null) return child;
+                                      return Container(
+                                        height: 200,
+                                        color: Colors.grey[300],
+                                        child: Center(
+                                          child: CircularProgressIndicator(
+                                            value: loadingProgress
+                                                        .expectedTotalBytes !=
+                                                    null
+                                                ? loadingProgress
+                                                        .cumulativeBytesLoaded /
+                                                    loadingProgress
+                                                        .expectedTotalBytes!
+                                                : null,
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                    errorBuilder: (context, error, stackTrace) {
+                                      return Container(
+                                        height: 200,
+                                        color: Colors.grey[300],
+                                        child: const Icon(Icons.error),
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                    if (voiceAttachments.isNotEmpty) ...[
+                      ...voiceAttachments.map(
+                        (attachment) => Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: _VoiceMessagePlayer(
+                            attachment: attachment,
+                            isMine: isMine,
+                          ),
+                        ),
+                      ),
+                    ],
+                    if (videoAttachments.isNotEmpty) ...[
+                      ...videoAttachments.map(
+                        (attachment) => Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: GestureDetector(
+                            onTap: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => PostVideoPage(
+                                    videoUrl: attachment.url,
+                                  ),
+                                ),
+                              );
+                            },
+                            child: Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: attachment.thumbnailUrl != null
+                                      ? Image.network(
+                                          attachment.thumbnailUrl!,
+                                          fit: BoxFit.cover,
+                                          width: double.infinity,
+                                          height: 200,
+                                        )
+                                      : Container(
+                                          width: double.infinity,
+                                          height: 200,
+                                          color: Colors.black12,
+                                        ),
+                                ),
+                                Container(
+                                  decoration: const BoxDecoration(
+                                    color: Colors.black45,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  padding: const EdgeInsets.all(8),
+                                  child: const Icon(
+                                    Icons.play_arrow,
+                                    color: Colors.white,
+                                    size: 32,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
+                      ),
                     ],
-                  ),
+                    if (message.text != null && message.text!.isNotEmpty)
+                      _buildHighlightedText(
+                        message.text!,
+                        searchTerm: searchTerm,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontStyle: message.systemPayload?['recalled'] == true
+                              ? FontStyle.italic
+                              : FontStyle.normal,
+                          color: message.systemPayload?['recalled'] == true
+                              ? Colors.grey.shade600
+                              : null,
+                        ),
+                      ),
+                    if (message.systemPayload?['editedAt'] != null &&
+                        message.systemPayload?['recalled'] != true)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(
+                          'Đã chỉnh sửa',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurfaceVariant,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      ),
+                    if (reactionEntries.isNotEmpty &&
+                        message.systemPayload?['recalled'] != true) ...[
+                      const SizedBox(height: 4),
+                      Wrap(
+                        spacing: 4,
+                        children: reactionEntries.map((entry) {
+                          final emoji = entry.key;
+                          final count = entry.value.length;
+                          return Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.7),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              '$emoji $count',
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ],
+                    if (isMine)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              message.seenBy.contains(otherUid)
+                                  ? Icons.done_all
+                                  : Icons.done,
+                              size: 14,
+                              color: message.seenBy.contains(otherUid)
+                                  ? Theme.of(context).colorScheme.primary
+                                  : Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant,
+                            ),
+                            if (message.seenBy.contains(otherUid))
+                              Padding(
+                                padding: const EdgeInsets.only(left: 4),
+                                child: Text(
+                                  'Đã xem',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                  ],
                 ),
-            ],
+              ),
+            ),
           ),
-        ),
+        ],
       ),
     );
   }

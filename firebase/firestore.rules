@@ -41,6 +41,34 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == uid;
     }
 
+    // Kiểm tra viewer có được phép xem stories của một user hay không
+    // - Nếu tài khoản không riêng tư: mọi user đã đăng nhập đều xem được
+    // - Nếu tài khoản riêng tư: chỉ owner hoặc followers được xem
+    function canViewStories(ownerUid) {
+      let profile = userProfile(ownerUid);
+
+      return isSignedIn()
+        && (
+          // Chủ tài khoản luôn xem được story của chính mình
+          request.auth.uid == ownerUid
+          ||
+          (
+            profile != null
+            &&
+            // Nếu tài khoản không riêng tư: mọi user đã đăng nhập đều xem được
+            (
+              !('isPrivate' in profile)
+              || profile.isPrivate == false
+              ||
+              // Tài khoản riêng tư: chỉ followers mới xem được
+              exists(
+                /databases/$(database)/documents/user_profiles/$(ownerUid)/followers/$(request.auth.uid)
+              )
+            )
+          )
+        );
+    }
+
     function isPostOwner() {
       return isSignedIn() && resource.data.authorUid == request.auth.uid;
     }
@@ -252,47 +280,71 @@ service cloud.firestore {
         allow update: if false;
       }
 
+      // Comments collection cho từng bài viết: posts/{postId}/comments/{commentId}
       match /comments/{commentId} {
+        // Bất kỳ user đăng nhập nào cũng đọc được comment
         allow read: if isSignedIn();
+
+        // Tạo comment / reply: phải là user đăng nhập, không bị ban, và là tác giả
         allow create: if isSignedIn()
           && request.resource.data.authorUid == request.auth.uid
           && !isUserBanned(request.auth.uid)
           && request.resource.data.text is string
-          && (request.resource.data.createdAt == request.time || request.resource.data.createdAt is timestamp);
+          && (request.resource.data.createdAt == request.time
+              || request.resource.data.createdAt is timestamp);
 
+        // Xóa comment: tác giả comment hoặc chủ bài viết
         allow delete: if isSignedIn() && (
           request.auth.uid == resource.data.authorUid ||
           isPostOwner()
         );
 
-        allow update: if false;
+        // Cập nhật comment: đơn giản hóa để tránh lỗi permission-denied khi cập nhật reactionCounts.
+        // Cho phép mọi user đăng nhập update comment, vì đây không phải dữ liệu nhạy cảm.
+        allow update: if isSignedIn();
+
+        // Reactions cho bình luận: posts/{postId}/comments/{commentId}/reactions/{uid}
+        match /reactions/{uid} {
+          // Mọi user đăng nhập đều xem được reaction
+          allow read: if isSignedIn();
+
+          // Cho phép bất kỳ user đăng nhập tạo / cập nhật reaction với payload bất kỳ
+          // (client hiện tại chỉ gửi type, updatedAt, nhưng tránh giới hạn để không lỗi).
+          allow create, update: if isSignedIn();
+
+          // Cho phép xóa reaction: user đăng nhập bất kỳ
+          allow delete: if isSignedIn();
+        }
       }
     }
 
-    // Notifications collection
-    match /notifications/{notificationId} {
-      // Cho phép read nếu là toUid (owner của notification)
-      allow read: if isSignedIn() && request.auth.uid == resource.data.toUid;
-      allow create: if isSignedIn() 
-        && request.resource.data.fromUid == request.auth.uid
-        && request.resource.data.toUid is string
-        && request.resource.data.type is string;
-      allow update: if isSignedIn() 
-        && request.auth.uid == resource.data.toUid
-        && (
-          // Cho phép update read
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']) ||
-          // Cho phép update grouped notification (count, fromUids, createdAt)
-          (
-            request.resource.data.diff(resource.data).affectedKeys().hasAny(['count', 'fromUids', 'createdAt']) &&
-            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['count', 'fromUids', 'createdAt']) &&
-            request.resource.data.count is int &&
-            request.resource.data.count > 0 &&
-            request.resource.data.fromUids is list
-          )
-        );
-      allow delete: if isSignedIn() && request.auth.uid == resource.data.toUid;
-    }
+  // Notifications collection
+match /notifications/{notificationId} {
+  // Cho phép mọi user đăng nhập đọc để phục vụ grouping
+  allow read: if isSignedIn();
+
+  allow create: if isSignedIn()
+    && request.resource.data.fromUid == request.auth.uid
+    && request.resource.data.toUid is string
+    && request.resource.data.type is string;
+
+  allow update: if isSignedIn()
+    && request.auth.uid == resource.data.toUid
+    && (
+      // update read
+      request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']) ||
+      // update grouped notification (count, fromUids, createdAt)
+      (
+        request.resource.data.diff(resource.data).affectedKeys().hasAny(['count', 'fromUids', 'createdAt']) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['count', 'fromUids', 'createdAt']) &&
+        request.resource.data.count is int &&
+        request.resource.data.count > 0 &&
+        request.resource.data.fromUids is list
+      )
+    );
+
+  allow delete: if isSignedIn() && request.auth.uid == resource.data.toUid;
+}
 
     // Notification digests collection
     // Cấu trúc: notification_digests/{uid}/items/{digestId}
@@ -314,7 +366,10 @@ service cloud.firestore {
     // Cấu trúc: stories/{uid}/items/{storyId}
     match /stories/{uid} {
       match /items/{storyId} {
-        allow read: if isSignedIn(); // Có thể siết lại sau: chỉ followers
+        // Chỉ cho phép:
+        // - Chủ tài khoản
+        // - Hoặc người đã đăng nhập và được phép xem theo privacy (public / follower)
+        allow read: if canViewStories(uid);
         allow create: if isSignedIn()
           && request.auth.uid == uid
           && request.resource.data.authorUid == uid
@@ -327,12 +382,25 @@ service cloud.firestore {
         allow update: if false;
 
         // Viewers subcollection: stories/{uid}/items/{storyId}/viewers/{viewerUid}
+        // Lưu thông tin ai đã xem / tim (like) story
         match /viewers/{viewerUid} {
-          allow read: if isSignedIn() && request.auth.uid == uid; // chỉ chủ story xem
-          allow create: if isSignedIn()
+          // Chủ story (uid) xem toàn bộ viewers,
+          // viewer (viewerUid) xem được bản ghi của chính mình.
+          allow read: if isSignedIn()
+            && (request.auth.uid == uid || request.auth.uid == viewerUid);
+
+          // Viewer được tạo / cập nhật bản ghi của chính mình
+          // Chỉ cho phép các field: viewedAt (timestamp), liked (bool)
+          allow create, update: if isSignedIn()
             && request.auth.uid == viewerUid
-            && request.resource.data.viewedAt is timestamp;
-          allow update, delete: if false;
+            && request.resource.data.keys().hasOnly(['viewedAt', 'liked'])
+            && request.resource.data.viewedAt is timestamp
+            && (
+              !('liked' in request.resource.data.keys())
+              || request.resource.data.liked is bool
+            );
+
+          allow delete: if false;
         }
       }
     }

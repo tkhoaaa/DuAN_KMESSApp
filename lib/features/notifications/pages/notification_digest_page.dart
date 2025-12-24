@@ -4,12 +4,12 @@ import 'package:flutter/material.dart';
 import '../../admin/pages/admin_appeal_detail_page.dart';
 import '../../admin/pages/admin_report_detail_page.dart';
 import '../../auth/auth_repository.dart';
-import '../../chat/pages/chat_detail_page.dart';
+// import '../../chat/pages/chat_detail_page.dart';
 import '../../posts/models/post.dart';
 import '../../posts/pages/post_permalink_page.dart';
-import '../../posts/repositories/post_repository.dart';
+// import '../../posts/repositories/post_repository.dart';
 import '../../profile/public_profile_page.dart';
-import '../../profile/user_profile_repository.dart';
+// import '../../profile/user_profile_repository.dart';
 import '../models/notification.dart' as models;
 import '../models/notification_digest.dart';
 import '../repositories/notification_repository.dart';
@@ -482,7 +482,6 @@ class _NotificationDetailsModalState extends State<_NotificationDetailsModal> {
   final NotificationRepository _notificationRepository =
       NotificationRepository();
   final NotificationDigestService _digestService = NotificationDigestService();
-  final PostRepository _postRepository = PostRepository();
   
   // Helper để access _posts collection
   CollectionReference<Map<String, dynamic>> get _posts =>
@@ -575,10 +574,13 @@ class _NotificationDetailsModalState extends State<_NotificationDetailsModal> {
         case models.NotificationType.follow:
           return '${notification.count} người đã theo dõi bạn';
         case models.NotificationType.comment:
+        case models.NotificationType.commentReaction:
         case models.NotificationType.message:
         case models.NotificationType.call:
         case models.NotificationType.report:
         case models.NotificationType.appeal:
+        case models.NotificationType.storyLike:
+          // Không group các loại này trong digest
           break;
       }
     }
@@ -588,6 +590,9 @@ class _NotificationDetailsModalState extends State<_NotificationDetailsModal> {
         return 'Đã thích bài đăng của bạn';
       case models.NotificationType.comment:
         return 'Đã bình luận bài đăng của bạn';
+      case models.NotificationType.commentReaction:
+        final reactionEmoji = notification.text ?? '👍';
+        return 'Đã thả reaction $reactionEmoji vào bình luận của bạn';
       case models.NotificationType.follow:
         return 'Đã theo dõi bạn';
       case models.NotificationType.message:
@@ -598,6 +603,8 @@ class _NotificationDetailsModalState extends State<_NotificationDetailsModal> {
         return 'Có báo cáo mới';
       case models.NotificationType.appeal:
         return 'Có đơn kháng cáo mới';
+      case models.NotificationType.storyLike:
+        return 'Đã tim tin của bạn';
     }
   }
 
@@ -801,22 +808,21 @@ class _NotificationDetailsModalState extends State<_NotificationDetailsModal> {
         );
         break;
       case models.NotificationType.message:
-        if (notification.conversationId != null) {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => ChatDetailPage(
-                conversationId: notification.conversationId!,
-                otherUid: notification.fromUid,
-              ),
-            ),
-          );
-        }
+        // Không còn navigate với message trong digest
         break;
       case models.NotificationType.comment:
         // Không cần xử lý vì đã xử lý trong _buildPostCommentItem
         break;
+      case models.NotificationType.commentReaction:
+        if (notification.postId != null) {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => PostPermalinkPage(postId: notification.postId!),
+            ),
+          );
+        }
+        break;
       case models.NotificationType.call:
-        // Call notifications được xử lý tự động bởi incoming call dialog
         // Không cần navigation
         break;
       case models.NotificationType.report:
@@ -844,6 +850,9 @@ class _NotificationDetailsModalState extends State<_NotificationDetailsModal> {
             ),
           );
         }
+        break;
+      case models.NotificationType.storyLike:
+        // Sau này có thể mở viewer story; hiện tại chỉ đóng modal
         break;
     }
   }

@@ -1,6 +1,4 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
-import '../../notifications/services/notification_service.dart';
 import '../../profile/user_profile_repository.dart';
 import '../models/conversation_summary.dart';
 import '../models/message.dart';
@@ -12,7 +10,6 @@ class ChatRepository {
       : _firestore = firestore ?? FirebaseFirestore.instance;
 
   final FirebaseFirestore _firestore;
-  final NotificationService _notificationService = NotificationService();
 
   CollectionReference<Map<String, dynamic>> get _conversationCollection =>
       _firestore.collection('conversations');
@@ -573,26 +570,7 @@ class ChatRepository {
 
     await batch.commit();
     
-    // Tạo notification cho các participants khác (không phải sender)
-    for (final participantId in participantIds) {
-      if (participantId == senderId) continue;
-      final shouldNotify = await _shouldSendNotification(
-        conversationId: conversationId,
-        receiverUid: participantId,
-        referenceTime: now,
-      );
-      if (!shouldNotify) continue;
-      _notificationService
-          .createMessageNotification(
-        conversationId: conversationId,
-        senderUid: senderId,
-        receiverUid: participantId,
-        messageText:
-            text.isNotEmpty ? text : (attachments.isNotEmpty ? '[media]' : null),
-      )
-          .catchError(
-              (e) => debugPrint('Error creating message notification: $e'));
-    }
+    // Không còn tạo notification cho tin nhắn chat ở tab Thông báo
   }
 
   /// Gửi tin nhắn có hình ảnh
@@ -638,6 +616,48 @@ class ChatRepository {
       text: text ?? '',
       attachments: attachments,
     );
+  }
+
+   /// Chỉnh sửa nội dung tin nhắn (chỉ áp dụng cho tin nhắn text/media của chính chủ)
+  Future<void> editMessage({
+    required String conversationId,
+    required String messageId,
+    required String newText,
+  }) async {
+    final messageRef = _messagesRef(conversationId).doc(messageId);
+    await messageRef.update({ 
+      'text': newText,
+      'systemPayload': {
+        'editedAt': FieldValue.serverTimestamp(),
+      },
+    });
+  }
+
+  /// Thu hồi tin nhắn: xóa nội dung và attachments, đánh dấu đã thu hồi
+  Future<void> recallMessage({
+    required String conversationId,
+    required String messageId,
+  }) async {
+    final messageRef = _messagesRef(conversationId).doc(messageId);
+    await messageRef.update({
+      'text': '[Tin nhắn đã thu hồi]',
+      'attachments': [],
+      'reactions': {},
+      'type': 'recalled',
+      'systemPayload': {
+        'recalled': true,
+        'recalledAt': FieldValue.serverTimestamp(),
+      },
+    });
+  }
+
+  /// Lấy danh sách participantIds của hội thoại
+  Future<List<String>> fetchParticipantIds(String conversationId) async {
+    final doc = await _conversationCollection.doc(conversationId).get();
+    final ids = (doc.data()?['participantIds'] as List<dynamic>? ?? [])
+        .map((e) => e.toString())
+        .toList();
+    return ids;
   }
 
   /// Thêm/xóa reaction cho một tin nhắn
@@ -757,27 +777,6 @@ class ChatRepository {
     }).toList();
   }
 
-  Future<bool> _shouldSendNotification({
-    required String conversationId,
-    required String receiverUid,
-    required DateTime referenceTime,
-  }) async {
-    try {
-      final settings = await fetchParticipantNotificationSettings(
-        conversationId: conversationId,
-        uid: receiverUid,
-      );
-      if (!settings.notificationsEnabled) return false;
-      if (settings.mutedUntil != null &&
-          settings.mutedUntil!.isAfter(referenceTime)) {
-        return false;
-      }
-      return true;
-    } catch (e) {
-      debugPrint('Warning: cannot determine mute state ($e), defaulting to notify');
-      return true;
-    }
-  }
 }
 
 class ParticipantNotificationSettings {

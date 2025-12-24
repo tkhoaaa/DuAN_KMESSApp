@@ -17,7 +17,11 @@ import '../posts/pages/post_create_page.dart';
 import '../posts/pages/post_permalink_page.dart';
 import '../posts/pages/post_video_page.dart';
 import 'user_profile_repository.dart';
+import '../../theme/colors.dart';
 import '../stories/pages/story_create_page.dart';
+import '../stories/pages/story_viewer_page.dart';
+import '../stories/repositories/story_repository.dart';
+import '../stories/models/story.dart';
 
 class PublicProfilePage extends StatefulWidget {
   const PublicProfilePage({
@@ -171,6 +175,66 @@ class _PublicProfilePageState extends State<PublicProfilePage> {
     }
   }
 
+  Future<void> _handleAvatarTap({
+    required UserProfile profile,
+    required bool hasActiveStory,
+  }) async {
+    final currentUid = authRepository.currentUser()?.uid;
+    if (!hasActiveStory) {
+      return;
+    }
+
+    // Chưa đăng nhập: yêu cầu đăng nhập trước
+    if (currentUid == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Vui lòng đăng nhập để xem story.')),
+      );
+      return;
+    }
+
+    // Chủ tài khoản luôn xem được story của chính mình
+    if (currentUid == widget.uid) {
+      if (!mounted) return;
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => StoryViewerPage(
+            initialAuthorUid: widget.uid,
+            userIdsWithStories: [widget.uid],
+          ),
+        ),
+      );
+      return;
+    }
+
+    // Tài khoản riêng tư: chỉ followers mới xem được
+    if (profile.isPrivate) {
+      final status = await _followService.fetchFollowStatus(
+        currentUid,
+        widget.uid,
+      );
+      if (status != FollowStatus.following && status != FollowStatus.self) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Tài khoản riêng tư. Chỉ người theo dõi mới có thể xem story.'),
+          ),
+        );
+        return;
+      }
+    }
+
+    if (!mounted) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => StoryViewerPage(
+          initialAuthorUid: widget.uid,
+          userIdsWithStories: [widget.uid],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final currentUid = authRepository.currentUser()?.uid;
@@ -295,15 +359,40 @@ class _PublicProfilePageState extends State<PublicProfilePage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        _InstaProfileHeader(
-                          displayName: displayName,
-                          profile: profile,
-                          statusText: statusText,
-                          currentUid: currentUid,
-                          followService: _followService,
-                          themeColor: themeColor,
-                          onAddPressed: _showCreateChooser,
-                          onAccountMenuPressed: _showAccountMenu,
+                        FutureBuilder<StoryRingStatus>(
+                          future: StoryRepository().fetchStoryRingStatus(
+                            ownerUid: widget.uid,
+                            viewerUid: currentUid ?? 'guest',
+                          ),
+                          builder: (context, ringSnapshot) {
+                            final ringStatus =
+                                ringSnapshot.data ?? StoryRingStatus.none;
+                            final hasActiveStory =
+                                ringStatus != StoryRingStatus.none;
+                            Color? ringColor;
+                            if (ringStatus == StoryRingStatus.unseen) {
+                              ringColor = AppColors.primaryPink;
+                            } else if (ringStatus == StoryRingStatus.allSeen) {
+                              ringColor = Colors.grey;
+                            }
+
+                            return _InstaProfileHeader(
+                              displayName: displayName,
+                              profile: profile,
+                              statusText: statusText,
+                              currentUid: currentUid,
+                              followService: _followService,
+                              themeColor: themeColor,
+                              hasActiveStory: hasActiveStory,
+                              storyRingColor: ringColor,
+                              onAvatarTap: () => _handleAvatarTap(
+                                profile: profile,
+                                hasActiveStory: hasActiveStory,
+                              ),
+                              onAddPressed: _showCreateChooser,
+                              onAccountMenuPressed: _showAccountMenu,
+                            );
+                          },
                         ),
                       if (blockedByTarget)
                         _BlockedInfoBanner(
@@ -406,6 +495,93 @@ class _PublicProfilePageState extends State<PublicProfilePage> {
                           ),
                         const SizedBox(height: 24),
                       ],
+                      // Highlight Stories Section
+                      if (!isBanned)
+                        StreamBuilder<UserProfile?>(
+                          stream: userProfileRepository.watchProfile(widget.uid),
+                          builder: (context, profileSnapshot) {
+                            final profile = profileSnapshot.data;
+                            final highlightedStories = profile?.highlightedStories ?? [];
+                            if (highlightedStories.isEmpty) {
+                              return const SizedBox.shrink();
+                            }
+                            return StreamBuilder<List<Story>>(
+                              stream: StoryRepository().fetchStoriesByAuthor(widget.uid),
+                              builder: (context, storiesSnapshot) {
+                                final allStories = storiesSnapshot.data ?? [];
+                                
+                                // Filter highlights để chỉ hiển thị những highlight có ít nhất 1 story tồn tại
+                                final validHighlights = highlightedStories
+                                    .where((h) => h.storyIds.any((id) =>
+                                        allStories.any((s) => s.id == id)))
+                                    .toList();
+                                
+                                if (validHighlights.isEmpty) {
+                                  return const SizedBox.shrink();
+                                }
+                                
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Padding(
+                                      padding: EdgeInsets.symmetric(horizontal: 16),
+                                      child: Row(
+                                        children: [
+                                          Icon(Icons.auto_awesome, size: 20, color: Colors.purple),
+                                          SizedBox(width: 8),
+                                          Text(
+                                            'Highlight Stories',
+                                            style: TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    SizedBox(
+                                      height: 100,
+                                      child: ListView.builder(
+                                        scrollDirection: Axis.horizontal,
+                                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                                        itemCount: validHighlights.length,
+                                        itemBuilder: (context, index) {
+                                          final highlight = validHighlights[index];
+                                          final highlightStories = allStories
+                                              .where((s) => highlight.storyIds.contains(s.id))
+                                              .toList();
+                                          if (highlightStories.isEmpty) {
+                                            return const SizedBox.shrink();
+                                          }
+                                          return _HighlightStoryBubble(
+                                            highlight: highlight,
+                                            firstStory: highlightStories.first,
+                                            authorUid: widget.uid,
+                                            onTap: () {
+                                              // Navigate to story viewer với stories của highlight
+                                              Navigator.of(context).push(
+                                                MaterialPageRoute(
+                                                  builder: (_) => StoryViewerPage(
+                                                    initialAuthorUid: widget.uid,
+                                                    userIdsWithStories: [widget.uid],
+                                                    initialStoryIds: highlight.storyIds,
+                                                    highlightId: highlight.id,
+                                                  ),
+                                                ),
+                                              );
+                                            },
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                    const SizedBox(height: 16),
+                                  ],
+                                );
+                              },
+                            );
+                          },
+                        ),
                       // Pinned Posts Section
                       if (!isBanned && _pinnedPosts.isNotEmpty) ...[
                         const Padding(
@@ -539,6 +715,9 @@ class _InstaProfileHeader extends StatelessWidget {
     required this.followService,
     required this.onAddPressed,
     required this.onAccountMenuPressed,
+    required this.hasActiveStory,
+    required this.onAvatarTap,
+    this.storyRingColor,
     this.themeColor,
   });
 
@@ -549,6 +728,9 @@ class _InstaProfileHeader extends StatelessWidget {
   final FollowService followService;
   final VoidCallback onAddPressed;
   final VoidCallback onAccountMenuPressed;
+  final bool hasActiveStory;
+  final VoidCallback onAvatarTap;
+  final Color? storyRingColor;
   final Color? themeColor;
 
   @override
@@ -594,23 +776,26 @@ class _InstaProfileHeader extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         Center(
-          child: Container(
-            decoration: themeColor != null
-                ? BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: themeColor!,
-                      width: 3,
-                    ),
-                  )
-                : null,
-            child: CircleAvatar(
-              radius: 48,
-              backgroundImage:
-                  profile.photoUrl != null ? NetworkImage(profile.photoUrl!) : null,
-              child: profile.photoUrl == null
-                  ? const Icon(Icons.person, size: 48)
+          child: GestureDetector(
+            onTap: hasActiveStory ? onAvatarTap : null,
+            child: Container(
+              decoration: hasActiveStory && storyRingColor != null
+                  ? BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: storyRingColor!,
+                        width: 3,
+                      ),
+                    )
                   : null,
+              child: CircleAvatar(
+                radius: 48,
+                backgroundImage:
+                    profile.photoUrl != null ? NetworkImage(profile.photoUrl!) : null,
+                child: profile.photoUrl == null
+                    ? const Icon(Icons.person, size: 48)
+                    : null,
+              ),
             ),
           ),
         ),
@@ -1174,6 +1359,81 @@ class _BlockedInfoBanner extends StatelessWidget {
         style: TextStyle(
           color: Theme.of(context).colorScheme.onErrorContainer,
         ),
+      ),
+    );
+  }
+}
+
+class _HighlightStoryBubble extends StatelessWidget {
+  const _HighlightStoryBubble({
+    required this.highlight,
+    required this.firstStory,
+    required this.authorUid,
+    required this.onTap,
+  });
+
+  final HighlightStory highlight;
+  final Story firstStory;
+  final String authorUid;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 70,
+        margin: const EdgeInsets.symmetric(horizontal: 6),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 70,
+              height: 70,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.purple, width: 2.5),
+              ),
+              child: ClipOval(
+                child: firstStory.thumbnailUrl != null
+                    ? Image.network(
+                        firstStory.thumbnailUrl!,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => _buildPlaceholder(),
+                      )
+                    : firstStory.type == StoryMediaType.image
+                        ? Image.network(
+                            firstStory.mediaUrl,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => _buildPlaceholder(),
+                          )
+                        : _buildPlaceholder(),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              highlight.name,
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPlaceholder() {
+    return Container(
+      color: Colors.grey[300],
+      child: Icon(
+        firstStory.type == StoryMediaType.video ? Icons.videocam : Icons.image,
+        color: Colors.grey[600],
+        size: 30,
       ),
     );
   }

@@ -156,11 +156,13 @@ class NotificationDigestService {
         case NotificationType.follow:
           followsCount += count;
           break;
+        case NotificationType.commentReaction:
         case NotificationType.message:
         case NotificationType.call:
         case NotificationType.report:
         case NotificationType.appeal:
-          // Bỏ qua messages và calls - không tính vào stats
+        case NotificationType.storyLike:
+          // Bỏ qua messages, calls, comment reactions - không tính vào stats
           break;
       }
     }

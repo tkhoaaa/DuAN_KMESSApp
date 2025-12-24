@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -277,7 +278,7 @@ class _PostFeedPageState extends State<PostFeedPage> {
       case _FeedMenuAction.filter:
         return 'Lọc & sắp xếp';
       case _FeedMenuAction.story:
-        return 'Story của bạn';
+        return 'Tin của bạn';
       case _FeedMenuAction.storyArchive:
         return 'Kho lưu trữ Story';
       case _FeedMenuAction.notifications:
@@ -361,10 +362,158 @@ class _PostFeedPageState extends State<PostFeedPage> {
     );
   }
 
+  Widget _buildShimmerLoading() {
+    return CustomScrollView(
+      slivers: [
+        SliverToBoxAdapter(
+          child: Container(
+            height: 50,
+            margin: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade200,
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        ),
+        SliverToBoxAdapter(
+          child: SizedBox(
+            height: 110,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+              itemCount: 5,
+              itemBuilder: (context, index) => Container(
+                width: 70,
+                margin: const EdgeInsets.only(right: 12),
+                child: Column(
+                  children: [
+                    Container(
+                      width: 64,
+                      height: 64,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.grey.shade200,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Container(
+                      height: 12,
+                      width: 50,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade200,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        SliverList(
+          delegate: SliverChildBuilderDelegate(
+            (context, index) => Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.grey.shade200,
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.grey.shade200,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              height: 16,
+                              width: 120,
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade200,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Container(
+                              height: 12,
+                              width: 80,
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade200,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    height: 200,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade200,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Container(
+                        height: 24,
+                        width: 60,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade200,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        height: 24,
+                        width: 60,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade200,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            childCount: 5,
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.grey.shade50,
       appBar: AppBar(
+        elevation: 0,
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
         title: Text(
           'Bảng tin',
           style: AppTypography.body.copyWith(
@@ -375,7 +524,10 @@ class _PostFeedPageState extends State<PostFeedPage> {
         actions: [
           PopupMenuButton<_FeedMenuAction>(
             icon: _menuButtonIcon(),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            elevation: 8,
             onSelected: _handleMenuAction,
             itemBuilder: (context) => _menuActions
                 .map(
@@ -388,59 +540,95 @@ class _PostFeedPageState extends State<PostFeedPage> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: FloatingActionButton.extended(
         onPressed: () async {
           final created = await Navigator.of(context).push<bool>(
-            MaterialPageRoute(builder: (_) => const PostCreatePage()),
+            PageRouteBuilder(
+              pageBuilder: (context, animation, secondaryAnimation) =>
+                  const PostCreatePage(),
+              transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                return SlideTransition(
+                  position: Tween<Offset>(
+                    begin: const Offset(0.0, 1.0),
+                    end: Offset.zero,
+                  ).animate(CurvedAnimation(
+                    parent: animation,
+                    curve: Curves.easeOutCubic,
+                  )),
+                  child: child,
+                );
+              },
+            ),
           );
           if (created == true) {
             _loadInitial();
           }
         },
-        child: const Icon(Icons.add),
+        icon: const Icon(Icons.add),
+        label: const Text('Tạo bài viết'),
+        backgroundColor: AppColors.primaryPink,
       ),
       body: RefreshIndicator(
         onRefresh: _loadInitial,
+        color: AppColors.primaryPink,
         child: _initialLoading
-            ? const Center(child: CircularProgressIndicator())
-            : Column(
-                children: [
-                  FeedFilterChips(
-                    filters: _filters,
-                    onRemoveFilter: (filters) {
-                      setState(() {
-                        _filters = filters;
-                      });
-                      _loadInitial();
-                    },
-                    onTap: () {
-                      _openFilterSheet();
-                    },
+            ? _buildShimmerLoading()
+            : CustomScrollView(
+                controller: _scrollController,
+                physics: const AlwaysScrollableScrollPhysics(
+                  parent: BouncingScrollPhysics(),
+                ),
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: FeedFilterChips(
+                      filters: _filters,
+                      onRemoveFilter: (filters) {
+                        setState(() {
+                          _filters = filters;
+                        });
+                        _loadInitial();
+                      },
+                      onTap: () {
+                        _openFilterSheet();
+                      },
+                    ),
                   ),
-                  Expanded(
-                    child: ListView.builder(
-                      controller: _scrollController,
-                      padding: const EdgeInsets.only(bottom: 80),
-                      itemCount: _entries.length + 1 + (_hasMore ? 1 : 0),
-                      itemBuilder: (context, index) {
-                        if (index == 0) {
-                          return _StoriesBar(storyRepository: _storyRepository);
+                  SliverToBoxAdapter(
+                    child: _StoriesBar(storyRepository: _storyRepository),
+                  ),
+                  SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) {
+                        if (index >= _entries.length) {
+                          if (_hasMore && _isLoading) {
+                            return const Padding(
+                              padding: EdgeInsets.all(24),
+                              child: Center(
+                                child: CircularProgressIndicator(
+                                  color: AppColors.primaryPink,
+                                ),
+                              ),
+                            );
+                          }
+                          return const SizedBox.shrink();
                         }
-                        final postIndex = index - 1;
-                        if (postIndex >= _entries.length) {
-                          return const Padding(
-                            padding: EdgeInsets.all(16),
-                            child: Center(child: CircularProgressIndicator()),
-                          );
-                        }
-                        final entry = _entries[postIndex];
-                        return PostFeedItem(
+                        final entry = _entries[index];
+                        return _AnimatedPostItem(
+                          key: ValueKey(entry.doc.id),
+                          index: index,
                           entry: entry,
                           service: _postService,
                           onOpenProfile: (uid) {
                             Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => PublicProfilePage(uid: uid),
+                              PageRouteBuilder(
+                                pageBuilder: (context, animation, secondaryAnimation) =>
+                                    PublicProfilePage(uid: uid),
+                                transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                                  return FadeTransition(
+                                    opacity: animation,
+                                    child: child,
+                                  );
+                                },
                               ),
                             );
                           },
@@ -448,16 +636,20 @@ class _PostFeedPageState extends State<PostFeedPage> {
                             showModalBottomSheet(
                               context: context,
                               isScrollControlled: true,
+                              backgroundColor: Colors.transparent,
                               builder: (_) => PostCommentsSheet(post: post),
                             );
                           },
                           onPostDeleted: () {
-                            // Reload feed sau khi xóa post
                             _loadInitial();
                           },
                         );
                       },
+                      childCount: _entries.length + (_hasMore ? 1 : 0),
                     ),
+                  ),
+                  SliverPadding(
+                    padding: const EdgeInsets.only(bottom: 80),
                   ),
                 ],
               ),
@@ -583,6 +775,7 @@ class _PostFeedItemState extends State<PostFeedItem> {
           child: PageView.builder(
             controller: _pageController,
             itemCount: media.length,
+            physics: const BouncingScrollPhysics(),
             onPageChanged: (index) {
               setState(() {
                 _currentPage = index;
@@ -694,18 +887,20 @@ class _PostFeedItemState extends State<PostFeedItem> {
         ),
         if (media.length > 1)
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
+            padding: const EdgeInsets.symmetric(vertical: 12),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: List.generate(media.length, (index) {
                 final selected = index == _currentPage;
-                return Container(
-                  width: 8,
+                return AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.easeInOut,
+                  width: selected ? 24 : 8,
                   height: 8,
                   margin: const EdgeInsets.symmetric(horizontal: 4),
                   decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: selected ? Colors.blue : Colors.grey.shade400,
+                    borderRadius: BorderRadius.circular(4),
+                    color: selected ? AppColors.primaryPink : Colors.grey.shade300,
                   ),
                 );
               }),
@@ -741,58 +936,84 @@ class _PostFeedItemState extends State<PostFeedItem> {
 
     final isOwner = currentUid == post.authorUid;
 
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      color: Colors.white,
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: const BorderSide(color: AppColors.borderGrey),
-      ),
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Card(
+        elevation: 0,
+        color: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+        ),
+        clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            leading: CircleAvatar(
-              backgroundImage:
-                  authorPhotoUrl != null ? NetworkImage(authorPhotoUrl) : null,
-              backgroundColor: AppColors.borderGrey,
-              child: authorPhotoUrl == null
-                  ? const Icon(Icons.person, color: AppColors.textLight)
-                  : null,
-            ),
-            title: Text(
-              displayName,
-              style: AppTypography.body.copyWith(fontWeight: FontWeight.w700),
-            ),
-            subtitle: post.createdAt != null
-                ? Text(
-                    post.createdAt!.toLocal().toString(),
-                    style: AppTypography.caption,
-                  )
-                : null,
-            onTap: () => widget.onOpenProfile(post.authorUid),
-            trailing: _buildTrailingMenu(
-              context: context,
-              post: post,
-              isOwner: isOwner,
-              blockedByMe: blockedByMe,
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Hero(
+                  tag: 'avatar_${post.authorUid}',
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: () => widget.onOpenProfile(post.authorUid),
+                      borderRadius: BorderRadius.circular(30),
+                      child: CircleAvatar(
+                        radius: 24,
+                        backgroundImage:
+                            authorPhotoUrl != null ? NetworkImage(authorPhotoUrl) : null,
+                        backgroundColor: AppColors.borderGrey,
+                        child: authorPhotoUrl == null
+                            ? const Icon(Icons.person, color: AppColors.textLight)
+                            : null,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      GestureDetector(
+                        onTap: () => widget.onOpenProfile(post.authorUid),
+                        child: Text(
+                          displayName,
+                          style: AppTypography.body.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      if (post.createdAt != null)
+                        Text(
+                          _formatTimeAgo(post.createdAt!),
+                          style: AppTypography.caption.copyWith(
+                            color: AppColors.textLight,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                _buildTrailingMenu(
+                  context: context,
+                  post: post,
+                  isOwner: isOwner,
+                  blockedByMe: blockedByMe,
+                ) ?? const SizedBox.shrink(),
+              ],
             ),
           ),
           _buildMediaCarousel(post),
           if (post.caption.isNotEmpty)
             Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 8,
-              ),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
               child: PostCaptionWithHashtags(
                 caption: post.caption,
               ),
             ),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             child: Row(
               children: [
                 StreamBuilder<bool>(
@@ -800,11 +1021,8 @@ class _PostFeedItemState extends State<PostFeedItem> {
                   builder: (context, likeSnapshot) {
                     final isLiked = likeSnapshot.data ?? false;
                     final isLoggedIn = authRepository.currentUser() != null;
-                    return IconButton(
-                      icon: Icon(
-                        isLiked ? Icons.favorite : Icons.favorite_border,
-                        color: isLiked ? AppColors.primaryPink : AppColors.textLight,
-                      ),
+                    return _LikeButton(
+                      isLiked: isLiked,
                       onPressed: isLoggedIn
                           ? () async {
                               try {
@@ -816,8 +1034,11 @@ class _PostFeedItemState extends State<PostFeedItem> {
                                 if (!mounted) return;
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
-                                    content:
-                                        Text('Lỗi cập nhật lượt thích: $e'),
+                                    content: Text('Lỗi cập nhật lượt thích: $e'),
+                                    behavior: SnackBarBehavior.floating,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
                                   ),
                                 );
                               }
@@ -830,9 +1051,54 @@ class _PostFeedItemState extends State<PostFeedItem> {
                   '${post.likeCount}',
                   style: AppTypography.caption.copyWith(color: AppColors.textDark),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.comment_outlined, color: AppColors.primaryPink),
-                  onPressed: () => widget.onOpenComments(post),
+                const SizedBox(width: 4),
+                // Tổng số reaction trên tất cả bình luận của bài viết
+                StreamBuilder<int>(
+                  key: ValueKey('reaction_count_${post.id}'),
+                  stream: widget.service.watchPostReactionCount(post.id),
+                  initialData: 0,
+                  builder: (context, snapshot) {
+                    debugPrint('StreamBuilder for post ${post.id}: connectionState=${snapshot.connectionState}, hasData=${snapshot.hasData}, data=${snapshot.data}, hasError=${snapshot.hasError}');
+                    if (snapshot.hasError) {
+                      debugPrint('Error watching post reaction count for post ${post.id}: ${snapshot.error}');
+                      return const SizedBox.shrink();
+                    }
+                    final totalReactions = snapshot.data ?? 0;
+                    debugPrint('Post ${post.id}: totalReactions = $totalReactions (connectionState=${snapshot.connectionState})');
+                    if (totalReactions <= 0) {
+                      return const SizedBox.shrink();
+                    }
+                    return Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.emoji_emotions_outlined,
+                          size: 18,
+                          color: AppColors.primaryPink,
+                        ),
+                        const SizedBox(width: 2),
+                        Text(
+                          '$totalReactions',
+                          style: AppTypography.caption
+                              .copyWith(color: AppColors.textDark),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () => widget.onOpenComments(post),
+                    borderRadius: BorderRadius.circular(20),
+                    child: Padding(
+                      padding: const EdgeInsets.all(8),
+                      child: Icon(
+                        Icons.comment_outlined,
+                        color: AppColors.primaryPink,
+                      ),
+                    ),
+                  ),
                 ),
                 Text(
                   '${post.commentCount}',
@@ -853,49 +1119,63 @@ class _PostFeedItemState extends State<PostFeedItem> {
                       );
                     },
                   ),
-                PopupMenuButton<String>(
-                  icon: const Icon(Icons.share, color: AppColors.primaryPink),
-                  onSelected: (value) async {
-                    if (value == 'share') {
-                      await ShareService.sharePost(
-                        postId: post.id,
-                        caption: post.caption.isNotEmpty ? post.caption : null,
-                      );
-                    } else if (value == 'copy') {
-                      await ShareService.copyPostLink(post.id);
-                      if (!mounted) return;
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Đã sao chép link')),
-                      );
-                    }
-                  },
-                  itemBuilder: (context) => const [
-                    PopupMenuItem(
-                      value: 'share',
-                      child: Row(
-                        children: [
-                          Icon(Icons.share, color: AppColors.primaryPink),
-                          SizedBox(width: 8),
-                          Text('Chia sẻ'),
-                        ],
-                      ),
+                Material(
+                  color: Colors.transparent,
+                  child: PopupMenuButton<String>(
+                    icon: const Icon(Icons.share, color: AppColors.primaryPink),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
                     ),
-                    PopupMenuItem(
-                      value: 'copy',
-                      child: Row(
-                        children: [
-                          Icon(Icons.copy, color: AppColors.textDark),
-                          SizedBox(width: 8),
-                          Text('Sao chép link'),
-                        ],
+                    elevation: 8,
+                    onSelected: (value) async {
+                      if (value == 'share') {
+                        await ShareService.sharePost(
+                          postId: post.id,
+                          caption: post.caption.isNotEmpty ? post.caption : null,
+                        );
+                      } else if (value == 'copy') {
+                        await ShareService.copyPostLink(post.id);
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: const Text('Đã sao chép link'),
+                            behavior: SnackBarBehavior.floating,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                        );
+                      }
+                    },
+                    itemBuilder: (context) => const [
+                      PopupMenuItem(
+                        value: 'share',
+                        child: Row(
+                          children: [
+                            Icon(Icons.share, color: AppColors.primaryPink),
+                            SizedBox(width: 8),
+                            Text('Chia sẻ'),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
+                      PopupMenuItem(
+                        value: 'copy',
+                        child: Row(
+                          children: [
+                            Icon(Icons.copy, color: AppColors.textDark),
+                            SizedBox(width: 8),
+                            Text('Sao chép link'),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
           ),
         ],
+      ),
       ),
     );
   }
@@ -1093,6 +1373,27 @@ class _PostFeedItemState extends State<PostFeedItem> {
     return '$minutesStr:$secondsStr';
   }
 
+  String _formatTimeAgo(DateTime dateTime) {
+    final now = DateTime.now();
+    final difference = now.difference(dateTime);
+
+    if (difference.inDays > 365) {
+      final years = (difference.inDays / 365).floor();
+      return '$years ${years == 1 ? 'năm' : 'năm'} trước';
+    } else if (difference.inDays > 30) {
+      final months = (difference.inDays / 30).floor();
+      return '$months ${months == 1 ? 'tháng' : 'tháng'} trước';
+    } else if (difference.inDays > 0) {
+      return '${difference.inDays} ${difference.inDays == 1 ? 'ngày' : 'ngày'} trước';
+    } else if (difference.inHours > 0) {
+      return '${difference.inHours} ${difference.inHours == 1 ? 'giờ' : 'giờ'} trước';
+    } else if (difference.inMinutes > 0) {
+      return '${difference.inMinutes} ${difference.inMinutes == 1 ? 'phút' : 'phút'} trước';
+    } else {
+      return 'Vừa xong';
+    }
+  }
+
   Future<void> _confirmBlockAuthor(String authorUid) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -1249,84 +1550,107 @@ class _StoriesBar extends StatelessWidget {
                   builder: (context, userStorySnap) {
                     final myStories = userStorySnap.data ?? [];
                     final hasMyStories = myStories.isNotEmpty;
-                    return GestureDetector(
-                      onTap: () {
-                        if (hasMyStories) {
-                          // Tạo danh sách users có story: chính mình + người theo dõi có story
-                          final usersWithStories = <String>[user.uid];
-                          for (final entry in following) {
-                            // Kiểm tra xem user này có story không (đã được check trong StreamBuilder)
-                            usersWithStories.add(entry.uid);
-                          }
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => StoryViewerPage(
-                                initialAuthorUid: user.uid,
-                                userIdsWithStories: usersWithStories,
+                    return StreamBuilder<UserProfile?>(
+                      stream: userProfileRepository.watchProfile(user.uid),
+                      builder: (context, profileSnap) {
+                        final profile = profileSnap.data;
+                        final photoUrl = profile?.photoUrl;
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 12),
+                          child: Column(
+                            children: [
+                              Stack(
+                                children: [
+                                  // Avatar: bấm để xem / tạo story
+                                  GestureDetector(
+                                    onTap: () {
+                                      if (hasMyStories) {
+                                        // Xem story hiện tại của mình + người đang theo dõi
+                                        final usersWithStories = <String>[user.uid];
+                                        for (final entry in following) {
+                                          usersWithStories.add(entry.uid);
+                                        }
+                                        Navigator.of(context).push(
+                                          MaterialPageRoute(
+                                            builder: (_) => StoryViewerPage(
+                                              initialAuthorUid: user.uid,
+                                              userIdsWithStories: usersWithStories,
+                                            ),
+                                          ),
+                                        );
+                                      } else {
+                                        // Chưa có story: chuyển thẳng tới trang tạo story
+                                        Navigator.of(context).push(
+                                          MaterialPageRoute(
+                                            builder: (_) => const StoryCreatePage(),
+                                          ),
+                                        );
+                                      }
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.all(2),
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        gradient: hasMyStories
+                                            ? const LinearGradient(
+                                                colors: [Colors.orange, Colors.pink],
+                                              )
+                                            : null,
+                                        color: hasMyStories
+                                            ? null
+                                            : Colors.grey.shade300,
+                                      ),
+                                      child: CircleAvatar(
+                                        radius: 30,
+                                        backgroundImage: photoUrl != null
+                                            ? NetworkImage(photoUrl)
+                                            : null,
+                                        backgroundColor: photoUrl == null
+                                            ? Colors.grey.shade300
+                                            : null,
+                                        child: photoUrl == null
+                                            ? const Icon(Icons.person)
+                                            : null,
+                                      ),
+                                    ),
+                                  ),
+                                  // Nút dấu +: luôn mở trang tạo story
+                                  Positioned(
+                                    right: 0,
+                                    bottom: 0,
+                                    child: GestureDetector(
+                                      onTap: () {
+                                        Navigator.of(context).push(
+                                          MaterialPageRoute(
+                                            builder: (_) => const StoryCreatePage(),
+                                          ),
+                                        );
+                                      },
+                                      child: Container(
+                                        decoration: const BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: Colors.blue,
+                                        ),
+                                        padding: const EdgeInsets.all(2),
+                                        child: const Icon(
+                                          Icons.add,
+                                          size: 16,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ),
-                          );
-                        } else {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => const StoryCreatePage(),
-                            ),
-                          );
-                        }
+                              const SizedBox(height: 4),
+                              Text(
+                                hasMyStories ? 'Tin của bạn' : 'Thêm tin',
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                            ],
+                          ),
+                        );
                       },
-                      child: Padding(
-                        padding: const EdgeInsets.only(right: 12),
-                        child: Column(
-                          children: [
-                            Stack(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(2),
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    gradient: hasMyStories
-                                        ? const LinearGradient(
-                                            colors: [
-                                              Colors.orange,
-                                              Colors.pink
-                                            ],
-                                          )
-                                        : null,
-                                    color: hasMyStories
-                                        ? null
-                                        : Colors.grey.shade300,
-                                  ),
-                                  child: const CircleAvatar(
-                                    radius: 30,
-                                    child: Icon(Icons.person),
-                                  ),
-                                ),
-                                Positioned(
-                                  right: 0,
-                                  bottom: 0,
-                                  child: Container(
-                                    decoration: const BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      color: Colors.blue,
-                                    ),
-                                    padding: const EdgeInsets.all(2),
-                                    child: const Icon(
-                                      Icons.add,
-                                      size: 16,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              hasMyStories ? 'Story của bạn' : 'Thêm story',
-                              style: const TextStyle(fontSize: 12),
-                            ),
-                          ],
-                        ),
-                      ),
                     );
                   },
                 ),
@@ -1403,6 +1727,158 @@ class _StoriesBar extends StatelessWidget {
               ],
             );
           },
+        ),
+      ),
+    );
+  }
+}
+
+class _AnimatedPostItem extends StatefulWidget {
+  const _AnimatedPostItem({
+    super.key,
+    required this.index,
+    required this.entry,
+    required this.service,
+    required this.onOpenProfile,
+    required this.onOpenComments,
+    this.onPostDeleted,
+  });
+
+  final int index;
+  final PostFeedEntry entry;
+  final PostService service;
+  final void Function(String uid) onOpenProfile;
+  final void Function(Post post) onOpenComments;
+  final VoidCallback? onPostDeleted;
+
+  @override
+  State<_AnimatedPostItem> createState() => _AnimatedPostItemState();
+}
+
+class _AnimatedPostItemState extends State<_AnimatedPostItem>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _fadeAnimation;
+  late Animation<Offset> _slideAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: Duration(milliseconds: 300 + (widget.index * 50).clamp(0, 300)),
+    );
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: Curves.easeOut,
+      ),
+    );
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0, 0.1),
+      end: Offset.zero,
+    ).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: Curves.easeOutCubic,
+      ),
+    );
+    _controller.forward();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _fadeAnimation,
+      child: SlideTransition(
+        position: _slideAnimation,
+        child: PostFeedItem(
+          entry: widget.entry,
+          service: widget.service,
+          onOpenProfile: widget.onOpenProfile,
+          onOpenComments: widget.onOpenComments,
+          onPostDeleted: widget.onPostDeleted,
+        ),
+      ),
+    );
+  }
+}
+
+class _LikeButton extends StatefulWidget {
+  const _LikeButton({
+    required this.isLiked,
+    this.onPressed,
+  });
+
+  final bool isLiked;
+  final VoidCallback? onPressed;
+
+  @override
+  State<_LikeButton> createState() => _LikeButtonState();
+}
+
+class _LikeButtonState extends State<_LikeButton>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _scaleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 200),
+    );
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 1.2).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: Curves.elasticOut,
+      ),
+    );
+  }
+
+  @override
+  void didUpdateWidget(_LikeButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isLiked != oldWidget.isLiked && widget.isLiked) {
+      _controller.forward().then((_) => _controller.reverse());
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: widget.onPressed,
+        borderRadius: BorderRadius.circular(20),
+        child: AnimatedBuilder(
+          animation: _scaleAnimation,
+          builder: (context, child) {
+            return Transform.scale(
+              scale: _scaleAnimation.value,
+              child: child,
+            );
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child: Icon(
+              widget.isLiked ? Icons.favorite : Icons.favorite_border,
+              color: widget.isLiked ? AppColors.primaryPink : AppColors.textLight,
+            ),
+          ),
         ),
       ),
     );

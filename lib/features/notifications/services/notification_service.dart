@@ -1,5 +1,6 @@
 import '../../admin/repositories/admin_repository.dart';
 import '../../call/models/call.dart';
+import '../../profile/user_profile_repository.dart';
 import '../models/notification.dart';
 import '../repositories/notification_repository.dart';
 
@@ -7,11 +8,14 @@ class NotificationService {
   NotificationService({
     NotificationRepository? repository,
     AdminRepository? adminRepository,
+    UserProfileRepository? profileRepository,
   })  : _repository = repository ?? NotificationRepository(),
-        _adminRepository = adminRepository ?? AdminRepository();
+        _adminRepository = adminRepository ?? AdminRepository(),
+        _profiles = profileRepository ?? userProfileRepository;
 
   final NotificationRepository _repository;
   final AdminRepository _adminRepository;
+  final UserProfileRepository _profiles;
 
   /// Generate group key cho notification
   /// Format: {type}_{postId?}_{toUid}
@@ -33,8 +37,10 @@ class NotificationService {
       case NotificationType.call:
       case NotificationType.report:
       case NotificationType.appeal:
-        // Comments, messages và calls không group
-        throw ArgumentError('Comments, messages and calls should not be grouped');
+      case NotificationType.storyLike:
+      case NotificationType.commentReaction:
+        // Comments, messages, calls, reports, appeals, story likes, comment reactions không group
+        throw ArgumentError('This notification type should not be grouped');
     }
   }
 
@@ -96,6 +102,26 @@ class NotificationService {
     // Không tạo notification nếu người comment là chính tác giả
     if (commenterUid == postAuthorUid) return;
 
+    String? commenterName;
+    try {
+      final profile = await _profiles.fetchProfile(commenterUid);
+      if (profile != null) {
+        if (profile.displayName?.isNotEmpty == true) {
+          commenterName = profile.displayName;
+        } else if (profile.email?.isNotEmpty == true) {
+          commenterName = profile.email;
+        }
+      }
+    } catch (_) {
+      // Không block notification nếu lỗi load profile
+    }
+
+    final trimmedComment = commentText?.trim() ?? '';
+    final notificationText = [
+      if (commenterName != null) commenterName,
+      if (trimmedComment.isNotEmpty) trimmedComment,
+    ].join(': ');
+
     final notification = Notification(
       id: '',
       type: NotificationType.comment,
@@ -105,7 +131,7 @@ class NotificationService {
       commentId: commentId,
       read: false,
       createdAt: DateTime.now(),
-      text: commentText,
+      text: notificationText.isNotEmpty ? notificationText : null,
     );
 
     await _repository.createNotification(notification);
@@ -174,6 +200,55 @@ class NotificationService {
       read: false,
       createdAt: DateTime.now(),
       text: messageText,
+    );
+
+    await _repository.createNotification(notification);
+  }
+
+  /// Tạo notification khi có tim (like) story
+  Future<void> createStoryLikeNotification({
+    required String storyId,
+    required String storyAuthorUid,
+    required String likerUid,
+  }) async {
+    // Không tạo notification nếu người tim là chính tác giả
+    if (likerUid == storyAuthorUid) return;
+
+    final notification = Notification(
+      id: '',
+      type: NotificationType.storyLike,
+      fromUid: likerUid,
+      toUid: storyAuthorUid,
+      // storyId sẽ được lưu trong postId field để tái sử dụng cấu trúc hiện tại
+      postId: storyId,
+      read: false,
+      createdAt: DateTime.now(),
+    );
+
+    await _repository.createNotification(notification);
+  }
+
+  /// Tạo notification khi có reaction vào comment
+  Future<void> createCommentReactionNotification({
+    required String postId,
+    required String commentId,
+    required String commentAuthorUid,
+    required String reactorUid,
+    required String reactionType,
+  }) async {
+    // Không tạo notification nếu người reaction là chính tác giả comment
+    if (reactorUid == commentAuthorUid) return;
+
+    final notification = Notification(
+      id: '',
+      type: NotificationType.commentReaction,
+      fromUid: reactorUid,
+      toUid: commentAuthorUid,
+      postId: postId,
+      commentId: commentId,
+      read: false,
+      createdAt: DateTime.now(),
+      text: reactionType, // Lưu loại reaction (emoji) vào text field
     );
 
     await _repository.createNotification(notification);

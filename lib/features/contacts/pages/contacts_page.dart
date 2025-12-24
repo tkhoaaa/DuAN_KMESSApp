@@ -268,32 +268,32 @@ class _ModernFollowList extends StatelessWidget {
       },
       color: AppColors.primaryPink,
       child: StreamBuilder<List<FollowEntry>>(
-        stream: stream,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
+      stream: stream,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
             return _ShimmerLoadingList();
-          }
-          if (snapshot.hasError) {
-            return _FirestoreIndexErrorView(error: snapshot.error);
-          }
-          final entries = snapshot.data ?? [];
-          if (entries.isEmpty) {
+        }
+        if (snapshot.hasError) {
+          return _FirestoreIndexErrorView(error: snapshot.error);
+        }
+        final entries = snapshot.data ?? [];
+        if (entries.isEmpty) {
             return _EmptyStateView(label: emptyLabel);
-          }
+        }
           return ListView.builder(
             padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-            itemCount: entries.length,
-            itemBuilder: (context, index) {
-              final entry = entries[index];
+          itemCount: entries.length,
+          itemBuilder: (context, index) {
+            final entry = entries[index];
               return _AnimatedFollowItem(
                 key: ValueKey(entry.uid),
                 entry: entry,
                 index: index,
                 actionBuilder: actionBuilder,
-              );
-            },
-          );
-        },
+            );
+          },
+        );
+      },
       ),
     );
   }
@@ -326,23 +326,23 @@ class _ModernFollowRequestList extends StatelessWidget {
       },
       color: AppColors.primaryPink,
       child: StreamBuilder<List<FollowRequestEntry>>(
-        stream: stream,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
+      stream: stream,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
             return _ShimmerLoadingList();
-          }
-          if (snapshot.hasError) {
-            return _FirestoreIndexErrorView(error: snapshot.error);
-          }
-          final entries = snapshot.data ?? [];
-          if (entries.isEmpty) {
+        }
+        if (snapshot.hasError) {
+          return _FirestoreIndexErrorView(error: snapshot.error);
+        }
+        final entries = snapshot.data ?? [];
+        if (entries.isEmpty) {
             return _EmptyStateView(label: emptyLabel);
-          }
+        }
           return ListView.builder(
             padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-            itemCount: entries.length,
-            itemBuilder: (context, index) {
-              final entry = entries[index];
+          itemCount: entries.length,
+          itemBuilder: (context, index) {
+            final entry = entries[index];
               return _AnimatedFollowRequestItem(
                 key: ValueKey(entry.uid),
                 entry: entry,
@@ -352,10 +352,10 @@ class _ModernFollowRequestList extends StatelessWidget {
                 acceptLabel: acceptLabel,
                 declineLabel: declineLabel,
                 showAcceptButton: showAcceptButton,
-              );
-            },
-          );
-        },
+            );
+          },
+        );
+      },
       ),
     );
   }
@@ -667,6 +667,10 @@ class _AnimatedFollowItemState extends State<_AnimatedFollowItem>
       opacity: _fadeAnimation,
       child: SlideTransition(
         position: _slideAnimation,
+        child: ScaleTransition(
+          scale: Tween<double>(begin: 0.97, end: 1.0).animate(
+            CurvedAnimation(parent: _controller, curve: Curves.easeOutBack),
+          ),
         child: Container(
           margin: const EdgeInsets.only(bottom: 12),
           child: Material(
@@ -682,25 +686,34 @@ class _AnimatedFollowItemState extends State<_AnimatedFollowItem>
               },
               borderRadius: BorderRadius.circular(16),
               child: Card(
+                  color: AppColors.primaryPink.withOpacity(0.04),
                 elevation: 0,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16),
                   side: BorderSide(
-                    color: Colors.grey.shade200,
+                      color: AppColors.primaryPink.withOpacity(0.15),
                     width: 1,
                   ),
                 ),
                 child: Padding(
-                  padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
                   child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _ModernAvatar(
                         avatarUrl: avatarUrl,
                         uid: widget.entry.uid,
                       ),
-                      const SizedBox(width: 16),
+                        const SizedBox(width: 12),
                       Expanded(
-                        child: Hero(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Hero(
                           tag: 'contact_title_${widget.entry.uid}',
                           child: Text(
                             title,
@@ -708,18 +721,20 @@ class _AnimatedFollowItemState extends State<_AnimatedFollowItem>
                               fontSize: 16,
                               fontWeight: FontWeight.w600,
                             ),
-                            // Cho phép tên hiển thị xuống nhiều dòng,
-                            // tránh bị cắt mất trên màn hình nhỏ.
                             softWrap: true,
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
+                              const SizedBox(height: 6),
                       Wrap(
                         spacing: 4,
+                                runSpacing: 4,
                         children: widget.actionBuilder(widget.entry),
                       ),
                     ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),

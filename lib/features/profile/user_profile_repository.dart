@@ -42,6 +42,38 @@ class ProfileLink {
   }
 }
 
+class HighlightStory {
+  HighlightStory({
+    required this.id,
+    required this.name,
+    required this.storyIds,
+  });
+
+  final String id;
+  final String name;
+  final List<String> storyIds;
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'name': name,
+      'storyIds': storyIds,
+    };
+  }
+
+  factory HighlightStory.fromMap(Map<String, dynamic> map) {
+    return HighlightStory(
+      id: map['id'] as String? ?? '',
+      name: map['name'] as String? ?? '',
+      storyIds: (map['storyIds'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .where((e) => e.isNotEmpty)
+              .toList() ??
+          const [],
+    );
+  }
+}
+
 class UserProfile {
   UserProfile({
     required this.uid,
@@ -64,6 +96,7 @@ class UserProfile {
     this.links = const [],
     this.pinnedPostIds = const [],
     this.pinnedStoryIds = const [],
+    this.highlightedStories = const [],
     this.showOnlineStatus = true,
     this.lastSeenVisibility = LastSeenVisibility.everyone,
     this.messagePermission = MessagePermission.everyone,
@@ -94,6 +127,7 @@ class UserProfile {
   final List<ProfileLink> links; // List of external links
   final List<String> pinnedPostIds; // List of pinned post IDs (max 3)
   final List<String> pinnedStoryIds; // List of pinned story IDs (max 3)
+  final List<HighlightStory> highlightedStories; // List of highlighted stories with names
   final bool showOnlineStatus; // Hiển thị trạng thái online/offline
   final LastSeenVisibility lastSeenVisibility; // Ai được xem last seen
   final MessagePermission messagePermission; // Ai được phép nhắn tin
@@ -123,6 +157,7 @@ class UserProfile {
       'links': links.map((link) => link.toMap()).toList(),
       'pinnedPostIds': pinnedPostIds,
       'pinnedStoryIds': pinnedStoryIds,
+      'highlightedStories': highlightedStories.map((h) => h.toMap()).toList(),
       'showOnlineStatus': showOnlineStatus,
       'lastSeenVisibility': lastSeenVisibility.name,
       'messagePermission': messagePermission.name,
@@ -151,6 +186,31 @@ class UserProfile {
         .map((item) => item.toString())
         .where((item) => item.isNotEmpty)
         .toList();
+    
+    // Parse highlightedStories (new format) or migrate from highlightedStoryIds (old format)
+    List<HighlightStory> highlightedStories = [];
+    if (data['highlightedStories'] != null) {
+      final highlightedStoriesData = data['highlightedStories'] as List<dynamic>? ?? [];
+      highlightedStories = highlightedStoriesData
+          .map((item) => HighlightStory.fromMap(
+                Map<String, dynamic>.from(item as Map),
+              ))
+          .toList();
+    } else if (data['highlightedStoryIds'] != null) {
+      // Migration from old format: convert to new format with default name
+      final oldIds = (data['highlightedStoryIds'] as List<dynamic>?)
+              ?.map((item) => item.toString())
+              .where((item) => item.isNotEmpty)
+              .toList() ??
+          [];
+      highlightedStories = oldIds
+          .map((id) => HighlightStory(
+                id: id,
+                name: 'Highlight',
+                storyIds: [id],
+              ))
+          .toList();
+    }
     
     // Parse privacy settings với default values
     final lastSeenVisibilityStr = data['lastSeenVisibility'] as String? ?? 'everyone';
@@ -192,6 +252,7 @@ class UserProfile {
       links: links,
       pinnedPostIds: pinnedPostIds,
       pinnedStoryIds: pinnedStoryIds,
+      highlightedStories: highlightedStories,
       showOnlineStatus: (data['showOnlineStatus'] as bool?) ?? true,
       lastSeenVisibility: lastSeenVisibility,
       messagePermission: messagePermission,
@@ -653,6 +714,17 @@ class UserProfileRepository {
         .toList();
     
     return profiles;
+  }
+
+  /// Cập nhật highlighted stories
+  Future<void> updateHighlightedStories(
+    String uid,
+    List<HighlightStory> highlightedStories,
+  ) async {
+    await _collection.doc(uid).update({
+      'highlightedStories': highlightedStories.map((h) => h.toMap()).toList(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
   }
 
   /// Cập nhật ban status của user (admin only)

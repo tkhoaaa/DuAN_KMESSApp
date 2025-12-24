@@ -1,7 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 
 import '../models/post.dart';
 import '../models/post_comment.dart';
+import '../models/comment_edit_history.dart';
 import '../models/feed_filters.dart';
 import '../models/post_media.dart';
 
@@ -52,6 +54,18 @@ class PostRepository {
 
   CollectionReference<Map<String, dynamic>> _postComments(String postId) =>
       _posts.doc(postId).collection('comments');
+
+  CollectionReference<Map<String, dynamic>> _commentReactions(
+    String postId,
+    String commentId,
+  ) =>
+      _postComments(postId).doc(commentId).collection('reactions');
+
+  CollectionReference<Map<String, dynamic>> _commentEditHistory(
+    String postId,
+    String commentId,
+  ) =>
+      _postComments(postId).doc(commentId).collection('editHistory');
 
   Future<String> createPost({
     required String authorUid,
@@ -423,17 +437,18 @@ class PostRepository {
 
   Stream<List<PostComment>> watchComments(String postId) {
     return _postComments(postId)
-        .orderBy('createdAt', descending: true)
-        .limit(50)
+        .orderBy('createdAt', descending: false)
+        .limit(100)
         .snapshots()
-        .map((snapshot) =>
-            snapshot.docs.map(PostComment.fromDoc).toList());
+        .map((snapshot) => snapshot.docs.map(PostComment.fromDoc).toList());
   }
 
   Future<String> addComment({
     required String postId,
     required String authorUid,
     required String text,
+    String? parentCommentId,
+    String? replyToUid,
     int maxRetries = 3,
   }) async {
     final postRef = _posts.doc(postId);
@@ -450,10 +465,18 @@ class PostRepository {
             'authorUid': authorUid,
             'text': text,
             'createdAt': FieldValue.serverTimestamp(),
+            if (parentCommentId != null) 'parentId': parentCommentId,
+            if (replyToUid != null) 'replyToUid': replyToUid,
           });
           txn.update(postRef, {
             'commentCount': FieldValue.increment(1),
           });
+          if (parentCommentId != null) {
+            final parentRef = commentsRef.doc(parentCommentId);
+            txn.set(parentRef, {
+              'replyCount': FieldValue.increment(1),
+            }, SetOptions(merge: true));
+          }
         });
         return commentId; // Thành công, return commentId
       } catch (e) {
@@ -466,6 +489,60 @@ class PostRepository {
       }
     }
     return commentId; // Không bao giờ đến đây, nhưng để tránh lỗi compile
+  }
+
+  Future<void> editComment({
+    required String postId,
+    required String commentId,
+    required String newText,
+    required String currentUid,
+  }) async {
+    final commentRef = _postComments(postId).doc(commentId);
+    final editHistoryRef = _commentEditHistory(postId, commentId);
+    
+    // Lấy thông tin comment để kiểm tra quyền và lấy text cũ
+    final commentDoc = await commentRef.get();
+    
+    if (!commentDoc.exists) {
+      throw Exception('Comment not found');
+    }
+    
+    final commentData = commentDoc.data()!;
+    final commentAuthorUid = commentData['authorUid'] as String? ?? '';
+    final oldText = commentData['text'] as String? ?? '';
+    
+    // Chỉ cho phép tác giả comment chỉnh sửa
+    if (currentUid != commentAuthorUid) {
+      throw Exception('Not authorized to edit this comment');
+    }
+    
+    final trimmedNewText = newText.trim();
+    if (trimmedNewText.isEmpty) {
+      throw Exception('Comment text cannot be empty');
+    }
+
+    // Nếu text không thay đổi, không làm gì
+    if (oldText == trimmedNewText) {
+      return;
+    }
+
+    // Lưu lịch sử chỉnh sửa và cập nhật comment trong transaction
+    await _firestore.runTransaction((txn) async {
+      // Lưu lịch sử chỉnh sửa
+      final historyDocRef = editHistoryRef.doc();
+      txn.set(historyDocRef, {
+        'oldText': oldText,
+        'newText': trimmedNewText,
+        'editedBy': currentUid,
+        'editedAt': FieldValue.serverTimestamp(),
+      });
+
+      // Cập nhật text và editedAt
+      txn.update(commentRef, {
+        'text': trimmedNewText,
+        'editedAt': FieldValue.serverTimestamp(),
+      });
+    });
   }
 
   Future<void> deleteComment({
@@ -504,6 +581,146 @@ class PostRepository {
         'commentCount': FieldValue.increment(-1),
       });
     });
+  }
+
+  Future<String?> getUserCommentReaction({
+    required String postId,
+    required String commentId,
+    required String uid,
+  }) async {
+    final doc =
+        await _commentReactions(postId, commentId).doc(uid).get();
+    if (!doc.exists) return null;
+    return doc.data()?['type'] as String?;
+  }
+
+  Future<void> setCommentReaction({
+    required String postId,
+    required String commentId,
+    required String uid,
+    String? reaction, // null => remove
+  }) async {
+    final commentRef = _postComments(postId).doc(commentId);
+    final reactionRef = _commentReactions(postId, commentId).doc(uid);
+
+    await _firestore.runTransaction((txn) async {
+      final reactionSnap = await txn.get(reactionRef);
+      final previousReaction = reactionSnap.data()?['type'] as String?;
+
+      // Nếu reaction không đổi, không làm gì
+      if (reaction != null && reaction == previousReaction) {
+        return;
+      }
+
+      // Update reactionCounts trên comment
+      // Lấy comment hiện tại để đọc reactionCounts hiện có
+      final commentSnap = await txn.get(commentRef);
+      final currentData = commentSnap.data() ?? {};
+      final currentReactionCounts = Map<String, int>.from(
+        (currentData['reactionCounts'] as Map<String, dynamic>?)?.map(
+          (key, value) => MapEntry(key, (value as num?)?.toInt() ?? 0),
+        ) ?? {},
+      );
+      
+      // Cập nhật reactionCounts
+      if (previousReaction != null) {
+        currentReactionCounts[previousReaction] = 
+            (currentReactionCounts[previousReaction] ?? 1) - 1;
+        if (currentReactionCounts[previousReaction]! <= 0) {
+          currentReactionCounts.remove(previousReaction);
+        }
+        debugPrint('Decrementing reactionCounts.$previousReaction for comment $commentId');
+      }
+      if (reaction != null) {
+        currentReactionCounts[reaction] = 
+            (currentReactionCounts[reaction] ?? 0) + 1;
+        debugPrint('Incrementing reactionCounts.$reaction for comment $commentId');
+      }
+      
+      // Lưu lại reactionCounts đã cập nhật
+      if (previousReaction != null || reaction != null) {
+        debugPrint('Updating comment $commentId with reactionCounts: $currentReactionCounts');
+        txn.update(commentRef, {
+          'reactionCounts': currentReactionCounts,
+        });
+      } else {
+        debugPrint('No updates needed for comment $commentId');
+      }
+
+      // Update subcollection reaction doc
+      if (reaction == null) {
+        if (reactionSnap.exists) {
+          txn.delete(reactionRef);
+        }
+      } else {
+        txn.set(reactionRef, {
+          'type': reaction,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      }
+    });
+  }
+
+  /// Lấy một comment cụ thể
+  Future<PostComment?> getComment({
+    required String postId,
+    required String commentId,
+  }) async {
+    final doc = await _postComments(postId).doc(commentId).get();
+    if (!doc.exists) return null;
+    return PostComment.fromDoc(doc);
+  }
+
+  /// Lấy lịch sử chỉnh sửa của một comment
+  Stream<List<CommentEditHistory>> getCommentEditHistory({
+    required String postId,
+    required String commentId,
+  }) {
+    return _commentEditHistory(postId, commentId)
+        .orderBy('editedAt', descending: true)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => CommentEditHistory.fromDoc(doc))
+            .toList());
+  }
+
+  /// Tổng số reaction (emoji) trên tất cả comment của 1 post
+  Stream<int> watchPostReactionCount(String postId) {
+    debugPrint('Creating watchPostReactionCount stream for post $postId');
+    return _postComments(postId)
+        .snapshots()
+        .map((snapshot) {
+          var total = 0;
+          debugPrint('Post $postId: Processing ${snapshot.docs.length} comments');
+          for (final doc in snapshot.docs) {
+            try {
+              final data = doc.data();
+              debugPrint('Comment ${doc.id} data keys: ${data.keys.toList()}');
+              final reactionsRaw =
+                  data['reactionCounts'] as Map<String, dynamic>?;
+              debugPrint('Comment ${doc.id} reactionCounts raw: $reactionsRaw');
+              if (reactionsRaw != null && reactionsRaw.isNotEmpty) {
+                debugPrint('Comment ${doc.id} has reactions: $reactionsRaw');
+                for (final entry in reactionsRaw.entries) {
+                  final count = (entry.value as num?)?.toInt() ?? 0;
+                  debugPrint('Comment ${doc.id} reaction ${entry.key}: $count');
+                  total += count;
+                }
+              } else {
+                debugPrint('Comment ${doc.id} has no reactions (reactionsRaw: $reactionsRaw)');
+              }
+            } catch (e, stackTrace) {
+              debugPrint('Error processing comment ${doc.id}: $e');
+              debugPrint('Stack trace: $stackTrace');
+            }
+          }
+          debugPrint('Post $postId: Total reactions = $total (from ${snapshot.docs.length} comments)');
+          return total;
+        })
+        .handleError((error, stackTrace) {
+          debugPrint('Error watching post reaction count for post $postId: $error');
+          debugPrint('Stack trace: $stackTrace');
+        });
   }
 
   Future<void> deletePost({

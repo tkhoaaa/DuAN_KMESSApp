@@ -1,9 +1,7 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 
 import '../../auth/auth_repository.dart';
-import '../../notifications/models/notification.dart';
 import '../../notifications/services/notification_service.dart';
 import '../../profile/user_profile_repository.dart';
 import '../models/call.dart';
@@ -15,11 +13,9 @@ class CallService {
     NotificationService? notificationService,
     UserProfileRepository? profileRepository,
   })  : _repository = repository ?? CallRepository(),
-        _notificationService = notificationService ?? NotificationService(),
         _profileRepository = profileRepository ?? userProfileRepository;
 
   final CallRepository _repository;
-  final NotificationService _notificationService;
   final UserProfileRepository _profileRepository;
 
   /// Khởi tạo cuộc gọi
@@ -51,18 +47,7 @@ class CallService {
       conversationId: conversationId,
     );
 
-    // Tạo notification cho callee
-    try {
-      await _notificationService.createCallNotification(
-        callId: callId,
-        callerUid: currentUid,
-        calleeUid: calleeUid,
-        callType: type,
-      );
-    } catch (e) {
-      debugPrint('Error creating call notification: $e');
-      // Không throw error vì call đã được tạo
-    }
+    // Không còn tạo notification cho cuộc gọi ở tab Thông báo
 
     return callId;
   }

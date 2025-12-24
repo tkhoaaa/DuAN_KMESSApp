@@ -163,8 +163,48 @@ class StoryRepository {
     });
   }
 
+  /// Trạng thái vòng story quanh avatar:
+  /// - none: không có story còn hạn
+  /// - unseen: có ít nhất 1 story chưa xem (vòng hồng)
+  /// - allSeen: có story và tất cả đều đã xem (vòng xám)
+  Future<StoryRingStatus> fetchStoryRingStatus({
+    required String ownerUid,
+    required String viewerUid,
+  }) async {
+    try {
+      final activeStories = await watchUserStories(ownerUid).first;
+      if (activeStories.isEmpty) {
+        return StoryRingStatus.none;
+      }
+
+      for (final story in activeStories) {
+        final viewerDoc =
+            await _viewersCollection(ownerUid, story.id).doc(viewerUid).get();
+        if (!viewerDoc.exists) {
+          // Chỉ cần 1 story chưa xem là hiển thị vòng hồng
+          return StoryRingStatus.unseen;
+        }
+      }
+
+      // Có story và tất cả đều đã xem
+      return StoryRingStatus.allSeen;
+    } catch (_) {
+      // Nếu có lỗi, mặc định không hiển thị vòng để tránh crash
+      return StoryRingStatus.none;
+    }
+  }
+
   /// Stream toàn bộ story (kể cả đã hết hạn) của user để làm kho lưu trữ
   Stream<List<Story>> watchUserStoryArchive(String uid, {int limit = 200}) {
+    return _storiesCollection(uid)
+        .orderBy('createdAt', descending: true)
+        .limit(limit)
+        .snapshots()
+        .map((snap) => snap.docs.map(Story.fromDoc).toList());
+  }
+
+  /// Fetch stories by author (one-time, includes expired)
+  Stream<List<Story>> fetchStoriesByAuthor(String uid, {int limit = 200}) {
     return _storiesCollection(uid)
         .orderBy('createdAt', descending: true)
         .limit(limit)
@@ -198,16 +238,87 @@ class StoryRepository {
     }, SetOptions(merge: true));
   }
 
-  /// Lấy danh sách viewers (chỉ nên gọi cho story của chính mình)
-  Future<List<String>> fetchViewers({
+  /// Toggle tim (like) cho story của người khác
+  Future<void> toggleStoryLike({
+    required String authorUid,
+    required String storyId,
+    required String likerUid,
+  }) async {
+    final viewerRef = _viewersCollection(authorUid, storyId).doc(likerUid);
+    final snap = await viewerRef.get();
+    if (snap.exists && (snap.data()?['liked'] == true)) {
+      // Bỏ tim
+      await viewerRef.update({'liked': false});
+    } else if (snap.exists) {
+      // Đã xem, chỉ update flag liked
+      await viewerRef.update({'liked': true});
+    } else {
+      // Chưa có viewer record: tạo mới với viewedAt + liked
+      await viewerRef.set({
+        'viewedAt': FieldValue.serverTimestamp(),
+        'liked': true,
+      }, SetOptions(merge: true));
+    }
+  }
+
+  /// Lấy danh sách viewers kèm trạng thái tim (liked)
+  Future<List<StoryViewerEntry>> fetchViewerEntries({
     required String authorUid,
     required String storyId,
   }) async {
     final snap = await _viewersCollection(authorUid, storyId)
         .orderBy('viewedAt', descending: true)
         .get();
-    return snap.docs.map((d) => d.id).toList();
+    return snap.docs.map((d) => StoryViewerEntry.fromDoc(d)).toList();
+  }
+
+  /// Kiểm tra 1 user cụ thể đã tim story chưa (đọc 1 document, không query)
+  Future<bool> isStoryLikedByUser({
+    required String authorUid,
+    required String storyId,
+    required String viewerUid,
+  }) async {
+    final doc =
+        await _viewersCollection(authorUid, storyId).doc(viewerUid).get();
+    final data = doc.data();
+    if (data == null) return false;
+    return data['liked'] == true;
+  }
+
+  /// Xóa story
+  Future<void> deleteStory({
+    required String authorUid,
+    required String storyId,
+  }) async {
+    await _storiesCollection(authorUid).doc(storyId).delete();
   }
 }
 
+enum StoryRingStatus {
+  none,
+  unseen,
+  allSeen,
+}
+
+class StoryViewerEntry {
+  StoryViewerEntry({
+    required this.uid,
+    required this.viewedAt,
+    required this.liked,
+  });
+
+  final String uid;
+  final DateTime? viewedAt;
+  final bool liked;
+
+  factory StoryViewerEntry.fromDoc(
+      QueryDocumentSnapshot<Map<String, dynamic>> doc) {
+    final data = doc.data();
+    return StoryViewerEntry(
+      uid: doc.id,
+      viewedAt: (data['viewedAt'] as Timestamp?)?.toDate(),
+      liked: data['liked'] as bool? ?? false,
+    );
+  }
+}
 

@@ -16,6 +16,7 @@ import '../../admin/repositories/ban_repository.dart';
 import '../../../services/cloudinary_service.dart';
 import '../models/post.dart';
 import '../models/post_comment.dart';
+import '../models/comment_edit_history.dart';
 import '../models/post_media.dart';
 import '../models/draft_post.dart';
 import '../models/feed_filters.dart';
@@ -58,10 +59,14 @@ class PostCommentEntry {
   PostCommentEntry({
     required this.comment,
     required this.author,
-  });
+    this.userReaction,
+    List<PostCommentEntry>? replies,
+  }) : replies = replies ?? [];
 
   final PostComment comment;
   final UserProfile? author;
+  final String? userReaction;
+  final List<PostCommentEntry> replies;
 }
 
 class PostService {
@@ -482,18 +487,63 @@ class PostService {
   }
 
   Stream<List<PostCommentEntry>> watchComments(String postId) {
+    final currentUid = authRepository.currentUser()?.uid;
+
     return _repository.watchComments(postId).asyncMap((comments) async {
-      final futures = comments.map((comment) async {
+      // Preload authors
+      final authorFutures = comments.map((comment) async {
         final author = await _profiles.fetchProfile(comment.authorUid);
-        return PostCommentEntry(comment: comment, author: author);
-      }).toList();
-      return Future.wait(futures);
+        return MapEntry(comment.id, author);
+      });
+      final authorsMap = Map.fromEntries(await Future.wait(authorFutures));
+
+      // Preload current user's reaction cho từng comment (nếu đã đăng nhập)
+      final reactionsMap = <String, String?>{};
+      if (currentUid != null) {
+        final reactionFutures = comments.map((comment) async {
+          final reaction = await _repository.getUserCommentReaction(
+            postId: postId,
+            commentId: comment.id,
+            uid: currentUid,
+          );
+          return MapEntry(comment.id, reaction);
+        });
+        reactionsMap.addEntries(await Future.wait(reactionFutures));
+      }
+
+      // Build entries map
+      final entriesMap = <String, PostCommentEntry>{};
+      for (final comment in comments) {
+        entriesMap[comment.id] = PostCommentEntry(
+          comment: comment,
+          author: authorsMap[comment.id],
+          userReaction: reactionsMap[comment.id],
+          replies: [],
+        );
+      }
+
+      // Attach replies to parents
+      final roots = <PostCommentEntry>[];
+      for (final entry in entriesMap.values) {
+        final parentId = entry.comment.parentId;
+        if (parentId != null &&
+            parentId.isNotEmpty &&
+            entriesMap.containsKey(parentId)) {
+          entriesMap[parentId]!.replies.add(entry);
+        } else {
+          roots.add(entry);
+        }
+      }
+
+      return roots;
     });
   }
 
   Future<void> addComment({
     required String postId,
     required String text,
+    String? parentCommentId,
+    String? replyToUid,
   }) async {
     final currentUid = authRepository.currentUser()?.uid;
     if (currentUid == null) {
@@ -517,6 +567,8 @@ class PostService {
         postId: postId,
         authorUid: currentUid,
         text: text,
+        parentCommentId: parentCommentId,
+        replyToUid: replyToUid,
       );
       debugPrint('Warning: Could not fetch post info for notification: $e');
       return;
@@ -527,6 +579,8 @@ class PostService {
       postId: postId,
       authorUid: currentUid,
       text: text,
+      parentCommentId: parentCommentId,
+      replyToUid: replyToUid,
     );
     
     // Tạo notification sau (không block, không throw exception)
@@ -545,12 +599,62 @@ class PostService {
 
   Stream<Post> watchPost(String postId) => _repository.watchPost(postId);
 
+  /// Tổng số reaction (emoji) trên tất cả bình luận của một post
+  Stream<int> watchPostReactionCount(String postId) =>
+      _repository.watchPostReactionCount(postId);
+
   Stream<bool> watchLikeStatus(String postId) {
     final currentUid = authRepository.currentUser()?.uid;
     if (currentUid == null) {
       return const Stream<bool>.empty();
     }
     return _repository.watchUserLike(postId: postId, uid: currentUid);
+  }
+
+  Future<void> setCommentReaction({
+    required String postId,
+    required String commentId,
+    required String? reaction, // null => remove
+  }) async {
+    final currentUid = authRepository.currentUser()?.uid;
+    if (currentUid == null) {
+      throw StateError('Bạn cần đăng nhập.');
+    }
+
+    await _ensureUserNotBanned(currentUid);
+    
+    // Lấy comment để biết authorUid trước khi set reaction
+    String? commentAuthorUid;
+    if (reaction != null) {
+      try {
+        final comment = await _repository.getComment(postId: postId, commentId: commentId);
+        commentAuthorUid = comment?.authorUid;
+      } catch (e) {
+        debugPrint('Error fetching comment for notification: $e');
+      }
+    }
+    
+    await _repository.setCommentReaction(
+      postId: postId,
+      commentId: commentId,
+      uid: currentUid,
+      reaction: reaction,
+    );
+
+    // Tạo notification sau (không block, không throw exception)
+    // Chỉ tạo khi reaction != null (không phải khi remove)
+    if (reaction != null && commentAuthorUid != null) {
+      _notificationService.createCommentReactionNotification(
+        postId: postId,
+        commentId: commentId,
+        commentAuthorUid: commentAuthorUid,
+        reactorUid: currentUid,
+        reactionType: reaction,
+      ).catchError((e) {
+        // Chỉ log lỗi, không throw để không ảnh hưởng đến reaction operation
+        debugPrint('Error creating comment reaction notification: $e');
+      });
+    }
   }
 
   Future<void> deletePost(String postId) async {
@@ -586,6 +690,35 @@ class PostService {
       // Nếu có lỗi trong quá trình lấy/xóa, throw như cũ
       rethrow;
     }
+  }
+
+  Future<void> editComment({
+    required String postId,
+    required String commentId,
+    required String newText,
+  }) async {
+    final currentUid = authRepository.currentUser()?.uid;
+    if (currentUid == null) {
+      throw StateError('Bạn cần đăng nhập.');
+    }
+
+    await _ensureUserNotBanned(currentUid);
+    await _repository.editComment(
+      postId: postId,
+      commentId: commentId,
+      newText: newText,
+      currentUid: currentUid,
+    );
+  }
+
+  Stream<List<CommentEditHistory>> getCommentEditHistory({
+    required String postId,
+    required String commentId,
+  }) {
+    return _repository.getCommentEditHistory(
+      postId: postId,
+      commentId: commentId,
+    );
   }
 
   Future<void> deleteComment({

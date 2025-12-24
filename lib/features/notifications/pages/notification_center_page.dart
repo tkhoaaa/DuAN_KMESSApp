@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import '../../admin/pages/admin_appeal_detail_page.dart';
 import '../../admin/pages/admin_report_detail_page.dart';
 import '../../auth/auth_repository.dart';
-import '../../chat/pages/chat_detail_page.dart';
+// import '../../chat/pages/chat_detail_page.dart';
 import '../../posts/pages/post_permalink_page.dart';
 import '../../profile/public_profile_page.dart';
 import '../../profile/user_profile_repository.dart';
@@ -64,6 +64,7 @@ class _NotificationCenterPageState extends State<NotificationCenterPage> {
     switch (notification.type) {
       case models.NotificationType.like:
       case models.NotificationType.comment:
+      case models.NotificationType.commentReaction:
         if (notification.postId != null) {
           Navigator.of(context).push(
             MaterialPageRoute(
@@ -80,20 +81,8 @@ class _NotificationCenterPageState extends State<NotificationCenterPage> {
         );
         break;
       case models.NotificationType.message:
-        if (notification.conversationId != null) {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => ChatDetailPage(
-                conversationId: notification.conversationId!,
-                otherUid: notification.fromUid,
-              ),
-            ),
-          );
-        }
-        break;
       case models.NotificationType.call:
-        // Call notifications được xử lý tự động bởi incoming call dialog
-        // Không cần navigation
+        // Không còn navigate đối với notification tin nhắn/cuộc gọi
         break;
       case models.NotificationType.report:
         // Navigate đến report detail page
@@ -126,6 +115,9 @@ class _NotificationCenterPageState extends State<NotificationCenterPage> {
           );
         }
         break;
+      case models.NotificationType.storyLike:
+        // Có thể mở Story viewer trong tương lai, tạm thời không navigate
+        break;
     }
   }
 
@@ -138,11 +130,13 @@ class _NotificationCenterPageState extends State<NotificationCenterPage> {
         case models.NotificationType.follow:
           return '${notification.count} người đã theo dõi bạn';
         case models.NotificationType.comment:
+        case models.NotificationType.commentReaction:
         case models.NotificationType.message:
         case models.NotificationType.call:
         case models.NotificationType.report:
         case models.NotificationType.appeal:
-          // Comments, messages và calls không group, nhưng vẫn check để an toàn
+        case models.NotificationType.storyLike:
+          // Các loại này hiện không group
           break;
       }
     }
@@ -153,6 +147,9 @@ class _NotificationCenterPageState extends State<NotificationCenterPage> {
         return 'Đã thích bài đăng của bạn';
       case models.NotificationType.comment:
         return 'Đã bình luận bài đăng của bạn';
+      case models.NotificationType.commentReaction:
+        final reactionEmoji = notification.text ?? '👍';
+        return 'Đã thả reaction $reactionEmoji vào bình luận của bạn';
       case models.NotificationType.follow:
         return 'Đã theo dõi bạn';
       case models.NotificationType.message:
@@ -163,6 +160,8 @@ class _NotificationCenterPageState extends State<NotificationCenterPage> {
         return 'Có báo cáo mới';
       case models.NotificationType.appeal:
         return 'Có đơn kháng cáo mới';
+      case models.NotificationType.storyLike:
+        return 'Đã tim tin của bạn';
     }
   }
 
@@ -172,6 +171,8 @@ class _NotificationCenterPageState extends State<NotificationCenterPage> {
         return Icons.favorite;
       case models.NotificationType.comment:
         return Icons.comment;
+      case models.NotificationType.commentReaction:
+        return Icons.emoji_emotions;
       case models.NotificationType.follow:
         return Icons.person_add;
       case models.NotificationType.message:
@@ -182,6 +183,8 @@ class _NotificationCenterPageState extends State<NotificationCenterPage> {
         return Icons.report;
       case models.NotificationType.appeal:
         return Icons.gavel;
+      case models.NotificationType.storyLike:
+        return Icons.favorite;
     }
   }
 
@@ -290,14 +293,25 @@ class _NotificationTile extends StatelessWidget {
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         leading: isGrouped && displayUids.isNotEmpty
-            ? _buildGroupedAvatars(displayUids, remainingCount, getColor(notification))
-            : CircleAvatar(
-                backgroundColor: getColor(notification).withOpacity(0.15),
-                child: Icon(
-                  getIcon(notification),
-                  color: getColor(notification),
-                ),
-              ),
+            ? _buildGroupedAvatars(
+                displayUids,
+                remainingCount,
+                getColor(notification),
+              )
+            : (notification.type == models.NotificationType.comment ||
+                    notification.type == models.NotificationType.commentReaction)
+                ? _buildSingleAvatar(
+                    notification.fromUid,
+                    getColor(notification),
+                  )
+                : CircleAvatar(
+                    backgroundColor:
+                        getColor(notification).withOpacity(0.15),
+                    child: Icon(
+                      getIcon(notification),
+                      color: getColor(notification),
+                    ),
+                  ),
         title: Text(
           getTitle(notification),
           style: AppTypography.body.copyWith(fontWeight: FontWeight.w700),
@@ -399,6 +413,24 @@ class _NotificationTile extends StatelessWidget {
             ),
         ],
       ),
+    );
+  }
+
+  Widget _buildSingleAvatar(String uid, Color color) {
+    return StreamBuilder(
+      stream: userProfileRepository.watchProfile(uid),
+      builder: (context, snapshot) {
+        final profile = snapshot.data;
+        final photoUrl = profile?.photoUrl;
+        return CircleAvatar(
+          backgroundColor: color.withOpacity(0.15),
+          backgroundImage:
+              photoUrl != null && photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null,
+          child: (photoUrl == null || photoUrl.isEmpty)
+              ? Icon(Icons.person, color: color)
+              : null,
+        );
+      },
     );
   }
 }

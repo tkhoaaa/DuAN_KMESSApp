@@ -8,6 +8,8 @@ enum NotificationType {
   call,
   report, // Report notification cho admin
   appeal, // Appeal notification cho admin
+  storyLike, // Tim (like) story
+  commentReaction, // Reaction (emoji) trên comment
 }
 
 class Notification {
@@ -75,6 +77,12 @@ class Notification {
       case 'appeal':
         type = NotificationType.appeal;
         break;
+      case 'storyLike':
+        type = NotificationType.storyLike;
+        break;
+      case 'commentReaction':
+        type = NotificationType.commentReaction;
+        break;
       default:
         type = NotificationType.like;
     }
@@ -128,6 +136,12 @@ class Notification {
         break;
       case NotificationType.appeal:
         typeStr = 'appeal';
+        break;
+      case NotificationType.storyLike:
+        typeStr = 'storyLike';
+        break;
+      case NotificationType.commentReaction:
+        typeStr = 'commentReaction';
         break;
     }
 
