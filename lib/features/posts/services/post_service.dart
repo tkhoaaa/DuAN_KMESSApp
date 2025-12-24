@@ -177,13 +177,14 @@ class PostService {
       throw ArgumentError('Cần chọn ít nhất một ảnh hoặc video.');
     }
 
-    final uploads = <Map<String, dynamic>>[];
-
-    for (final entry in media) {
+    // Upload tất cả media song song (parallel) để tăng tốc độ
+    final uploadFutures = media.asMap().entries.map((entry) async {
+      final index = entry.key;
+      final mediaEntry = entry.value;
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       // Làm sạch tên file: loại bỏ khoảng trắng và ký tự đặc biệt
-      final originalName = entry.file.name.isNotEmpty 
-          ? entry.file.name
+      final originalName = mediaEntry.file.name.isNotEmpty 
+          ? mediaEntry.file.name
               .trim()
               .replaceAll(RegExp(r'[^\w\-.]'), '_')
               .replaceAll(RegExp(r'\s+'), '_')
@@ -192,14 +193,13 @@ class PostService {
       String downloadUrl;
       String? thumbnailUrl;
       int? durationMs;
-
       String? publicId;
 
       if (storageBackend == 'cloudinary') {
         // Dùng Cloudinary
-        if (entry.type == PostMediaType.video) {
+        if (mediaEntry.type == PostMediaType.video) {
           final result = await CloudinaryService.uploadVideo(
-            file: entry.file,
+            file: mediaEntry.file,
             folder: 'posts/$currentUid',
             publicId: '$timestamp-$originalName',
           );
@@ -209,7 +209,7 @@ class PostService {
           publicId = result['publicId'] as String?;
         } else {
           final result = await CloudinaryService.uploadImage(
-            file: entry.file,
+            file: mediaEntry.file,
             folder: 'posts/$currentUid',
             publicId: '$timestamp-$originalName',
           );
@@ -225,19 +225,19 @@ class PostService {
             .child('$timestamp-$originalName');
 
         final metadata = SettableMetadata(
-          contentType: entry.type == PostMediaType.video
-              ? (entry.file.mimeType ?? 'video/mp4')
-              : (entry.file.mimeType ?? 'image/jpeg'),
+          contentType: mediaEntry.type == PostMediaType.video
+              ? (mediaEntry.file.mimeType ?? 'video/mp4')
+              : (mediaEntry.file.mimeType ?? 'image/jpeg'),
         );
 
         UploadTask uploadTask;
         if (kIsWeb) {
-          final data = await entry.file.readAsBytes();
+          final data = await mediaEntry.file.readAsBytes();
           uploadTask = ref.putData(data, metadata);
         } else {
-          final file = File(entry.file.path);
+          final file = File(mediaEntry.file.path);
           if (!await file.exists()) {
-            throw StateError('File không tồn tại: ${entry.file.path}');
+            throw StateError('File không tồn tại: ${mediaEntry.file.path}');
           }
           uploadTask = ref.putFile(file, metadata);
         }
@@ -250,10 +250,10 @@ class PostService {
           // Retry một lần nếu lỗi
           print('Upload failed, retrying... Error: $e');
           if (kIsWeb) {
-            final data = await entry.file.readAsBytes();
+            final data = await mediaEntry.file.readAsBytes();
             uploadTask = ref.putData(data, metadata);
           } else {
-            final file = File(entry.file.path);
+            final file = File(mediaEntry.file.path);
             uploadTask = ref.putFile(file, metadata);
           }
           uploadSnapshot = await uploadTask;
@@ -272,11 +272,11 @@ class PostService {
           downloadUrl = await ref.getDownloadURL();
         }
 
-        if (entry.type == PostMediaType.video) {
+        if (mediaEntry.type == PostMediaType.video) {
           if (kIsWeb) {
             // Tạo thumbnail từ video trên web bằng canvas
             try {
-              final thumbData = await _generateWebVideoThumbnail(entry.file);
+              final thumbData = await _generateWebVideoThumbnail(mediaEntry.file);
               if (thumbData != null) {
                 final thumbRef = _storage
                     .ref()
@@ -299,7 +299,7 @@ class PostService {
           } else {
             try {
               final thumbData = await VideoThumbnail.thumbnailData(
-                video: entry.file.path,
+                video: mediaEntry.file.path,
                 imageFormat: ImageFormat.PNG,
                 maxHeight: 480,
                 quality: 75,
@@ -326,7 +326,7 @@ class PostService {
 
             VideoPlayerController? controller;
             try {
-              controller = VideoPlayerController.file(File(entry.file.path));
+              controller = VideoPlayerController.file(File(mediaEntry.file.path));
               await controller.initialize();
               durationMs = controller.value.duration.inMilliseconds;
             } catch (_) {
@@ -338,14 +338,28 @@ class PostService {
         }
       }
 
-      uploads.add({
+      return {
         'url': downloadUrl,
-        'type': entry.type.name,
+        'type': mediaEntry.type.name,
         if (thumbnailUrl != null) 'thumbnailUrl': thumbnailUrl,
         if (durationMs != null) 'durationMs': durationMs,
         if (publicId != null) 'publicId': publicId,
-      });
-    }
+        'index': index, // Giữ nguyên thứ tự
+      };
+    });
+
+    // Chờ tất cả uploads hoàn thành song song
+    final uploadResults = await Future.wait(uploadFutures);
+    
+    // Sắp xếp lại theo thứ tự ban đầu
+    uploadResults.sort((a, b) => (a['index'] as int).compareTo(b['index'] as int));
+    
+    // Loại bỏ index và tạo danh sách uploads
+    final uploads = uploadResults.map((result) {
+      final map = Map<String, dynamic>.from(result);
+      map.remove('index');
+      return map;
+    }).toList();
 
     await _repository.createPost(
       authorUid: currentUid,
@@ -551,30 +565,8 @@ class PostService {
     }
 
     await _ensureUserNotBanned(currentUid);
-    // Lấy post để lấy authorUid trước khi comment (với timeout và error handling)
-    Post post;
-    try {
-      post = await _repository.watchPost(postId).first.timeout(
-        const Duration(seconds: 5),
-        onTimeout: () {
-          throw TimeoutException('Không thể lấy thông tin bài đăng. Vui lòng thử lại.');
-        },
-      );
-    } catch (e) {
-      // Nếu không lấy được post, vẫn thử comment (có thể post đã bị xóa)
-      // Nhưng không tạo notification
-      await _repository.addComment(
-        postId: postId,
-        authorUid: currentUid,
-        text: text,
-        parentCommentId: parentCommentId,
-        replyToUid: replyToUid,
-      );
-      debugPrint('Warning: Could not fetch post info for notification: $e');
-      return;
-    }
     
-    // Tạo comment và lấy commentId (với retry logic)
+    // Tạo comment ngay lập tức (optimistic update)
     final commentId = await _repository.addComment(
       postId: postId,
       authorUid: currentUid,
@@ -583,17 +575,37 @@ class PostService {
       replyToUid: replyToUid,
     );
     
-    // Tạo notification sau (không block, không throw exception)
-    // Chạy async và bỏ qua lỗi để không ảnh hưởng đến comment operation
-    _notificationService.createCommentNotification(
-      postId: postId,
-      commentId: commentId,
-      commenterUid: currentUid,
-      postAuthorUid: post.authorUid,
-      commentText: text,
-    ).catchError((e) {
-      // Chỉ log lỗi, không throw để không ảnh hưởng đến comment operation
-      debugPrint('Error creating comment notification: $e');
+    // Lấy post info và tạo notification sau (không block comment operation)
+    // Sử dụng Future.microtask để không chờ đợi
+    Future.microtask(() async {
+      try {
+        Post? post;
+        try {
+          post = await _repository.watchPost(postId).first.timeout(
+            const Duration(seconds: 3), // Giảm timeout
+          );
+        } catch (e) {
+          // Timeout hoặc lỗi khi lấy post
+          debugPrint('Warning: Could not fetch post info for notification: $e');
+          return;
+        }
+        
+        if (post.authorUid != currentUid) {
+          // Tạo notification async, không block
+          _notificationService.createCommentNotification(
+            postId: postId,
+            commentId: commentId,
+            commenterUid: currentUid,
+            postAuthorUid: post.authorUid,
+            commentText: text,
+          ).catchError((e) {
+            debugPrint('Error creating comment notification: $e');
+          });
+        }
+      } catch (e) {
+        // Ignore errors khi lấy post info - comment đã được tạo thành công
+        debugPrint('Warning: Could not fetch post info for notification: $e');
+      }
     });
   }
 

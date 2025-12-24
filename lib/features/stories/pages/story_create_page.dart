@@ -40,7 +40,7 @@ class _StoryCreatePageState extends State<StoryCreatePage> {
         picked = await _picker.pickImage(
           source: source,
           maxWidth: 1080,
-          imageQuality: 85,
+          imageQuality: 90, // Tăng chất lượng một chút
         );
       } else {
         picked = await _picker.pickVideo(

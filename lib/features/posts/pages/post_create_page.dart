@@ -149,8 +149,8 @@ class _PostCreatePageState extends State<PostCreatePage> {
 
   Future<void> _pickImagesFromGallery() async {
     final picked = await _picker.pickMultiImage(
-      maxWidth: 1600,
-      imageQuality: 85,
+      maxWidth: 1920, // Tăng chất lượng nhưng vẫn tối ưu
+      imageQuality: 90, // Tăng chất lượng một chút
     );
     if (picked.isEmpty) return;
     setState(() {
@@ -168,8 +168,8 @@ class _PostCreatePageState extends State<PostCreatePage> {
   Future<void> _captureImage() async {
     final file = await _picker.pickImage(
       source: ImageSource.camera,
-      maxWidth: 1600,
-      imageQuality: 85,
+      maxWidth: 1920, // Tăng chất lượng
+      imageQuality: 90,
     );
     if (file == null) return;
     setState(() {

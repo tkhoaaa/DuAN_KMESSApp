@@ -50,25 +50,40 @@ class _PostCommentsSheetState extends State<PostCommentsSheet> {
               : replyingComment.id;
     }
 
+    // Optimistic update: Clear text field ngay lập tức để UX tốt hơn
+    final commentText = text;
+    _controller.clear();
+    final replyingTo = _replyingTo;
     setState(() {
       _sending = true;
+      _replyingTo = null;
     });
+
     try {
+      // Gửi comment (không await notification để tăng tốc)
       await _postService.addComment(
         postId: widget.post.id,
-        text: text,
+        text: commentText,
         parentCommentId: parentCommentId,
-        replyToUid: _replyingTo?.comment.authorUid,
+        replyToUid: replyingTo?.comment.authorUid,
       );
-      _controller.clear();
-      setState(() {
-        _replyingTo = null;
-      });
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Lỗi gửi bình luận: $e')),
-      );
+      // Nếu lỗi, khôi phục lại text
+      if (mounted) {
+        _controller.text = commentText;
+        setState(() {
+          _replyingTo = replyingTo;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Lỗi gửi bình luận: $e'),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
+      }
     } finally {
       if (mounted) {
         setState(() {

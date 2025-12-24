@@ -32,6 +32,7 @@ import '../widgets/feed_filter_chips.dart';
 import 'post_comments_sheet.dart';
 import 'post_create_page.dart';
 import 'post_video_page.dart';
+import 'image_viewer_page.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/typography.dart';
 
@@ -785,48 +786,91 @@ class _PostFeedItemState extends State<PostFeedItem> {
               final item = media[index];
               switch (item.type) {
                 case PostMediaType.image:
-                  return Image.network(
-                    item.url,
-                    fit: BoxFit.cover,
-                    width: double.infinity,
-                    loadingBuilder: (context, child, loadingProgress) {
-                      if (loadingProgress == null) return child;
-                      return Container(
-                        height: 360,
-                        color: Colors.grey.shade200,
-                        child: Center(
-                          child: CircularProgressIndicator(
-                            value: loadingProgress.expectedTotalBytes != null
-                                ? loadingProgress.cumulativeBytesLoaded /
-                                    loadingProgress.expectedTotalBytes!
-                                : null,
+                  return GestureDetector(
+                    onTap: () {
+                      // Lấy danh sách tất cả ảnh từ post
+                      final images = media
+                          .where((m) => m.type == PostMediaType.image)
+                          .toList();
+                      final imageIndex = images.indexWhere((img) => img.url == item.url);
+                      
+                      Navigator.of(context).push(
+                        PageRouteBuilder(
+                          pageBuilder: (context, animation, secondaryAnimation) =>
+                              ImageViewerPage(
+                            images: images,
+                            initialIndex: imageIndex >= 0 ? imageIndex : 0,
                           ),
+                          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                            // Scale + Fade transition for smooth effect
+                            final curvedAnimation = CurvedAnimation(
+                              parent: animation,
+                              curve: Curves.easeOutCubic,
+                              reverseCurve: Curves.easeInCubic,
+                            );
+                            
+                            return FadeTransition(
+                              opacity: curvedAnimation,
+                              child: ScaleTransition(
+                                scale: Tween<double>(
+                                  begin: 0.8,
+                                  end: 1.0,
+                                ).animate(curvedAnimation),
+                                child: child,
+                              ),
+                            );
+                          },
+                          transitionDuration: const Duration(milliseconds: 400),
+                          reverseTransitionDuration: const Duration(milliseconds: 300),
                         ),
                       );
                     },
-                    errorBuilder: (context, error, stackTrace) {
-                      return Container(
-                        height: 360,
-                        color: Colors.grey.shade200,
-                        child: const Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.image_not_supported,
-                                size: 48,
-                                color: Colors.grey,
+                    child: Hero(
+                      tag: 'image_${item.url}_$index',
+                      child: Image.network(
+                        item.url,
+                        fit: BoxFit.cover,
+                        width: double.infinity,
+                        loadingBuilder: (context, child, loadingProgress) {
+                          if (loadingProgress == null) return child;
+                          return Container(
+                            height: 360,
+                            color: Colors.grey.shade200,
+                            child: Center(
+                              child: CircularProgressIndicator(
+                                value: loadingProgress.expectedTotalBytes != null
+                                    ? loadingProgress.cumulativeBytesLoaded /
+                                        loadingProgress.expectedTotalBytes!
+                                    : null,
                               ),
-                              SizedBox(height: 8),
-                              Text(
-                                'Không thể tải ảnh',
-                                style: TextStyle(color: Colors.grey),
+                            ),
+                          );
+                        },
+                        errorBuilder: (context, error, stackTrace) {
+                          return Container(
+                            height: 360,
+                            color: Colors.grey.shade200,
+                            child: const Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.image_not_supported,
+                                    size: 48,
+                                    color: Colors.grey,
+                                  ),
+                                  SizedBox(height: 8),
+                                  Text(
+                                    'Không thể tải ảnh',
+                                    style: TextStyle(color: Colors.grey),
+                                  ),
+                                ],
                               ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
+                            ),
+                          );
+                        },
+                      ),
+                    ),
                   );
                 case PostMediaType.video:
                   return GestureDetector(
