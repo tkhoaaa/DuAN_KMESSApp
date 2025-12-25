@@ -64,7 +64,7 @@
                 <action android:name="android.intent.action.VIEW"/>
                 <category android:name="android.intent.category.DEFAULT"/>
                 <category android:name="android.intent.category.BROWSABLE"/>
-                <data android:scheme="fb841543928576901"/>
+                <data android:scheme="fb1576453390212797"/>
             </intent-filter>
         </activity>
         
@@ -80,7 +80,7 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="fb841543928576901" />
+                <data android:scheme="fb1576453390212797" />
             </intent-filter>
         </activity>
         

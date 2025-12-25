@@ -1,0 +1,55 @@
+========================================
+CÁC URL CALLBACK CẦN THÊM VÀO FACEBOOK DEVELOPER CONSOLE
+========================================
+
+1. OAuth Redirect URIs (QUAN TRỌNG NHẤT)
+   Thêm vào: Facebook Login Settings → Valid OAuth redirect URIs
+   
+   https://duankmessapp.firebaseapp.com/_/auth/handler
+   https://duankmessapp.firebaseapp.com/auth/facebook/callback
+
+2. Privacy Policy URL
+   Thêm vào: Settings → Basic → URL chính sách quyền riêng tư
+   
+   https://duankmessapp.firebaseapp.com/privacy-policy.html
+
+3. Terms of Service URL
+   Thêm vào: Settings → Basic → URL Điều khoản dịch vụ
+   
+   https://duankmessapp.firebaseapp.com/terms-of-service.html
+
+4. User Data Deletion URL
+   Thêm vào: Settings → Basic → URL hướng dẫn xóa dữ liệu người dùng
+   
+   https://duankmessapp.firebaseapp.com/user-data-deletion.html
+
+========================================
+HƯỚNG DẪN NHANH
+========================================
+
+BƯỚC 1: Thêm OAuth Redirect URIs
+- Vào: https://developers.facebook.com/apps/1576453390212797/fb-login/settings/
+- Cuộn xuống "URI chuyển hướng OAuth hợp lệ"
+- Copy và paste 2 URL trên (mỗi URL một dòng)
+- Click "Lưu thay đổi"
+
+BƯỚC 2: Thêm các URL bắt buộc
+- Vào: https://developers.facebook.com/apps/1576453390212797/settings/basic/
+- Thêm 3 URL ở trên vào các trường tương ứng
+- Click "Lưu thay đổi"
+
+BƯỚC 3: Chuyển sang Live Mode
+- Vào: https://developers.facebook.com/apps/1576453390212797/settings/basic/
+- Toggle "Chế độ của ứng dụng" từ "Phát triển" sang "Chính thức"
+- Xác nhận
+
+========================================
+KIỂM TRA
+========================================
+
+Sau khi thêm, kiểm tra bằng:
+1. Facebook Login Settings → Công cụ xác thực URI chuyển hướng
+2. Meta Sharing Debugger: https://developers.facebook.com/tools/debug/
+
+Tất cả URL phải hiển thị dấu tích xanh (✓) hoặc Response Code 200-299
+

@@ -65,6 +65,9 @@ class _NotificationCenterPageState extends State<NotificationCenterPage> {
       case models.NotificationType.like:
       case models.NotificationType.comment:
       case models.NotificationType.commentReaction:
+      case models.NotificationType.save:
+      case models.NotificationType.share:
+      case models.NotificationType.replyComment:
         if (notification.postId != null) {
           Navigator.of(context).push(
             MaterialPageRoute(
@@ -136,6 +139,9 @@ class _NotificationCenterPageState extends State<NotificationCenterPage> {
         case models.NotificationType.report:
         case models.NotificationType.appeal:
         case models.NotificationType.storyLike:
+        case models.NotificationType.save:
+        case models.NotificationType.share:
+        case models.NotificationType.replyComment:
           // Các loại này hiện không group
           break;
       }
@@ -150,6 +156,8 @@ class _NotificationCenterPageState extends State<NotificationCenterPage> {
       case models.NotificationType.commentReaction:
         final reactionEmoji = notification.text ?? '👍';
         return 'Đã thả reaction $reactionEmoji vào bình luận của bạn';
+      case models.NotificationType.replyComment:
+        return 'Đã trả lời bình luận của bạn';
       case models.NotificationType.follow:
         return 'Đã theo dõi bạn';
       case models.NotificationType.message:
@@ -162,6 +170,10 @@ class _NotificationCenterPageState extends State<NotificationCenterPage> {
         return 'Có đơn kháng cáo mới';
       case models.NotificationType.storyLike:
         return 'Đã tim tin của bạn';
+      case models.NotificationType.save:
+        return 'Đã lưu bài đăng của bạn';
+      case models.NotificationType.share:
+        return 'Đã chia sẻ bài đăng của bạn';
     }
   }
 
@@ -173,6 +185,8 @@ class _NotificationCenterPageState extends State<NotificationCenterPage> {
         return Icons.comment;
       case models.NotificationType.commentReaction:
         return Icons.emoji_emotions;
+      case models.NotificationType.replyComment:
+        return Icons.reply;
       case models.NotificationType.follow:
         return Icons.person_add;
       case models.NotificationType.message:
@@ -185,6 +199,10 @@ class _NotificationCenterPageState extends State<NotificationCenterPage> {
         return Icons.gavel;
       case models.NotificationType.storyLike:
         return Icons.favorite;
+      case models.NotificationType.save:
+        return Icons.bookmark;
+      case models.NotificationType.share:
+        return Icons.share;
     }
   }
 
@@ -299,9 +317,18 @@ class _NotificationTile extends StatelessWidget {
                 getColor(notification),
               )
             : (notification.type == models.NotificationType.comment ||
-                    notification.type == models.NotificationType.commentReaction)
+                    notification.type == models.NotificationType.commentReaction ||
+                    notification.type == models.NotificationType.like ||
+                    notification.type == models.NotificationType.save ||
+                    notification.type == models.NotificationType.share ||
+                    notification.type == models.NotificationType.replyComment ||
+                    notification.type == models.NotificationType.report ||
+                    notification.type == models.NotificationType.appeal)
                 ? _buildSingleAvatar(
-                    notification.fromUid,
+                    notification.type == models.NotificationType.report || 
+                    notification.type == models.NotificationType.appeal
+                        ? (notification.targetUid ?? notification.fromUid)
+                        : notification.fromUid,
                     getColor(notification),
                   )
                 : CircleAvatar(
@@ -312,10 +339,17 @@ class _NotificationTile extends StatelessWidget {
                       color: getColor(notification),
                     ),
                   ),
-        title: Text(
-          getTitle(notification),
-          style: AppTypography.body.copyWith(fontWeight: FontWeight.w700),
-        ),
+        title: (notification.type == models.NotificationType.like ||
+                notification.type == models.NotificationType.save ||
+                notification.type == models.NotificationType.share ||
+                notification.type == models.NotificationType.replyComment ||
+                notification.type == models.NotificationType.report ||
+                notification.type == models.NotificationType.appeal)
+            ? _buildTitleWithUserName(notification)
+            : Text(
+                getTitle(notification),
+                style: AppTypography.body.copyWith(fontWeight: FontWeight.w700),
+              ),
         subtitle: notification.text != null && notification.text!.isNotEmpty
             ? Text(
                 notification.text!,
@@ -429,6 +463,72 @@ class _NotificationTile extends StatelessWidget {
           child: (photoUrl == null || photoUrl.isEmpty)
               ? Icon(Icons.person, color: color)
               : null,
+        );
+      },
+    );
+  }
+
+  Widget _buildTitleWithUserName(models.Notification notification) {
+    // Xác định UID để lấy profile
+    final targetUid = (notification.type == models.NotificationType.report || 
+                       notification.type == models.NotificationType.appeal)
+        ? (notification.targetUid ?? notification.fromUid)
+        : notification.fromUid;
+    
+    return StreamBuilder(
+      stream: userProfileRepository.watchProfile(targetUid),
+      builder: (context, snapshot) {
+        final profile = snapshot.data;
+        final displayName = profile?.displayName?.isNotEmpty == true
+            ? profile!.displayName!
+            : (profile?.email?.isNotEmpty == true
+                ? profile!.email!
+                : targetUid);
+        
+        String actionText;
+        switch (notification.type) {
+          case models.NotificationType.like:
+            actionText = 'đã thích bài đăng của bạn';
+            break;
+          case models.NotificationType.save:
+            actionText = 'đã lưu bài đăng của bạn';
+            break;
+          case models.NotificationType.share:
+            actionText = 'đã chia sẻ bài đăng của bạn';
+            break;
+          case models.NotificationType.replyComment:
+            actionText = 'đã trả lời bình luận của bạn';
+            break;
+          case models.NotificationType.report:
+            actionText = ' - Có báo cáo mới về người dùng';
+            break;
+          case models.NotificationType.appeal:
+            actionText = ' - Có đơn kháng cáo mới';
+            break;
+          default:
+            actionText = getTitle(notification);
+        }
+        
+        return RichText(
+          text: TextSpan(
+            style: AppTypography.body.copyWith(fontWeight: FontWeight.w700),
+            children: [
+              TextSpan(
+                text: displayName,
+                style: AppTypography.body.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.primaryPink,
+                ),
+              ),
+              TextSpan(
+                text: actionText,
+                style: AppTypography.body.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: Colors.black,
+                ),
+              ),
+            ],
+          ),
         );
       },
     );

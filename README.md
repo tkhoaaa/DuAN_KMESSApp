@@ -18,6 +18,7 @@ flutter doctor --android-licenses
 flutter run -d windows   # chạy desktop (dev nhanh)
 flutter run -d chrome    # chạy web (tùy chọn)
 flutter run -d emulator  # chạy Android emulator
+flutter test test/       # chạy file test để kiểm tra các thành phần trong widget
 ```
 
 ## Deploy & Cấu hình

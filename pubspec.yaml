@@ -80,6 +80,10 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
+  # Assets
+  assets:
+    - assets/icons/
+
 flutter_launcher_icons:
   android: true
   ios: true

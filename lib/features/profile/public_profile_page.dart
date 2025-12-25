@@ -535,7 +535,7 @@ class _PublicProfilePageState extends State<PublicProfilePage> {
                                           Icon(Icons.auto_awesome, size: 20, color: Colors.purple),
                                           SizedBox(width: 8),
                                           Text(
-                                            'Highlight Stories',
+                                            'Tin nổi bật',
                                             style: TextStyle(
                                               fontSize: 16,
                                               fontWeight: FontWeight.bold,

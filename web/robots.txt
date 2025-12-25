@@ -1,0 +1,20 @@
+User-agent: *
+Allow: /privacy-policy.html
+Allow: /terms-of-service.html
+Allow: /user-data-deletion.html
+Allow: /
+
+# Facebook crawler
+User-agent: facebookexternalhit/*
+Allow: /privacy-policy.html
+Allow: /terms-of-service.html
+Allow: /user-data-deletion.html
+Allow: /
+
+# Meta crawler
+User-agent: MetaBot
+Allow: /privacy-policy.html
+Allow: /terms-of-service.html
+Allow: /user-data-deletion.html
+Allow: /
+

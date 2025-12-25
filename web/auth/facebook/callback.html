@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <title>Đang xử lý đăng nhập Facebook - Kmess</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #fff;
+        }
+        
+        .container {
+            text-align: center;
+            padding: 40px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+        }
+        
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid #fff;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+        
+        h1 {
+            margin: 0 0 10px 0;
+            font-size: 24px;
+        }
+        
+        p {
+            margin: 0;
+            opacity: 0.9;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="spinner"></div>
+        <h1>Đang xử lý đăng nhập...</h1>
+        <p>Vui lòng đợi trong giây lát</p>
+    </div>
+
+    <script>
+        // Xử lý callback từ Facebook OAuth
+        // Firebase Auth sẽ tự động xử lý token và redirect
+        // Nếu có lỗi, hiển thị thông báo
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const error = urlParams.get('error');
+        const errorDescription = urlParams.get('error_description');
+        const code = urlParams.get('code');
+
+        if (error) {
+            // Có lỗi xảy ra
+            document.querySelector('h1').textContent = 'Đăng nhập thất bại';
+            document.querySelector('p').textContent = errorDescription || error;
+            document.querySelector('.spinner').style.display = 'none';
+
+            // Redirect về trang đăng nhập sau 3 giây
+            setTimeout(() => {
+                window.location.href = '/';
+            }, 3000);
+        } else if (code) {
+            // Có authorization code, Firebase sẽ xử lý
+            // Đợi Firebase Auth xử lý và redirect
+            console.log('Authorization code received, waiting for Firebase to process...');
+        } else {
+            // Không có code hoặc error, có thể đã được xử lý
+            // Redirect về trang chủ sau 2 giây
+            setTimeout(() => {
+                window.location.href = '/';
+            }, 2000);
+        }
+
+        // Fallback: Nếu sau 10 giây vẫn chưa redirect, tự động redirect về trang chủ
+        setTimeout(() => {
+            if (window.location.pathname.includes('/auth/facebook/callback')) {
+                window.location.href = '/';
+            }
+        }, 10000);
+    </script>
+</body>
+
+</html>

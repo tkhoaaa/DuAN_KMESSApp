@@ -32,6 +32,16 @@ class NotificationService {
         return 'like_${postId}_$toUid';
       case NotificationType.follow:
         return 'follow_$toUid';
+      case NotificationType.save:
+        if (postId == null) {
+          throw ArgumentError('postId is required for save notifications');
+        }
+        return 'save_${postId}_$toUid';
+      case NotificationType.share:
+        if (postId == null) {
+          throw ArgumentError('postId is required for share notifications');
+        }
+        return 'share_${postId}_$toUid';
       case NotificationType.comment:
       case NotificationType.message:
       case NotificationType.call:
@@ -39,7 +49,8 @@ class NotificationService {
       case NotificationType.appeal:
       case NotificationType.storyLike:
       case NotificationType.commentReaction:
-        // Comments, messages, calls, reports, appeals, story likes, comment reactions không group
+      case NotificationType.replyComment:
+        // Comments, messages, calls, reports, appeals, story likes, comment reactions, reply comments không group
         throw ArgumentError('This notification type should not be grouped');
     }
   }
@@ -129,6 +140,50 @@ class NotificationService {
       toUid: postAuthorUid,
       postId: postId,
       commentId: commentId,
+      read: false,
+      createdAt: DateTime.now(),
+      text: notificationText.isNotEmpty ? notificationText : null,
+    );
+
+    await _repository.createNotification(notification);
+  }
+
+  /// Tạo notification khi có reply comment
+  Future<void> createReplyCommentNotification({
+    required String postId,
+    required String commentId,
+    required String replyCommentId,
+    required String replierUid,
+    required String commentAuthorUid,
+    String? replyText,
+  }) async {
+    // Không tạo notification nếu người reply là chính tác giả comment
+    if (replierUid == commentAuthorUid) return;
+
+    // Lấy tên người reply
+    String? replierName;
+    try {
+      final profile = await userProfileRepository.fetchProfile(replierUid);
+      replierName = profile?.displayName?.isNotEmpty == true
+          ? profile!.displayName!
+          : (profile?.email?.isNotEmpty == true ? profile!.email! : null);
+    } catch (_) {
+      // Không block notification nếu lỗi load profile
+    }
+
+    final trimmedReply = replyText?.trim() ?? '';
+    final notificationText = [
+      if (replierName != null) replierName,
+      if (trimmedReply.isNotEmpty) trimmedReply,
+    ].join(': ');
+
+    final notification = Notification(
+      id: '',
+      type: NotificationType.replyComment,
+      fromUid: replierUid,
+      toUid: commentAuthorUid,
+      postId: postId,
+      commentId: commentId, // ID của comment gốc
       read: false,
       createdAt: DateTime.now(),
       text: notificationText.isNotEmpty ? notificationText : null,

@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">duan_kmessapp</string>
-    <string name="facebook_app_id">841543928576901</string>
-    <string name="fb_login_protocol_scheme">fb841543928576901</string>
+    <!-- Facebook App ID từ Firebase Console -->
+    <string name="facebook_app_id">1576453390212797</string>
+    <string name="fb_login_protocol_scheme">fb1576453390212797</string>
     <!-- Client Token từ Facebook Console > Settings > Basic -->
-    <string name="facebook_client_token">1db8bc66233b65bbbb53d22c77aa9cfc</string>
+    <string name="facebook_client_token">8d60f6b24922dbf14e7a8208483eed18</string>
 </resources>

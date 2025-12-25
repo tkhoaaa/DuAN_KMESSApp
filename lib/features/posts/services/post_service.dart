@@ -590,7 +590,36 @@ class PostService {
           return;
         }
         
-        if (post.authorUid != currentUid) {
+        // Nếu là reply comment, tạo notification cho comment author
+        if (parentCommentId != null && replyToUid != null) {
+          // Lấy thông tin comment gốc để đảm bảo có commentId đúng
+          try {
+            final parentComment = await _repository.getComment(
+              postId: postId,
+              commentId: parentCommentId,
+            ).timeout(const Duration(seconds: 2));
+            
+            if (parentComment != null && replyToUid != currentUid) {
+              // Tạo notification cho người được reply
+              _notificationService.createReplyCommentNotification(
+                postId: postId,
+                commentId: parentCommentId, // ID của comment gốc
+                replyCommentId: commentId,
+                replierUid: currentUid,
+                commentAuthorUid: replyToUid,
+                replyText: text,
+              ).catchError((e) {
+                debugPrint('Error creating reply comment notification: $e');
+              });
+            }
+          } catch (e) {
+            debugPrint('Warning: Could not fetch parent comment for notification: $e');
+          }
+        }
+        
+        // Tạo notification cho post author nếu không phải là reply hoặc reply nhưng không phải chính post author
+        if (post.authorUid != currentUid && 
+            (parentCommentId == null || replyToUid != post.authorUid)) {
           // Tạo notification async, không block
           _notificationService.createCommentNotification(
             postId: postId,

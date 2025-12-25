@@ -10,6 +10,9 @@ enum NotificationType {
   appeal, // Appeal notification cho admin
   storyLike, // Tim (like) story
   commentReaction, // Reaction (emoji) trên comment
+  save, // Lưu bài viết
+  share, // Chia sẻ bài viết
+  replyComment, // Trả lời bình luận
 }
 
 class Notification {
@@ -83,6 +86,15 @@ class Notification {
       case 'commentReaction':
         type = NotificationType.commentReaction;
         break;
+      case 'save':
+        type = NotificationType.save;
+        break;
+      case 'share':
+        type = NotificationType.share;
+        break;
+      case 'replyComment':
+        type = NotificationType.replyComment;
+        break;
       default:
         type = NotificationType.like;
     }
@@ -142,6 +154,15 @@ class Notification {
         break;
       case NotificationType.commentReaction:
         typeStr = 'commentReaction';
+        break;
+      case NotificationType.save:
+        typeStr = 'save';
+        break;
+      case NotificationType.share:
+        typeStr = 'share';
+        break;
+      case NotificationType.replyComment:
+        typeStr = 'replyComment';
         break;
     }
 

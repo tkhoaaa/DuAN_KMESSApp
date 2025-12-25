@@ -5,6 +5,7 @@ import '../models/post.dart';
 import '../services/post_service.dart';
 import 'edit_history_sheet.dart';
 import 'package:intl/intl.dart';
+import '../../../theme/colors.dart';
 
 class PostCommentsSheet extends StatefulWidget {
   const PostCommentsSheet({
@@ -18,20 +19,52 @@ class PostCommentsSheet extends StatefulWidget {
   State<PostCommentsSheet> createState() => _PostCommentsSheetState();
 }
 
-class _PostCommentsSheetState extends State<PostCommentsSheet> {
+class _PostCommentsSheetState extends State<PostCommentsSheet>
+    with SingleTickerProviderStateMixin {
   final PostService _postService = PostService();
   final TextEditingController _controller = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+  final FocusNode _focusNode = FocusNode();
   bool _sending = false;
   PostCommentEntry? _replyingTo;
   final Map<String, String?> _localReactions = {};
   // Lưu trữ reaction counts đã được cập nhật locally để UI phản hồi ngay
   final Map<String, Map<String, int>> _localReactionCounts = {};
+  bool _isKeyboardVisible = false;
 
   static const List<String> _reactionOptions = ['👍', '❤️', '😂', '😮', '😢'];
 
   @override
+  void initState() {
+    super.initState();
+    _focusNode.addListener(() {
+      if (_focusNode.hasFocus) {
+        setState(() {
+          _isKeyboardVisible = true;
+        });
+        // Scroll to bottom when keyboard appears
+        Future.delayed(const Duration(milliseconds: 300), () {
+          if (_scrollController.hasClients) {
+            _scrollController.animateTo(
+              _scrollController.position.maxScrollExtent,
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeOut,
+            );
+          }
+        });
+      } else {
+        setState(() {
+          _isKeyboardVisible = false;
+        });
+      }
+    });
+  }
+
+  @override
   void dispose() {
     _controller.dispose();
+    _scrollController.dispose();
+    _focusNode.dispose();
     super.dispose();
   }
 
@@ -183,55 +216,71 @@ class _PostCommentsSheetState extends State<PostCommentsSheet> {
       initialChildSize: 0.7,
       minChildSize: 0.4,
       maxChildSize: 0.95,
-      builder: (context, controller) {
+      builder: (context, dragController) {
         return Material(
           shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
           ),
+          color: Colors.white,
           child: Column(
             children: [
-              const SizedBox(height: 8),
+              // Modern drag handle
+              const SizedBox(height: 12),
               Container(
                 width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: Colors.grey.shade400,
+                  color: Colors.grey.shade300,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
-              const SizedBox(height: 8),
-              Text(
-                'Bình luận',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
+              const SizedBox(height: 16),
+              // Header with animation
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Row(
+                  children: [
+                    Text(
+                      'Bình luận',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.textDark,
+                          ),
                     ),
+                    const Spacer(),
+                    IconButton(
+                      icon: Icon(Icons.close, color: Colors.grey.shade600),
+                      onPressed: () => Navigator.pop(context),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 8),
+              // Comments list with proper keyboard handling
               Expanded(
                 child: StreamBuilder(
                   stream: _postService.watchComments(widget.post.id),
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) {
                       return const Center(
-                        child: CircularProgressIndicator(),
+                        child: CircularProgressIndicator(
+                          valueColor: AlwaysStoppedAnimation<Color>(AppColors.primaryPink),
+                        ),
                       );
                     }
                     final comments = snapshot.data ?? [];
                     
-                    // Khi stream emit data mới từ Firestore, nó đã có tất cả reactions từ tất cả users
-                    // Local counts chỉ là delta (thay đổi) để hiển thị ngay lập tức
-                    // Khi stream emit data mới, nếu userReaction trong stream khớp với localReactions,
-                    // nghĩa là local delta đã được áp dụng vào Firestore, ta xóa local delta để tránh double counting
+                    // Sync local reactions with stream data
                     if (snapshot.hasData && comments.isNotEmpty) {
                       for (final entry in comments) {
                         final commentId = entry.comment.id;
                         final localReaction = _localReactions[commentId];
-                        // Nếu stream đã có reaction của user (khớp với local), xóa local delta
                         if (localReaction != null && entry.userReaction == localReaction) {
                           _localReactionCounts.remove(commentId);
                         }
                       }
-                      // Xử lý tương tự cho replies
                       for (final entry in comments) {
                         for (final reply in entry.replies) {
                           final commentId = reply.comment.id;
@@ -244,63 +293,113 @@ class _PostCommentsSheetState extends State<PostCommentsSheet> {
                     }
                     
                     if (comments.isEmpty) {
-                      return const Center(
-                        child: Text('Chưa có bình luận.'),
+                      return Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.comment_outlined,
+                              size: 64,
+                              color: Colors.grey.shade300,
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              'Chưa có bình luận',
+                              style: TextStyle(
+                                color: Colors.grey.shade600,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ],
+                        ),
                       );
                     }
+                    
                     return ListView.builder(
-                      controller: controller,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
+                      controller: dragController,
+                      padding: EdgeInsets.only(
+                        left: 16,
+                        right: 16,
+                        top: 8,
+                        bottom: _isKeyboardVisible ? 100 : 16,
                       ),
                       itemCount: comments.length,
                       itemBuilder: (context, index) {
                         final entry = comments[index];
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              _CommentItem(
-                                entry: entry,
-                                userReactionOverride:
-                                    _localReactions[entry.comment.id],
-                                localReactionCounts:
-                                    _localReactionCounts[entry.comment.id],
-                                onReply: _setReplyingTo,
-                                onReact: _toggleReaction,
-                                reactionOptions: _reactionOptions,
-                                postService: _postService,
-                                displayNameBuilder: _displayName,
-                                postId: widget.post.id,
-                                postAuthorUid: widget.post.authorUid,
+                        return TweenAnimationBuilder<double>(
+                          tween: Tween(begin: 0.0, end: 1.0),
+                          duration: Duration(milliseconds: 300 + (index * 50)),
+                          curve: Curves.easeOut,
+                          builder: (context, value, child) {
+                            return Opacity(
+                              opacity: value,
+                              child: Transform.translate(
+                                offset: Offset(0, 20 * (1 - value)),
+                                child: child,
                               ),
-                              if (entry.replies.isNotEmpty)
-                                ...entry.replies.map(
-                                  (reply) => Padding(
-                                    padding: const EdgeInsets.only(
-                                      left: 48,
-                                      top: 8,
-                                    ),
-                                    child: _CommentItem(
-                                      entry: reply,
-                                      userReactionOverride:
-                                          _localReactions[reply.comment.id],
-                                      localReactionCounts:
-                                          _localReactionCounts[reply.comment.id],
-                                      isReply: true,
-                                      onReply: _setReplyingTo,
-                                      onReact: _toggleReaction,
-                                      reactionOptions: _reactionOptions,
-                                      postService: _postService,
-                                      displayNameBuilder: _displayName,
-                                      postId: widget.post.id,
-                                      postAuthorUid: widget.post.authorUid,
+                            );
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.only(bottom: 16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _CommentItem(
+                                  entry: entry,
+                                  userReactionOverride:
+                                      _localReactions[entry.comment.id],
+                                  localReactionCounts:
+                                      _localReactionCounts[entry.comment.id],
+                                  onReply: _setReplyingTo,
+                                  onReact: _toggleReaction,
+                                  reactionOptions: _reactionOptions,
+                                  postService: _postService,
+                                  displayNameBuilder: _displayName,
+                                  postId: widget.post.id,
+                                  postAuthorUid: widget.post.authorUid,
+                                ),
+                                if (entry.replies.isNotEmpty)
+                                  ...entry.replies.asMap().entries.map(
+                                    (replyEntry) => TweenAnimationBuilder<double>(
+                                      tween: Tween(begin: 0.0, end: 1.0),
+                                      duration: Duration(
+                                        milliseconds: 350 + (replyEntry.key * 30),
+                                      ),
+                                      curve: Curves.easeOut,
+                                      builder: (context, value, child) {
+                                        return Opacity(
+                                          opacity: value,
+                                          child: Transform.translate(
+                                            offset: Offset(0, 15 * (1 - value)),
+                                            child: child,
+                                          ),
+                                        );
+                                      },
+                                      child: Padding(
+                                        padding: const EdgeInsets.only(
+                                          left: 48,
+                                          top: 12,
+                                        ),
+                                        child: _CommentItem(
+                                          entry: replyEntry.value,
+                                          userReactionOverride: _localReactions[
+                                              replyEntry.value.comment.id],
+                                          localReactionCounts: _localReactionCounts[
+                                              replyEntry.value.comment.id],
+                                          isReply: true,
+                                          onReply: _setReplyingTo,
+                                          onReact: _toggleReaction,
+                                          reactionOptions: _reactionOptions,
+                                          postService: _postService,
+                                          displayNameBuilder: _displayName,
+                                          postId: widget.post.id,
+                                          postAuthorUid: widget.post.authorUid,
+                                        ),
+                                      ),
                                     ),
                                   ),
-                                ),
-                            ],
+                              ],
+                            ),
                           ),
                         );
                       },
@@ -308,66 +407,167 @@ class _PostCommentsSheetState extends State<PostCommentsSheet> {
                   },
                 ),
               ),
-              if (_replyingTo != null)
-                Container(
-                  width: double.infinity,
-                  margin: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 6,
-                  ),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade200,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          'Đang trả lời: ${_displayName(_replyingTo!)}',
-                          style: const TextStyle(fontWeight: FontWeight.w600),
+              // Reply indicator with animation
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeInOut,
+                height: _replyingTo != null ? 60 : 0,
+                child: _replyingTo != null
+                    ? Container(
+                        width: double.infinity,
+                        margin: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
                         ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close),
-                        onPressed: () {
-                          setState(() {
-                            _replyingTo = null;
-                          });
-                        },
-                      ),
-                    ],
-                  ),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.primaryPink.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: AppColors.primaryPink.withValues(alpha: 0.3),
+                            width: 1,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.reply,
+                              size: 18,
+                              color: AppColors.primaryPink,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Đang trả lời: ${_displayName(_replyingTo!)}',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.primaryPink,
+                                  fontSize: 13,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: () {
+                                  setState(() {
+                                    _replyingTo = null;
+                                  });
+                                },
+                                borderRadius: BorderRadius.circular(20),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(4),
+                                  child: Icon(
+                                    Icons.close,
+                                    size: 18,
+                                    color: AppColors.primaryPink,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : const SizedBox.shrink(),
+              ),
+              // Modern input field with animation
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeInOut,
+                padding: EdgeInsets.only(
+                  left: 16,
+                  right: 16,
+                  top: 8,
+                  bottom: MediaQuery.of(context).viewInsets.bottom > 0
+                      ? MediaQuery.of(context).viewInsets.bottom
+                      : MediaQuery.of(context).padding.bottom + 8,
                 ),
-              SafeArea(
-                top: false,
-                child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  boxShadow: _isKeyboardVisible
+                      ? [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.05),
+                            blurRadius: 10,
+                            offset: const Offset(0, -2),
+                          ),
+                        ]
+                      : [],
+                ),
+                child: SafeArea(
+                  top: false,
                   child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       Expanded(
-                        child: TextField(
-                          controller: _controller,
-                          decoration: const InputDecoration(
-                            hintText: 'Viết bình luận...',
-                            border: OutlineInputBorder(),
+                        child: Container(
+                          constraints: const BoxConstraints(maxHeight: 100),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade100,
+                            borderRadius: BorderRadius.circular(24),
+                            border: Border.all(
+                              color: _focusNode.hasFocus
+                                  ? AppColors.primaryPink
+                                  : Colors.transparent,
+                              width: 2,
+                            ),
+                          ),
+                          child: TextField(
+                            controller: _controller,
+                            focusNode: _focusNode,
+                            maxLines: null,
+                            textInputAction: TextInputAction.send,
+                            onSubmitted: (_) => _sendComment(),
+                            decoration: InputDecoration(
+                              hintText: 'Viết bình luận...',
+                              hintStyle: TextStyle(color: Colors.grey.shade500),
+                              border: InputBorder.none,
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                                vertical: 12,
+                              ),
+                            ),
+                            style: const TextStyle(fontSize: 15),
                           ),
                         ),
                       ),
                       const SizedBox(width: 8),
-                      IconButton(
-                        icon: _sending
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Icon(Icons.send),
-                        onPressed: _sending ? null : _sendComment,
+                      Material(
+                        color: _sending
+                            ? Colors.grey.shade300
+                            : AppColors.primaryPink,
+                        borderRadius: BorderRadius.circular(24),
+                        child: InkWell(
+                          onTap: _sending ? null : _sendComment,
+                          borderRadius: BorderRadius.circular(24),
+                          child: Container(
+                            width: 48,
+                            height: 48,
+                            alignment: Alignment.center,
+                            child: _sending
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                        Colors.white,
+                                      ),
+                                    ),
+                                  )
+                                : const Icon(
+                                    Icons.send_rounded,
+                                    color: Colors.white,
+                                    size: 22,
+                                  ),
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -448,15 +648,28 @@ class _CommentItem extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        CircleAvatar(
-          radius: 18,
-          backgroundImage:
-              photoUrl != null && photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null,
-          child: (photoUrl == null || photoUrl.isEmpty)
-              ? const Icon(Icons.person, size: 18)
-              : null,
+        Hero(
+          tag: 'avatar_${entry.comment.id}',
+          child: Container(
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: AppColors.primaryPink.withValues(alpha: 0.2),
+                width: 2,
+              ),
+            ),
+            child: CircleAvatar(
+              radius: 20,
+              backgroundImage:
+                  photoUrl != null && photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null,
+              backgroundColor: Colors.grey.shade200,
+              child: (photoUrl == null || photoUrl.isEmpty)
+                  ? Icon(Icons.person, size: 20, color: Colors.grey.shade600)
+                  : null,
+            ),
+          ),
         ),
-        const SizedBox(width: 10),
+        const SizedBox(width: 12),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -467,41 +680,49 @@ class _CommentItem extends StatelessWidget {
                   Expanded(
                     child: Text(
                       name,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.w700,
-                        fontSize: 14,
+                        fontSize: 15,
+                        color: AppColors.textDark,
                       ),
                     ),
                   ),
                   if (timeString.isNotEmpty) ...[
                     Text(
                       timeString,
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodySmall
-                          ?.copyWith(color: Colors.grey.shade600),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade500,
+                      ),
                     ),
                     if (entry.comment.editedAt != null) ...[
-                      const SizedBox(width: 4),
-                      GestureDetector(
-                        onTap: () => _showEditHistory(context),
-                        child: Text(
-                          '(Đã chỉnh sửa)',
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodySmall
-                              ?.copyWith(
-                                color: Colors.blue,
+                      const SizedBox(width: 6),
+                      Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: () => _showEditHistory(context),
+                          borderRadius: BorderRadius.circular(4),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                            child: Text(
+                              '(Đã chỉnh sửa)',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: AppColors.primaryPink,
                                 fontStyle: FontStyle.italic,
-                                decoration: TextDecoration.underline,
                               ),
+                            ),
+                          ),
                         ),
                       ),
                     ],
                   ],
                   if (canDelete || canEdit)
                     PopupMenuButton<String>(
-                      icon: const Icon(Icons.more_vert, size: 18),
+                      icon: Icon(Icons.more_vert, size: 18, color: Colors.grey.shade600),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                       onSelected: (value) async {
                         if (value == 'edit') {
                           final result = await showDialog<String>(
@@ -634,13 +855,27 @@ class _CommentItem extends StatelessWidget {
                     ),
                 ],
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 6),
               if (isReply && entry.comment.replyToUid != null)
-                Text(
-                  'Trả lời',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey.shade600,
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.reply,
+                        size: 12,
+                        color: AppColors.primaryPink,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Trả lời',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.primaryPink,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               _CommentBubbleWithReactions(
@@ -720,55 +955,78 @@ class _CommentBubbleWithReactions extends StatelessWidget {
           children: [
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.all(10),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               decoration: BoxDecoration(
-                color: Colors.grey.shade100,
-                borderRadius: BorderRadius.circular(10),
+                color: Colors.grey.shade50,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(
+                  color: Colors.grey.shade200,
+                  width: 1,
+                ),
               ),
-              child: Text(entry.comment.text),
+              child: Text(
+                entry.comment.text,
+                style: const TextStyle(
+                  fontSize: 15,
+                  height: 1.4,
+                  color: AppColors.textDark,
+                ),
+              ),
             ),
             if (totalReactions > 0)
               Positioned(
-                right: 8,
-                bottom: -10,
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(14),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.08),
-                        blurRadius: 4,
-                        offset: const Offset(0, 1),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      for (final emoji in summaryEmojis) ...[
-                        Text(emoji, style: const TextStyle(fontSize: 12)),
-                        const SizedBox(width: 2),
-                      ],
-                      Text(
-                        totalReactions.toString(),
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
+                right: 12,
+                bottom: -12,
+                child: TweenAnimationBuilder<double>(
+                  tween: Tween(begin: 0.0, end: 1.0),
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.elasticOut,
+                  builder: (context, value, child) {
+                    return Transform.scale(
+                      scale: value,
+                      child: child,
+                    );
+                  },
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.1),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        for (final emoji in summaryEmojis) ...[
+                          Text(emoji, style: const TextStyle(fontSize: 13)),
+                          const SizedBox(width: 2),
+                        ],
+                        Text(
+                          totalReactions.toString(),
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.primaryPink,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
           ],
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 12),
         Wrap(
-          spacing: 6,
-          runSpacing: 4,
+          spacing: 8,
+          runSpacing: 6,
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             // Nếu đã có reaction thì chỉ hiển thị các reaction đang active
@@ -793,9 +1051,23 @@ class _CommentBubbleWithReactions extends StatelessWidget {
                   onTap: () => onReact(entry, reaction),
                 ),
               ),
-            TextButton(
-              onPressed: () => onReply(entry),
-              child: const Text('Trả lời'),
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () => onReply(entry),
+                borderRadius: BorderRadius.circular(20),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  child: Text(
+                    'Trả lời',
+                    style: TextStyle(
+                      color: AppColors.primaryPink,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              ),
             ),
           ],
         ),
@@ -819,30 +1091,57 @@ class _ReactionChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: selected ? Colors.pink.shade50 : Colors.grey.shade200,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: selected ? Colors.pink.shade200 : Colors.transparent,
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(emoji),
-            if (count > 0) ...[
-              const SizedBox(width: 4),
-              Text(
-                count.toString(),
-                style: const TextStyle(fontWeight: FontWeight.w600),
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0.8, end: 1.0),
+      duration: const Duration(milliseconds: 200),
+      builder: (context, scale, child) {
+        return Transform.scale(
+          scale: selected ? 1.1 : scale,
+          child: child,
+        );
+      },
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(20),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeInOut,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: selected
+                  ? AppColors.primaryPink.withValues(alpha: 0.15)
+                  : Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: selected
+                    ? AppColors.primaryPink
+                    : Colors.transparent,
+                width: 1.5,
               ),
-            ],
-          ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  emoji,
+                  style: const TextStyle(fontSize: 16),
+                ),
+                if (count > 0) ...[
+                  const SizedBox(width: 6),
+                  Text(
+                    count.toString(),
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                      color: selected ? AppColors.primaryPink : AppColors.textDark,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
         ),
       ),
     );

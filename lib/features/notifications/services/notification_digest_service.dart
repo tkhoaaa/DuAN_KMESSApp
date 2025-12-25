@@ -162,7 +162,10 @@ class NotificationDigestService {
         case NotificationType.report:
         case NotificationType.appeal:
         case NotificationType.storyLike:
-          // Bỏ qua messages, calls, comment reactions - không tính vào stats
+        case NotificationType.save:
+        case NotificationType.share:
+        case NotificationType.replyComment:
+          // Bỏ qua messages, calls, comment reactions, saves, shares, reply comments - không tính vào stats
           break;
       }
     }

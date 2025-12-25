@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter_facebook_auth/flutter_facebook_auth.dart';
-import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
 import '../profile/user_profile_repository.dart';
 
 abstract class AuthRepository {
@@ -238,9 +238,20 @@ class FirebaseAuthRepository implements AuthRepository {
   @override
   Future<void> signInWithFacebook() async {
     try {
-      // Login với Facebook (dùng webOnly để đảm bảo callback quay lại app)
+      // Logout trước để đảm bảo clean state
+      try {
+        await FacebookAuth.instance.logOut();
+      } catch (e) {
+        // Ignore errors khi logout (có thể chưa đăng nhập)
+        if (kDebugMode) {
+          print('Note: Error during pre-logout (can be ignored): $e');
+        }
+      }
+      
+      // Login với Facebook - sử dụng native trên mobile, web trên web
       final LoginResult result = await FacebookAuth.instance.login(
-        loginBehavior: LoginBehavior.webOnly,
+        permissions: ['email', 'public_profile'],
+        loginBehavior: kIsWeb ? LoginBehavior.webOnly : LoginBehavior.nativeWithFallback,
       );
       
       if (result.status != LoginStatus.success) {
@@ -250,73 +261,127 @@ class FirebaseAuthRepository implements AuthRepository {
             print('Error message: ${result.message}');
           }
         }
+        
+        // Xử lý các trường hợp đặc biệt
+        if (result.status == LoginStatus.cancelled) {
+          // User cancelled - không throw error
+          return;
+        }
+        
         throw FirebaseAuthException(
           code: 'facebook-login-failed',
           message: result.message ?? 'Đăng nhập Facebook thất bại',
         );
       }
 
-        // Lấy access token
-        final AccessToken? accessToken = result.accessToken;
-        if (accessToken == null) {
-          throw FirebaseAuthException(
-            code: 'facebook-login-failed',
-            message: 'Không thể lấy access token từ Facebook',
-          );
-        }
-        
-        // Tạo Firebase credential từ Facebook token
-        final OAuthCredential credential = FacebookAuthProvider.credential(
-          accessToken.tokenString,
+      // Lấy access token
+      final AccessToken? accessToken = result.accessToken;
+      if (accessToken == null) {
+        throw FirebaseAuthException(
+          code: 'facebook-login-failed',
+          message: 'Không thể lấy access token từ Facebook',
         );
+      }
+      
+      // Tạo Firebase credential từ Facebook token
+      final OAuthCredential credential = FacebookAuthProvider.credential(
+        accessToken.tokenString,
+      );
 
       // Sign in với Firebase
-      await _auth.signInWithCredential(credential);
+      final userCredential = await _auth.signInWithCredential(credential);
+      
+      // Kiểm tra xem có user không
+      if (userCredential.user == null) {
+        throw FirebaseAuthException(
+          code: 'facebook-login-failed',
+          message: 'Không thể tạo tài khoản Firebase từ Facebook',
+        );
+      }
       
       // Lấy thông tin profile từ Facebook sau khi đăng nhập thành công
-      final user = _auth.currentUser;
-      if (user != null) {
-        try {
-          // Lấy thông tin profile từ Facebook Graph API
-          final userData = await FacebookAuth.instance.getUserData();
-          final facebookName = userData['name'] as String?;
-          final facebookEmail = userData['email'] as String?;
-          final facebookPicture = userData['picture'] as Map<String, dynamic>?;
-          final facebookPhotoUrl = facebookPicture?['data']?['url'] as String?;
-          
-          if (kDebugMode) {
-            print('Facebook profile data: name=$facebookName, email=$facebookEmail');
-          }
-          
-          // Tự động tạo/update profile với thông tin từ Facebook
-          await userProfileRepository.ensureProfile(
-            uid: user.uid,
-            email: facebookEmail ?? user.email, 
-            displayName: facebookName ?? user.displayName,
-            photoUrl: facebookPhotoUrl ?? user.photoURL,
-          );
-        } catch (e) {
-          // Nếu không lấy được thông tin từ Facebook, vẫn tạo profile với thông tin từ Firebase
-          if (kDebugMode) {
-            print('Error getting Facebook profile: $e');
-          }
-          await userProfileRepository.ensureProfile(
-            uid: user.uid,
-            email: user.email,
-            displayName: user.displayName,
-            photoUrl: user.photoURL,
-          );
+      final user = userCredential.user!;
+      try {
+        // Lấy thông tin profile từ Facebook Graph API
+        final userData = await FacebookAuth.instance.getUserData(
+          fields: 'name,email,picture.width(200)',
+        );
+        final facebookName = userData['name'] as String?;
+        final facebookEmail = userData['email'] as String?;
+        final facebookPicture = userData['picture'] as Map<String, dynamic>?;
+        final pictureData = facebookPicture?['data'] as Map<String, dynamic>?;
+        final facebookPhotoUrl = pictureData?['url'] as String?;
+        
+        if (kDebugMode) {
+          print('Facebook profile data: name=$facebookName, email=$facebookEmail, photoUrl=$facebookPhotoUrl');
         }
+        
+        // Tự động tạo/update profile với thông tin từ Facebook
+        await userProfileRepository.ensureProfile(
+          uid: user.uid,
+          email: facebookEmail ?? user.email, 
+          displayName: facebookName ?? user.displayName,
+          photoUrl: facebookPhotoUrl ?? user.photoURL,
+        );
+      } catch (e) {
+        // Nếu không lấy được thông tin từ Facebook, vẫn tạo profile với thông tin từ Firebase
+        if (kDebugMode) {
+          print('Error getting Facebook profile: $e');
+        }
+        await userProfileRepository.ensureProfile(
+          uid: user.uid,
+          email: user.email,
+          displayName: user.displayName,
+          photoUrl: user.photoURL,
+        );
       }
-    } on FirebaseAuthException {
-      rethrow;
-    } catch (e) {
+    } on FirebaseAuthException catch (e) {
+      // Re-throw FirebaseAuthException với thông tin chi tiết hơn
       if (kDebugMode) {
-        print('Unexpected error in signInWithFacebook: $e');
+        print('FirebaseAuthException during Facebook sign-in: ${e.code} - ${e.message}');
       }
+      rethrow;
+    } catch (e, stackTrace) {
+      if (kDebugMode) {
+        print('Facebook Sign-In error: $e');
+        print('Stack trace: $stackTrace');
+      }
+      
+      // Xử lý các loại lỗi phổ biến
+      final errorStr = e.toString().toLowerCase();
+      
+      // Kiểm tra các loại lỗi phổ biến
+      if (errorStr.contains('cancelled') || 
+          errorStr.contains('cancel') ||
+          errorStr.contains('user_cancelled')) {
+        // User cancelled - không throw error
+        return;
+      } else if (errorStr.contains('network') || 
+                 errorStr.contains('connection') ||
+                 errorStr.contains('socket') ||
+                 errorStr.contains('timeout')) {
+        throw FirebaseAuthException(
+          code: 'facebook-login-network-error',
+          message: 'Lỗi kết nối. Vui lòng kiểm tra internet và thử lại.',
+        );
+      } else if (errorStr.contains('account-exists-with-different-credential') ||
+                 errorStr.contains('email-already-in-use')) {
+        throw FirebaseAuthException(
+          code: 'account-exists-with-different-credential',
+          message: 'Tài khoản này đã được đăng ký bằng phương thức khác. Vui lòng sử dụng email/mật khẩu.',
+        );
+      } else if (errorStr.contains('invalid-credential') ||
+                 errorStr.contains('invalid_token')) {
+        throw FirebaseAuthException(
+          code: 'invalid-credential',
+          message: 'Thông tin đăng nhập không hợp lệ. Vui lòng thử lại.',
+        );
+      }
+      
+      // Lỗi không xác định
       throw FirebaseAuthException(
         code: 'facebook-login-failed',
-        message: 'Đăng nhập Facebook thất bại: ${e.toString()}',
+        message: 'Đăng nhập Facebook thất bại. Vui lòng thử lại. Lỗi: ${e.toString()}',
       );
     }
   }

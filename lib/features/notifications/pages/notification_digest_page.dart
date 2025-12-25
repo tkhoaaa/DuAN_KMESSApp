@@ -580,6 +580,9 @@ class _NotificationDetailsModalState extends State<_NotificationDetailsModal> {
         case models.NotificationType.report:
         case models.NotificationType.appeal:
         case models.NotificationType.storyLike:
+        case models.NotificationType.save:
+        case models.NotificationType.share:
+        case models.NotificationType.replyComment:
           // Không group các loại này trong digest
           break;
       }
@@ -605,6 +608,12 @@ class _NotificationDetailsModalState extends State<_NotificationDetailsModal> {
         return 'Có đơn kháng cáo mới';
       case models.NotificationType.storyLike:
         return 'Đã tim tin của bạn';
+      case models.NotificationType.save:
+        return 'Đã lưu bài đăng của bạn';
+      case models.NotificationType.share:
+        return 'Đã chia sẻ bài đăng của bạn';
+      case models.NotificationType.replyComment:
+        return 'Đã trả lời bình luận của bạn';
     }
   }
 
@@ -853,6 +862,17 @@ class _NotificationDetailsModalState extends State<_NotificationDetailsModal> {
         break;
       case models.NotificationType.storyLike:
         // Sau này có thể mở viewer story; hiện tại chỉ đóng modal
+        break;
+      case models.NotificationType.save:
+      case models.NotificationType.share:
+      case models.NotificationType.replyComment:
+        if (notification.postId != null) {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => PostPermalinkPage(postId: notification.postId!),
+            ),
+          );
+        }
         break;
     }
   }
